@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-blue: #3b82f6;
+  --color-brand-cream: #fffbeb;
+  --font-handwriting: "Caveat", cursive;
+}
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+/* Table Styles */
+.table-row-zebra:nth-child(even) {
+  background-color: var(--color-gray-50);
+}
+
+.table-row-active {
+  background-color: var(--color-blue-50) !important;
+  border-left: 4px solid var(--color-blue-600);
+}
+
+.table-row-hover:hover {
+  background-color: var(--color-blue-50);
+  cursor: pointer;
+}
