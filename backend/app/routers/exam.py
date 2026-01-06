@@ -48,6 +48,7 @@ async def upload_material(
         raise HTTPException(status_code=400, detail="無法解析題目，請檢查檔案格式 (需包含 Q:, ANS:, SCORE:)")
 
     # 3. 儲存題目至資料庫 (User 要求直接產生，採用追加模式)
+    import json
     try:
         new_questions = []
         for q in questions_data:
@@ -61,6 +62,30 @@ async def upload_material(
             )
             db.add(new_q)
             new_questions.append(new_q)
+            
+            # --- 同步寫入題庫 (QuestionBank) ---
+            # 檢查是否已存在 (以題目內容判斷)
+            exists_in_bank = db.query(models.QuestionBank).filter(
+                models.QuestionBank.content == q["content"]
+            ).first()
+            
+            if not exists_in_bank:
+                # 產生標籤: 計畫標題 + 分類
+                tags_list = []
+                if plan.title: tags_list.append(plan.title)
+                if plan.sub_category and plan.sub_category.name: 
+                    tags_list.append(plan.sub_category.name)
+                
+                qb = models.QuestionBank(
+                    content=q["content"],
+                    question_type=q["type"],
+                    options=q["options"],
+                    answer=q["answer"],
+                    tags=json.dumps(tags_list, ensure_ascii=False),
+                    created_by=current_user.emp_id if hasattr(current_user, 'emp_id') else 'system'
+                )
+                db.add(qb)
+            # -----------------------------------
         
         db.commit()
     except Exception as e:

@@ -176,6 +176,8 @@ const TrainingPlanManager = () => {
     plan.year.includes(searchTerm)
   );
 
+  const today = new Date().toISOString().split('T')[0];
+
   // 找尋部門或分類名稱的輔助函式
   const getDeptName = (id: number) => departments.find(d => d.id === id)?.name || '未知單位';
   
@@ -248,7 +250,8 @@ const TrainingPlanManager = () => {
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider w-24">年份</th>
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">計畫名稱</th>
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">開課單位</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">日期</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">開始日期</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">結束日期</th>
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">計時</th>
               </tr>
             </thead>
@@ -263,8 +266,10 @@ const TrainingPlanManager = () => {
                   </td>
                 </tr>
               ) : (
-                filteredPlans.map((plan, index) => (
-                  <tr key={plan.id} className="hover:bg-gray-50/50 transition-colors group">
+                filteredPlans.map((plan, index) => {
+                  const isExpired = plan.end_date && plan.end_date < today;
+                  return (
+                  <tr key={plan.id} className={`group border-b border-gray-50 transition-colors even:bg-gray-100/60 hover:bg-blue-50/50 ${isExpired ? 'border-l-4 border-l-orange-400 bg-orange-50/10' : ''}`}>
                     <td className="px-6 py-4 text-sm font-black text-gray-300">{index + 1}</td>
                     <td className="px-6 py-4 text-sm font-black text-blue-600">{plan.year}</td>
                     <td className="px-6 py-4">
@@ -277,17 +282,20 @@ const TrainingPlanManager = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm font-bold text-gray-600">
-                      <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-gray-400" />
-                            <span>{plan.training_date}</span>
-                          </div>
-                          {plan.end_date && (
-                             <div className="flex items-center gap-2 text-gray-400 text-xs pl-6">
-                                <span>~ {plan.end_date}</span>
-                             </div>
-                          )}
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-gray-400" />
+                        <span>{plan.training_date}</span>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-bold text-gray-600">
+                       {plan.end_date ? (
+                         <div className={`flex items-center gap-2 ${isExpired ? 'text-orange-600' : ''}`}>
+                            <span>{plan.end_date}</span>
+                            {isExpired && <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">已過期</span>}
+                         </div>
+                       ) : (
+                         <span className="text-gray-400">-</span>
+                       )}
                     </td>
                     <td className="px-6 py-4 text-sm font-bold">
                        <div className="flex items-center justify-between">
@@ -302,7 +310,7 @@ const TrainingPlanManager = () => {
                            
                            <button 
                                 onClick={() => openModal(plan)}
-                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                 title="編輯計畫"
                            >
                                 <PenTool className="w-4 h-4" />
@@ -310,7 +318,8 @@ const TrainingPlanManager = () => {
                        </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

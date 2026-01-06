@@ -153,4 +153,36 @@ class Question(QuestionBase):
         from_attributes = True
 
 # 更新遞迴模型的向前參照
+class QuestionBankBase(BaseModel):
+    content: str
+    question_type: str
+    options: Optional[str] = None
+    answer: str
+    tags: Optional[str] = None
+
+class QuestionBankCreate(QuestionBankBase):
+    pass
+
+class QuestionBankUpdate(BaseModel):
+    content: Optional[str] = None
+    question_type: Optional[str] = None
+    options: Optional[str] = None
+    answer: Optional[str] = None
+    tags: Optional[str] = None
+
+class QuestionBank(QuestionBankBase):
+    id: int
+    created_by: Optional[str] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class QuestionBankList(BaseModel):
+    items: List[QuestionBank]
+    total: int
+    page: int
+    size: int
+    total_pages: int
+
 SystemFunction.update_forward_refs()

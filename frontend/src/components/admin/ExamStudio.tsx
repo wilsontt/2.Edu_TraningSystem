@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit } from 'lucide-react';
+import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download } from 'lucide-react';
 import { AxiosError } from 'axios';
 import api from '../../api';
 import QuestionEditorModal from './QuestionEditorModal';
+import QuestionBankManager from './QuestionBankManager';
+import BankImportModal from './BankImportModal';
 
 interface TrainingPlan {
   id: number;
@@ -49,6 +51,8 @@ const ExamStudio = () => {
     const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
     const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+    const [mode, setMode] = useState<'plan' | 'bank'>('plan');
+    const [showImportModal, setShowImportModal] = useState(false);
 
     useEffect(() => {
         fetchPlans();
@@ -153,7 +157,7 @@ const ExamStudio = () => {
         }
 
         // 檢查是否重複
-        const isDuplicate = materials.some(m => m.filename === file.name);
+        const isDuplicate = materials.some(m => m.filename.toLowerCase() === file.name.toLowerCase());
         if (isDuplicate) {
             if (!window.confirm(`檔案 "${file.name}" 已存在。確定要重新上傳並覆蓋嗎？`)) {
                 return;
@@ -203,8 +207,14 @@ const ExamStudio = () => {
 
     const onDrop = (e: React.DragEvent) => {
         e.preventDefault();
+        e.stopPropagation();
         setIsDragOver(false);
-        handleFileUpload(e.dataTransfer.files);
+        
+        if (isUploading) return; // Prevent drop if uploading
+
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+             handleFileUpload(e.dataTransfer.files);
+        }
     };
 
     const onDragOver = (e: React.DragEvent) => {
@@ -223,14 +233,47 @@ const ExamStudio = () => {
     );
     const selectedPlan = plans.find((p: TrainingPlan) => p.id === selectedPlanId);
 
+    if (mode === 'bank') {
+        return (
+            <div className="max-w-7xl mx-auto p-6 space-y-6 h-[calc(100vh-100px)]">
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <Archive className="w-8 h-8 text-blue-600" />
+                        <div>
+                            <h1 className="text-3xl font-black text-gray-900 tracking-tight">題庫維護</h1>
+                            <p className="text-gray-500 font-medium">管理與維護所有歷史題庫</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => setMode('plan')}
+                        className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-200 rounded-xl font-bold hover:bg-gray-50 transition-colors shadow-sm"
+                    >
+                        <BookOpen className="w-4 h-4" />
+                        返回考卷工坊
+                    </button>
+                </div>
+                <QuestionBankManager />
+            </div>
+        );
+    }
+
     return (
         <div className="max-w-7xl mx-auto p-6 space-y-6 h-[calc(100vh-100px)]">
-            <div className="flex items-center gap-3 mb-6">
-                <BookOpen className="w-8 h-8 text-blue-600" />
-                <div>
-                    <h1 className="text-3xl font-black text-gray-900 tracking-tight">考卷工坊</h1>
-                    <p className="text-gray-500 font-medium">上傳 TXT 考卷題目，系統將自動解析並匯入題庫</p>
+            <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                    <BookOpen className="w-8 h-8 text-blue-600" />
+                    <div>
+                        <h1 className="text-3xl font-black text-gray-900 tracking-tight">考卷工坊</h1>
+                        <p className="text-gray-500 font-medium">上傳 TXT 考卷題目，系統將自動解析並匯入題庫</p>
+                    </div>
                 </div>
+                <button 
+                    onClick={() => setMode('bank')}
+                    className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-xl font-bold hover:bg-blue-50 transition-colors shadow-sm"
+                >
+                    <Archive className="w-4 h-4" />
+                    歷史題庫維護
+                </button>
             </div>
 
             <div className="grid grid-cols-12 gap-6 h-full">
@@ -260,8 +303,8 @@ const ExamStudio = () => {
                                     <button
                                         key={plan.id}
                                         onClick={() => setSelectedPlanId(plan.id)}
-                                        className={`w-full text-left p-4 transition-colors hover:bg-gray-50 flex items-center justify-between group ${
-                                            selectedPlanId === plan.id ? 'bg-blue-50 border-l-4 border-blue-500' : 'border-l-4 border-transparent'
+                                        className={`w-full text-left p-4 transition-colors flex items-center justify-between group border-b border-gray-50 last:border-0 even:bg-gray-100/60 hover:bg-blue-50/80 ${
+                                            selectedPlanId === plan.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'
                                         }`}
                                     >
                                         <div className="min-w-0">
@@ -342,6 +385,46 @@ const ExamStudio = () => {
                                     )}
                                 </div>
 
+                                {/* Format Help Section */}
+                                <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+                                    <h3 className="text-sm font-black text-gray-700 mb-4 flex items-center gap-2">
+                                        <AlertCircle className="w-4 h-4 text-blue-500" />
+                                        題目格式範例 (TXT)
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div className="space-y-2">
+                                            <div className="text-xs font-bold text-gray-500 uppercase">是非題 (True/False)</div>
+                                            <div className="bg-white p-3 rounded-lg border border-gray-200 text-xs font-mono text-gray-600 leading-relaxed">
+                                                <div>Q: 資訊安全很重要，對嗎？</div>
+                                                <div className="text-green-600 font-bold">ANS: Y</div>
+                                                <div>SCORE: 10</div>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="text-xs font-bold text-gray-500 uppercase">單選題 (Single Choice)</div>
+                                            <div className="bg-white p-3 rounded-lg border border-gray-200 text-xs font-mono text-gray-600 leading-relaxed">
+                                                <div>Q: 哪項不是資安要素？</div>
+                                                <div>A: 機密性</div>
+                                                <div>B: 完整性</div>
+                                                <div>C: 方便性</div>
+                                                <div className="text-green-600 font-bold">ANS: C</div>
+                                                <div>SCORE: 10</div>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="text-xs font-bold text-gray-500 uppercase">複選題 (Multiple Choice)</div>
+                                            <div className="bg-white p-3 rounded-lg border border-gray-200 text-xs font-mono text-gray-600 leading-relaxed">
+                                                <div>Q: 資安要素包含？</div>
+                                                <div>A: 機密性</div>
+                                                <div>B: 完整性</div>
+                                                <div>C: 可用性</div>
+                                                <div className="text-green-600 font-bold">ANS: ABC</div>
+                                                <div>SCORE: 20</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {/* Materials List with Preview */}
                                 <div>
                                     <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -392,10 +475,19 @@ const ExamStudio = () => {
 
                                 {/* Questions List */}
                                 <div>
-                                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                        <Check className="w-5 h-5 text-gray-500" />
-                                        已匯入題庫 ({questions.length})
-                                    </h3>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                            <Check className="w-5 h-5 text-gray-500" />
+                                            已匯入題庫 ({questions.length})
+                                        </h3>
+                                        <button 
+                                            onClick={() => setShowImportModal(true)}
+                                            className="text-sm font-bold text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 border border-blue-200"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                            從題庫匯入
+                                        </button>
+                                    </div>
                                     {isLoadingQuestions ? (
                                         <div className="text-center py-8 text-gray-400"><Loader2 className="w-5 h-5 animate-spin mx-auto"/></div>
                                     ) : questions.length === 0 ? (
@@ -444,7 +536,7 @@ const ExamStudio = () => {
                                                                         {(key === q.answer || (q.answer?.includes(key) && q.question_type === 'multiple')) && ' ✓'}
                                                                     </div>
                                                                 ));
-                                                            } catch (e) { return <div className="text-red-500 text-sm">選項解析錯誤</div>; }
+                                                            } catch (_) { return <div className="text-red-500 text-sm">選項解析錯誤</div>; }
                                                         })()}
                                                         {q.question_type === 'true_false' && (
                                                             <div className="text-sm font-bold text-green-600">
@@ -495,6 +587,17 @@ const ExamStudio = () => {
                     onClose={() => setEditingQuestion(null)}
                     onSave={() => {
                         if (selectedPlanId) fetchQuestions(selectedPlanId);
+                    }}
+                />
+            )}
+
+            {/* Import Modal */}
+            {showImportModal && selectedPlanId && (
+                <BankImportModal 
+                    planId={selectedPlanId}
+                    onClose={() => setShowImportModal(false)}
+                    onImportSuccess={() => {
+                        fetchQuestions(selectedPlanId);
                     }}
                 />
             )}

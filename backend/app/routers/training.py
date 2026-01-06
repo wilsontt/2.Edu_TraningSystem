@@ -72,6 +72,11 @@ def update_training_plan(
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
 
     # update fields
+    # Check if start date is changed and if exams have started
+    if db_plan.training_date != plan_update.training_date:
+        if db_plan.exam_records:
+             raise HTTPException(status_code=400, detail="已有學員開始考試，無法變更開始日期")
+             
     db_plan.title = plan_update.title
     db_plan.sub_category_id = plan_update.sub_category_id
     db_plan.dept_id = plan_update.dept_id

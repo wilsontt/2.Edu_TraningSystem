@@ -94,13 +94,25 @@ class Question(Base):
     __tablename__ = "questions"
     id = Column(Integer, primary_key=True, index=True)
     plan_id = Column(Integer, ForeignKey("training_plans.id"))
-    question_type = Column(String) # 單選/是非
     content = Column(Text)
+    question_type = Column(String) # 單選/是非
     options = Column(Text) # JSON 選項
     answer = Column(String)
     points = Column(Integer, default=10)
     
     training_plan = relationship("TrainingPlan", back_populates="questions")
+
+class QuestionBank(Base):
+    __tablename__ = "question_bank"
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(Text, nullable=False)
+    question_type = Column(String, nullable=False) # single, multiple, true_false
+    options = Column(Text, nullable=True) # JSON string
+    answer = Column(String, nullable=False)
+    tags = Column(Text, nullable=True) # JSON string array
+    created_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 
 class ExamRecord(Base):
     __tablename__ = "exam_records"

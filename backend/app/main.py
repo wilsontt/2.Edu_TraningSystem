@@ -22,6 +22,8 @@ from .routers import exam
 app.include_router(exam.router, prefix="/api")
 from .routers import exam_center
 app.include_router(exam_center.router, prefix="/api")
+from .routers import question_bank
+app.include_router(question_bank.router, prefix="/api")
 
 @app.get("/")
 async def root():
