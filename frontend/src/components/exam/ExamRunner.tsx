@@ -257,7 +257,7 @@ const ExamRunner = () => {
                 />
             )}
 
-            {/* Header - Fixed */}
+            {/* 頁首 - 固定 */}
             <div className="bg-white px-4 py-3 flex items-center justify-between border-b border-gray-100 shadow-sm shrink-0 z-20">
                 <button 
                     onClick={handleExit} 
@@ -272,7 +272,7 @@ const ExamRunner = () => {
                 {!result && <ExamTimer limitTime={examData.limit_time} onTimeUp={handleTimeUp} />}
             </div>
 
-            {/* Progress Bar - Fixed */}
+            {/* 進度條 - 固定 */}
             <div className="h-1.5 bg-gray-100 w-full shrink-0">
                 <div 
                     className="h-full bg-blue-600 transition-all duration-300 ease-out rounded-r-full"
@@ -280,7 +280,7 @@ const ExamRunner = () => {
                 />
             </div>
 
-            {/* Question Area Container - Scrollable */}
+            {/* 題目區域容器 - 可捲動 */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden relative bg-white w-full scroll-smooth">
                 <AnimatePresence initial={false} custom={direction} mode="wait">
                     <motion.div
@@ -342,7 +342,7 @@ const ExamRunner = () => {
                 </AnimatePresence>
             </div>
 
-            {/* Navigation Footer - Fixed */}
+            {/* 導航頁尾 - 固定 */}
             <div className="bg-white/90 backdrop-blur-md border-t border-gray-100 p-4 shrink-0 z-20 w-full">
                 <div className="flex items-center gap-3 w-full max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto">
                     <button 

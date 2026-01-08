@@ -269,7 +269,7 @@ const TrainingPlanManager = () => {
                 filteredPlans.map((plan, index) => {
                   const isExpired = plan.end_date && plan.end_date < today;
                   return (
-                  <tr key={plan.id} className={`group border-b border-gray-50 transition-colors even:bg-gray-100/60 hover:bg-blue-50/50 ${isExpired ? 'border-l-4 border-l-orange-400 bg-orange-50/10' : ''}`}>
+                  <tr key={plan.id} className={`group border-b border-gray-50 transition-colors even:bg-gray-100/60 hover:bg-blue-50/80 ${isExpired ? 'border-l-4 border-l-orange-400 bg-orange-50/10' : ''}`}>
                     <td className="px-6 py-4 text-sm font-black text-gray-300">{index + 1}</td>
                     <td className="px-6 py-4 text-sm font-black text-blue-600">{plan.year}</td>
                     <td className="px-6 py-4">

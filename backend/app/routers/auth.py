@@ -30,7 +30,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     if not emp_id:
         raise HTTPException(status_code=401, detail="無效的認證憑證")
     
-    # Eager load role and functions to avoid lazy load issues in async context
+    # 預先載入角色與功能，避免非同步環境下的 Lazy Load 問題
     user = db.query(models.User).options(
         joinedload(models.User.role).joinedload(models.Role.functions)
     ).filter(models.User.emp_id == emp_id).first()
@@ -97,7 +97,7 @@ async def get_captcha():
              font = ImageFont.load_default()
 
     # 每個字的顏色
-    colors = [(220, 38, 38), (22, 163, 74), (37, 99, 235), (234, 88, 12)] # Red, Green, Blue, Orange
+    colors = [(220, 38, 38), (22, 163, 74), (37, 99, 235), (234, 88, 12)] # 紅, 綠, 藍, 橘
     
     for i, char in enumerate(captcha_text):
         x = 20 + i * 35

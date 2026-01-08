@@ -22,7 +22,7 @@ const BankImportModal = ({ planId, onClose, onImportSuccess }: BankImportModalPr
     const [importing, setImporting] = useState(false);
     
     const [page, setPage] = useState(1);
-    const [pageSize] = useState(10); // Smaller page size for modal
+    const [pageSize] = useState(10); // 模態框使用較小的分頁大小
     const [/* total */, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
 
@@ -69,10 +69,15 @@ const BankImportModal = ({ planId, onClose, onImportSuccess }: BankImportModalPr
         
         try {
             setImporting(true);
-            await api.post('/admin/question-bank/import', {
+            const res = await api.post('/admin/question-bank/import', {
                 plan_id: planId,
                 question_ids: selectedIds
             });
+            const { imported, duplicate } = (res as any).data;
+            let msg = `匯入成功 ${imported} 題`;
+            if (duplicate > 0) msg += `\n(另有 ${duplicate} 題因重複而未匯入)`;
+            
+            alert(msg);
             onImportSuccess();
             onClose();
         } catch (err) {

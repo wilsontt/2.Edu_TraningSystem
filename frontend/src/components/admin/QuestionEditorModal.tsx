@@ -90,7 +90,7 @@ const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalP
             setIsSaving(true);
             setError(null);
             
-            // Validate
+            // 驗證
             if (!formData.content.trim()) throw new Error("題目內容不能為空");
             if (formData.question_type !== 'true_false' && Object.keys(formData.options).length === 0) {
                  throw new Error("單選/多選題必須至少有一個選項");
@@ -134,7 +134,7 @@ const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalP
                         </div>
                     )}
 
-                    {/* Question Type & Points */}
+                    {/* 題目類型與分數 */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">題目類型</label>
@@ -159,7 +159,7 @@ const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalP
                         </div>
                     </div>
 
-                    {/* Content */}
+                    {/* 題目內容 */}
                     <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">題目內容</label>
                         <textarea 
@@ -170,7 +170,7 @@ const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalP
                         />
                     </div>
 
-                    {/* Options (Dynamic) */}
+                    {/* 選項設定 (動態) */}
                     {formData.question_type !== 'true_false' && (
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2 flex justify-between items-center">
@@ -206,7 +206,7 @@ const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalP
                         </div>
                     )}
 
-                    {/* Answer */}
+                    {/* 正確答案 */}
                     <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">正確答案</label>
                         {formData.question_type === 'true_false' ? (

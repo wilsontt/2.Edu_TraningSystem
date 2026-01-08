@@ -7,11 +7,11 @@ from .auth import check_permission
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-# --- Department CRUD ---
+# --- 單位管理 (CRUD) ---
 @router.get("/departments", response_model=List[schemas.Department])
 def get_departments(db: Session = Depends(get_db), current_user = check_permission("menu:admin:dept")):
     departments = db.query(models.Department).all()
-    # Add counts
+    # 新增統計數據
     for dept in departments:
         dept.user_count = len(dept.users)
     return departments
@@ -56,7 +56,7 @@ def delete_department(id: int, db: Session = Depends(get_db), current_user = che
     db.commit()
     return {"message": "刪除成功"}
 
-# --- Department Users ---
+# --- 單位使用者管理 ---
 @router.get("/departments/{id}/users")
 def get_department_users(id: int, db: Session = Depends(get_db), current_user = check_permission("menu:admin:dept")):
     """獲取特定部門的所有使用者"""
@@ -80,7 +80,7 @@ def get_department_users(id: int, db: Session = Depends(get_db), current_user = 
         "users": users
     }
 
-# --- Category CRUD ---
+# --- 分類管理 (CRUD) ---
 @router.get("/categories/main", response_model=List[schemas.MainCategory])
 def get_main_categories(db: Session = Depends(get_db), current_user = check_permission("menu:plan")):
     """獲取所有大項目清單（含其下的細項目）"""

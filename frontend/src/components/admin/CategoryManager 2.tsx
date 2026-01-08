@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AxiosError } from 'axios';
-import { Plus, Edit2, Check, X, FolderTree, Search, Loader2, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Check, X, FolderTree, Search, Loader2, ChevronDown, ChevronRight, Trash2, AlertCircle } from 'lucide-react';
 import api from '../../api';
 
 interface SubCategory {
@@ -20,16 +20,16 @@ const CategoryManager = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 展開/收合狀態
+  // Expand/Collapse state
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
   
-  // 主分類新增/編輯狀態
+  // Create / Edit state for Main Categories
   const [isAddingMain, setIsAddingMain] = useState(false);
   const [newMainName, setNewMainName] = useState('');
   const [editingMainId, setEditingMainId] = useState<number | null>(null);
   const [editMainName, setEditMainName] = useState('');
   
-  // 子分類新增/編輯狀態
+  // Create / Edit state for Sub Categories
   const [addingSubToMainId, setAddingSubToMainId] = useState<number | null>(null);
   const [newSubName, setNewSubName] = useState('');
   const [editingSubId, setEditingSubId] = useState<number | null>(null);
@@ -60,7 +60,7 @@ const CategoryManager = () => {
     setExpandedCategories(newExpanded);
   };
 
-  // 主分類操作
+  // Main Category handlers
   const handleAddMain = async (e?: React.MouseEvent) => {
     e?.preventDefault();
     if (!newMainName.trim()) return;
@@ -94,7 +94,7 @@ const CategoryManager = () => {
     }
   };
 
-  // 子分類操作
+  // Sub Category handlers
   const handleAddSub = async (mainId: number, e?: React.MouseEvent) => {
     e?.preventDefault();
     if (!newSubName.trim()) return;

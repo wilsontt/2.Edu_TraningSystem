@@ -36,7 +36,7 @@ const UserManager = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Edit State
+  // 編輯狀態
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({
     role_id: 0,

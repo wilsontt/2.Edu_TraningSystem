@@ -25,8 +25,7 @@ def get_questions(
     query = db.query(models.QuestionBank)
     
     if keyword:
-        # SQLite case-insensitive LIKE is limited, using ilike provided by SQLAlchemy extended types if possible, 
-        # but for portability in this project using .contains or ilike
+        # SQLite 大小寫不敏感支援有限，但在此專案中使用 .contains 即可
         query = query.filter(models.QuestionBank.content.ilike(f"%{keyword}%"))
     
     if question_type and question_type != 'all':
@@ -120,6 +119,15 @@ def import_questions_to_plan(
     count = 0
     try:
         for q in questions:
+            # 檢查是否已存在於該計畫中 (避免重複匯入)
+            exists = db.query(models.Question).filter(
+                models.Question.plan_id == plan_id,
+                models.Question.content == q.content
+            ).first()
+            
+            if exists:
+                continue
+
             # 複製一份到 Question 表
             new_q = models.Question(
                 plan_id=plan_id,
@@ -137,4 +145,9 @@ def import_questions_to_plan(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"匯入失敗: {str(e)}")
         
-    return {"message": f"成功匯入 {count} 題", "count": count}
+    return {
+        "message": f"匯入完成", 
+        "imported": count,
+        "duplicate": len(questions) - count,
+        "failed": 0
+    }

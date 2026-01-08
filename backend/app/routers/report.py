@@ -8,15 +8,15 @@ from .auth import check_permission
 
 router = APIRouter(prefix="/admin/reports", tags=["reports"])
 
-# --- Overview Statistics ---
+# --- 總覽統計 ---
 @router.get("/overview")
 def get_overview_statistics(db: Session = Depends(get_db), current_user = check_permission("menu:report")):
     """
     獲取總體統計數據:
-    - 總考試場次 (TrainingPlans with timer_enabled maybe? Or just count records)
-    - 總應考人次 (ExamRecords count)
-    - 平均分數 (Avg total_score)
-    - 總體及格率 (Passed count / Total count)
+    - 總考試場次
+    - 總應考人次
+    - 平均分數
+    - 總體及格率
     """
     total_records = db.query(models.ExamRecord).count()
     if total_records == 0:
@@ -42,7 +42,7 @@ def get_overview_statistics(db: Session = Depends(get_db), current_user = check_
         "pass_rate": round(pass_rate, 1)
     }
 
-# --- Department Statistics ---
+# --- 部門/單位統計 ---
 @router.get("/department")
 def get_department_statistics(db: Session = Depends(get_db), current_user = check_permission("menu:report")):
     """
@@ -79,7 +79,7 @@ def get_department_statistics(db: Session = Depends(get_db), current_user = chec
         print(f"Error in department stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- Plan Statistics ---
+# --- 計畫統計 ---
 @router.get("/plan")
 def get_plan_statistics(db: Session = Depends(get_db), current_user = check_permission("menu:report")):
     """
@@ -113,7 +113,7 @@ def get_plan_statistics(db: Session = Depends(get_db), current_user = check_perm
         print(f"Error in plan stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- PDF Export ---
+# --- PDF 匯出 ---
 from fastapi.responses import StreamingResponse
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
@@ -129,11 +129,11 @@ def export_pdf(plan_id: Optional[int] = None, db: Session = Depends(get_db)): # 
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
-    # Title
+    # 標題
     p.setFont("Helvetica-Bold", 20)
     p.drawString(100, height - 50, "Training Exam Report")
 
-    # Content
+    # 內容
     y = height - 100
     p.setFont("Helvetica", 12)
 
@@ -151,7 +151,7 @@ def export_pdf(plan_id: Optional[int] = None, db: Session = Depends(get_db)): # 
     p.drawString(50, y, f"Total Records: {len(records)}")
     y -= 30
 
-    # Table Header
+    # 表格標題
     headers = ["Emp ID", "Score", "Result", "Date"]
     x_positions = [50, 150, 250, 350]
     
@@ -161,7 +161,7 @@ def export_pdf(plan_id: Optional[int] = None, db: Session = Depends(get_db)): # 
     y -= 20
     p.line(50, y+15, 500, y+15)
 
-    # Table Rows
+    # 表格資料
     for r in records:
         if y < 50:
             p.showPage()

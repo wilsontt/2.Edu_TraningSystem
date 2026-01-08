@@ -18,10 +18,7 @@ import type { User } from './types';
 import { useRef } from 'react';
 // ... (imports are fine, just adding one) ...
 
-// Correcting the replacing target block to be safe
-// I will split this into two edits if needed, but let's try one block for import and one for route if they are far apart.
-// They are far apart (Line 14 and Line 310). I should use multi_replace or two calls.
-// Using replace_file_content for imports first.
+
 
 const CalendarIcon = () => {
   const [date, setDate] = useState(new Date());
@@ -30,7 +27,9 @@ const CalendarIcon = () => {
     const timer = setInterval(() => setDate(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-
+  
+  // 格式化月份、日期、時間字串
+  // 返回 JSX（日曆圖示 + 日期時間文字）
   const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
   const day = date.getDate();
   

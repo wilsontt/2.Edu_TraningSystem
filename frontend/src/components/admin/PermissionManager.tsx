@@ -29,7 +29,7 @@ const PermissionManager = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Confirm Modal State
+  // 確認模態框狀態
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; targetRoleId: number | null }>({
       isOpen: false,
       targetRoleId: null
@@ -45,7 +45,7 @@ const PermissionManager = () => {
     }
   }, [selectedRoleId]);
   
-  // Custom Role Select Handler
+  // 自定義角色選擇處理
   const handleRoleSelect = (roleId: number) => {
     if (selectedRoleId === roleId) return;
     if (isDirty) {
@@ -95,7 +95,7 @@ const PermissionManager = () => {
   };
 
   const handleTogglePermission = (funcId: number) => {
-    // Admin checking
+    // 檢查 Admin 權限
     const currentRole = roles.find(r => r.id === selectedRoleId);
     if (currentRole?.name === 'Admin') return;
 

@@ -8,7 +8,7 @@ from .auth import check_permission
 
 router = APIRouter(prefix="/training", tags=["training"])
 
-# --- Training Plan CRUD ---
+# --- 訓練計畫管理 ---
 @router.post("/plans", response_model=schemas.TrainingPlan)
 def create_training_plan(
     plan: schemas.TrainingPlanCreate,
@@ -72,7 +72,7 @@ def update_training_plan(
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
 
     # update fields
-    # Check if start date is changed and if exams have started
+    # 檢查開始日期是否變更，且是否已有考試紀錄
     if db_plan.training_date != plan_update.training_date:
         if db_plan.exam_records:
              raise HTTPException(status_code=400, detail="已有學員開始考試，無法變更開始日期")
@@ -87,15 +87,13 @@ def update_training_plan(
     db_plan.time_limit = plan_update.time_limit
     db_plan.passing_score = plan_update.passing_score
     
-    # Update target departments if provided
+    # 若有提供受課單位則更新
     if plan_update.target_dept_ids:
         target_depts = db.query(models.Department).filter(models.Department.id.in_(plan_update.target_dept_ids)).all()
         db_plan.target_departments = target_depts
     elif not db_plan.target_departments:
-         # Should not happen typically, but ensure at least host dept is there if empty? 
-         # Or stick to existing if not provided? Use list from frontend.
-         # Assuming frontend sends full list on update.
-         pass
+         # 正常情況不應發生，若無提供則略過
+        pass
     
     try:
         db.commit()

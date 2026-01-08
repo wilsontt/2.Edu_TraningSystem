@@ -4,7 +4,7 @@ import { Download, Users, FileText, CheckCircle, TrendingUp } from "lucide-react
 import clsx from 'clsx';
 import { format } from "date-fns";
 
-// Define Types
+// 定義型別
 interface OverviewStats {
   total_exams: number;
   total_records: number;
@@ -107,13 +107,13 @@ export default function ReportDashboard() {
         </button>
       </div>
 
-      {/* KPI Cards */}
+      {/* 關鍵績效指標 (KPI) */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[
           { title: "總考試場次", value: overview.total_exams, sub: "所有計畫", icon: FileText, color: "text-blue-500" },
           { title: "總應考人次", value: overview.total_records, sub: "累積人次", icon: Users, color: "text-green-500" },
           { title: "平均分數", value: overview.average_score, sub: "分", icon: TrendingUp, color: "text-yellow-500" },
-          { title: "及格率", value: `${overview.pass_rate}%`, sub: "Overall", icon: CheckCircle, color: "text-red-500" }
+          { title: "及格率", value: `${overview.pass_rate}%`, sub: "總體", icon: CheckCircle, color: "text-red-500" }
         ].map((kpi, idx) => (
           <div key={idx} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <div className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -128,7 +128,7 @@ export default function ReportDashboard() {
         ))}
       </div>
 
-      {/* Tabs */}
+      {/* 分頁籤 */}
       <div className="space-y-4">
         <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
           <button

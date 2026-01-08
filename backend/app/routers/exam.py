@@ -4,6 +4,7 @@ from typing import List
 import os
 import shutil
 from pathlib import Path
+from datetime import datetime
 
 from .. import models, schemas
 from ..database import get_db
@@ -51,7 +52,20 @@ async def upload_material(
     import json
     try:
         new_questions = []
+        duplicate_count = 0
+        imported_count = 0
+
         for q in questions_data:
+            # 檢查此計畫中是否已有重複題目
+            exists = db.query(models.Question).filter(
+                models.Question.plan_id == plan_id,
+                models.Question.content == q["content"]
+            ).first()
+
+            if exists:
+                duplicate_count += 1
+                continue
+
             new_q = models.Question(
                 plan_id=plan_id,
                 question_type=q["type"],
@@ -62,6 +76,7 @@ async def upload_material(
             )
             db.add(new_q)
             new_questions.append(new_q)
+            imported_count += 1
             
             # --- 同步寫入題庫 (QuestionBank) ---
             # 檢查是否已存在 (以題目內容判斷)
@@ -91,6 +106,13 @@ async def upload_material(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"題目儲存失敗: {str(e)}")
+
+    return {
+        "filename": file.filename,
+        "imported": imported_count,
+        "duplicate": duplicate_count,
+        "failed": 0
+    }
 
     # 4. 備份原始檔案
     try:
@@ -137,7 +159,8 @@ def list_materials(
             files.append({
                 "filename": f.name,
                 "path": str(f),
-                "size": f.stat().st_size
+                "size": f.stat().st_size,
+                "upload_time": datetime.fromtimestamp(f.stat().st_mtime).strftime('%Y-%m-%d %H:%M')
             })
             
     return files

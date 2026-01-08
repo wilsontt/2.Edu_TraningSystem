@@ -28,16 +28,16 @@ const DepartmentManager = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Create / Edit state
+  // 新增/編輯狀態
   const [isEditing, setIsEditing] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
 
-  // Error Modal State
+  // 錯誤模態框狀態
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Users Modal State
+  // 使用者模態框狀態
   const [viewingDeptUsers, setViewingDeptUsers] = useState<DepartmentUsersData | null>(null);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
@@ -136,7 +136,7 @@ const DepartmentManager = () => {
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8 animate-in fade-in duration-500 relative">
-      {/* Error Modal */}
+      {/* 錯誤模態框 */}
       {errorMessage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
@@ -162,7 +162,7 @@ const DepartmentManager = () => {
         </div>
       )}
 
-      {/* Users Modal */}
+      {/* 使用者模態框 */}
       {viewingDeptUsers && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">

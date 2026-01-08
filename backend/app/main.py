@@ -6,7 +6,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex="https?://.*", # Allow all http/https origins with credentials
+    allow_origin_regex="https?://.*", # 允許所有 HTTP/HTTPS 來源並支援憑證
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

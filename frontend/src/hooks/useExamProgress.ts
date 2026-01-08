@@ -6,7 +6,7 @@ export const useExamProgress = (planId: string | undefined, userId: string | und
     const [answers, setAnswers] = useState<Record<number, string>>({});
     const [hasRestored, setHasRestored] = useState(false);
 
-    // Load from storage on mount
+    // 載入暫存進度
     useEffect(() => {
         if (!planId || !userId) return;
         
@@ -16,9 +16,7 @@ export const useExamProgress = (planId: string | undefined, userId: string | und
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
-                // We use a functional update or just set it. 
-                // The lint warning is about cascading updates. 
-                // Since this runs once on mount/id-change, it's acceptable but we can optimize.
+                // 使用 functional update 避免依賴問題
                 setAnswers(parsed);
                 console.log(`[Exam] Restored progress for plan ${planId}`);
             } catch (e) {
@@ -26,14 +24,14 @@ export const useExamProgress = (planId: string | undefined, userId: string | und
             }
         }
         setHasRestored(true);
-    }, [planId, userId]); // Dependencies are correct for re-hydration on plan switch
+    }, [planId, userId]); // 確保在切換計畫時重新載入
 
-    // Save to storage on change
+    // 變更時儲存進度
     const saveAnswer = useCallback((qId: number, value: string) => {
         setAnswers(prev => {
             const next = { ...prev, [qId]: value };
             
-            // Persist
+            // 持久化存儲
             if (planId && userId) {
                 const key = `${STORAGE_PREFIX}${userId}_${planId}`;
                 localStorage.setItem(key, JSON.stringify(next));

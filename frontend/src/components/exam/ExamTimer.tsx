@@ -2,15 +2,15 @@ import { useEffect, useState } from 'react';
 import { Clock } from 'lucide-react';
 
 interface ExamTimerProps {
-    limitTime: number; // total seconds allowed
+    limitTime: number; // 允許的總秒數
     onTimeUp: () => void;
 }
 
 const ExamTimer = ({ limitTime, onTimeUp }: ExamTimerProps) => {
-    // Initialize state directly from prop to avoid sync setState in effect
+    // 直接從 prop 初始化 state 以避免 effect 中的同步 setState
     const [timeLeft, setTimeLeft] = useState(limitTime);
 
-    // Sync only if limitTime prop changes significantly (e.g. new exam loaded)
+    // 僅在 limitTime 顯著變更時同步
     useEffect(() => {
         if (limitTime > 0) {
             setTimeLeft(limitTime);
@@ -43,7 +43,7 @@ const ExamTimer = ({ limitTime, onTimeUp }: ExamTimerProps) => {
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
 
-    const isUrgent = timeLeft < 60; // Less than 1 minute
+    const isUrgent = timeLeft < 60; // 少於 1 分鐘
 
     if (limitTime <= 0) return null;
 

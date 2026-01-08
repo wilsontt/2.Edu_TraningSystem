@@ -18,7 +18,7 @@ const ScoreCard = ({ score, totalScore, isPassed, onClose }: ScoreCardProps) => 
                 transition={{ type: "spring", stiffness: 200, damping: 15 }}
                 className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden relative"
             >
-                {/* Decorative Header */}
+                {/* 裝飾性標頭 */}
                 <div className={`h-32 ${isPassed ? 'bg-green-500' : 'bg-red-500'} relative overflow-hidden flex items-center justify-center`}>
                     <div className="absolute inset-0 bg-white/10 opacity-50 bg-[radial-gradient(circle_at_center,var(--tw-gradient-stops))] from-white/40 to-transparent scale-150" />
                     
@@ -56,7 +56,7 @@ const ScoreCard = ({ score, totalScore, isPassed, onClose }: ScoreCardProps) => 
                         <span className="text-xl text-gray-400 font-bold mb-2">/ {totalScore} 分</span>
                     </div>
 
-                    {/* Stamp Animation */}
+                    {/* 印章動畫 */}
                     <motion.div 
                         initial={{ scale: 2, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
@@ -78,7 +78,7 @@ const ScoreCard = ({ score, totalScore, isPassed, onClose }: ScoreCardProps) => 
                         </button>
                         {!isPassed && (
                             <button 
-                                onClick={() => window.location.reload()} // Simple retry for demo, ideally reset state
+                                onClick={() => window.location.reload()} // 簡單重試Demo，理想情況應重置狀態
                                 className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
                             >
                                 <RotateCcw className="w-4 h-4" />

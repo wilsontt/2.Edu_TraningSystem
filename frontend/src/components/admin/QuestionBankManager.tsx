@@ -16,13 +16,13 @@ const QuestionBankManager = () => {
     const [questions, setQuestions] = useState<QuestionBankItem[]>([]);
     const [loading, setLoading] = useState(false);
     
-    // Pagination
+    // 分頁
     const [page, setPage] = useState(1);
     const [pageSize] = useState(20);
     const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
 
-    // Filters
+    // 篩選
     const [keyword, setKeyword] = useState('');
     const [questionType, setQuestionType] = useState('all');
     const [tagFilter, setTagFilter] = useState('');
@@ -54,7 +54,7 @@ const QuestionBankManager = () => {
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        setPage(1); // Reset to page 1
+        setPage(1); // 重置為第一頁
         fetchQuestions();
     };
 
@@ -88,7 +88,7 @@ const QuestionBankManager = () => {
 
     return (
         <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            {/* Toolbar */}
+            {/* 工具列 */}
             <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-wrap gap-4 items-center justify-between">
                 <form onSubmit={handleSearch} className="flex gap-2 items-center flex-1 min-w-[300px]">
                     <div className="relative flex-1">
@@ -147,7 +147,7 @@ const QuestionBankManager = () => {
                             <tr><td colSpan={5} className="p-8 text-center text-gray-400 italic font-bold">查無資料</td></tr>
                         ) : (
                             questions.map((q, idx) => (
-                                <tr key={q.id} className="group transition-colors border-b border-gray-50 last:border-0 even:bg-gray-100/60 hover:bg-blue-50/50">
+                                <tr key={q.id} className="group transition-colors border-b border-gray-50 last:border-0 even:bg-gray-100/60 hover:bg-blue-50/80">
                                     <td className="px-6 py-3 text-xs font-mono text-gray-400">
                                         {(page - 1) * pageSize + idx + 1}
                                     </td>

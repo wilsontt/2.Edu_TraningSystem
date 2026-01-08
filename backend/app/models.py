@@ -77,8 +77,8 @@ class TrainingPlan(Base):
     sub_category_id = Column(Integer, ForeignKey("sub_categories.id"))
     dept_id = Column(Integer, ForeignKey("departments.id")) # 開課/上課地點
     title = Column(String)
-    training_date = Column(Date) # Start Date
-    end_date = Column(Date, nullable=True) # End Date
+    training_date = Column(Date) # 開始日期
+    end_date = Column(Date, nullable=True) # 結束日期
     year = Column(String)
     timer_enabled = Column(Boolean, default=False)
     time_limit = Column(Integer, default=0)
@@ -95,8 +95,8 @@ class Question(Base):
     id = Column(Integer, primary_key=True, index=True)
     plan_id = Column(Integer, ForeignKey("training_plans.id"))
     content = Column(Text)
-    question_type = Column(String) # 單選/是非
-    options = Column(Text) # JSON 選項
+    question_type = Column(String) # 單選/是非/多選
+    options = Column(Text) # JSON 選項字串
     answer = Column(String)
     points = Column(Integer, default=10)
     
@@ -106,10 +106,10 @@ class QuestionBank(Base):
     __tablename__ = "question_bank"
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
-    question_type = Column(String, nullable=False) # single, multiple, true_false
-    options = Column(Text, nullable=True) # JSON string
+    question_type = Column(String, nullable=False) # 題型: single(單選), multiple(多選), true_false(是非)
+    options = Column(Text, nullable=True) # JSON 字串
     answer = Column(String, nullable=False)
-    tags = Column(Text, nullable=True) # JSON string array
+    tags = Column(Text, nullable=True) # JSON 字串陣列
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 

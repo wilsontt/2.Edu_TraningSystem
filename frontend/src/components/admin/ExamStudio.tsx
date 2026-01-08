@@ -24,6 +24,7 @@ interface Material {
     filename: string;
     path: string;
     size: number;
+    upload_time?: string;
 }
 
 interface Question {
@@ -71,7 +72,7 @@ const ExamStudio = () => {
     const fetchPlans = async () => {
         try {
             setIsLoadingPlans(true);
-            const res = await api.get('/training/plans'); // Correct endpoint
+            const res = await api.get('/training/plans'); // 正確的 API 端點
             setPlans(res.data);
         } catch (err) {
             console.error(err);
@@ -179,7 +180,14 @@ const ExamStudio = () => {
                 },
             });
             
-            setUploadSuccess(res.data.message || '檔案上傳並匯入成功');
+            const { imported, duplicate, failed } = res.data;
+            let msg = `檔案上傳皆匯入成功 (共 ${imported} 題)`;
+            if (duplicate > 0 || failed > 0) {
+                msg = `匯入完成：成功 ${imported} 題`;
+                if (duplicate > 0) msg += `，重複 ${duplicate} 題未匯入`;
+                if (failed > 0) msg += `，失敗 ${failed} 題`;
+            }
+            setUploadSuccess(msg);
             fetchMaterials(selectedPlanId); // Refresh materials list
             fetchQuestions(selectedPlanId); // Refresh questions list
         } catch (err) {
@@ -303,8 +311,10 @@ const ExamStudio = () => {
                                     <button
                                         key={plan.id}
                                         onClick={() => setSelectedPlanId(plan.id)}
-                                        className={`w-full text-left p-4 transition-colors flex items-center justify-between group border-b border-gray-50 last:border-0 even:bg-gray-100/60 hover:bg-blue-50/80 ${
-                                            selectedPlanId === plan.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'
+                                        className={`w-full text-left p-4 transition-colors flex items-center justify-between group border-b border-gray-50 last:border-b-0 hover:bg-blue-50/80 ${
+                                            selectedPlanId === plan.id 
+                                                ? 'bg-blue-50 border-l-4 border-l-blue-500' 
+                                                : 'border-l-4 border-l-transparent even:bg-gray-100/60'
                                         }`}
                                     >
                                         <div className="min-w-0">
@@ -453,7 +463,17 @@ const ExamStudio = () => {
                                                         </div>
                                                         <div>
                                                             <div className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">{file.filename}</div>
-                                                            <div className="text-xs text-gray-400">{Math.round(file.size / 1024)} KB • 點擊預覽</div>
+                                                            <div className="text-xs text-gray-400 flex items-center gap-2">
+                                                                <span>{Math.round(file.size / 1024)} KB</span>
+                                                                {file.upload_time && (
+                                                                    <>
+                                                                        <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                                                        <span>{file.upload_time}</span>
+                                                                    </>
+                                                                )}
+                                                                <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                                                <span>點擊預覽</span>
+                                                            </div>
                                                         </div>
                                                     </button>
                                                     
@@ -495,9 +515,9 @@ const ExamStudio = () => {
                                             目前無題目
                                         </div>
                                     ) : (
-                                        <div className="space-y-4">
+                                        <div className="divide-y divide-gray-50 border border-gray-100 rounded-2xl overflow-hidden">
                                             {questions.map((q: Question, idx: number) => (
-                                                <div key={q.id} className="p-4 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-all group">
+                                                <div key={q.id} className="p-4 transition-colors group even:bg-gray-100/60 hover:bg-blue-50/80">
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div className="flex gap-2">
                                                             <span className="inline-block px-2 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded">

@@ -17,12 +17,12 @@ const SystemFunctionManager = () => {
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   
-  // Adding state
+  // 新增狀態
   const [isAdding, setIsAdding] = useState(false);
   const [addingParentId, setAddingParentId] = useState<number | null>(null);
   const [newFunc, setNewFunc] = useState({ name: '', code: '', path: '' });
   
-  // Editing state
+  // 編輯狀態
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editFunc, setEditFunc] = useState({ name: '', code: '', path: '' });
 
@@ -35,9 +35,9 @@ const SystemFunctionManager = () => {
   const fetchFunctions = async () => {
     try {
       setLoading(true);
-      // Using existing /admin/functions but we need a recursive structure or client-side assembly
-      // The backend /admin/functions only returns root nodes (parent_id == None). 
-      // Models has `children` relationship, so Schema should handle it recursive if configured right.
+      // 使用現有的 API，但需要遞迴結構或前端組裝
+      // 後端 /admin/functions 僅回傳根節點 (parent_id == None)。
+      // 模型有 `children` 關聯，因此若 Schema 設定正確應可遞迴取得。
       const res = await api.get('/admin/functions'); 
       setFunctions(res.data);
     } catch (err) {
@@ -65,7 +65,7 @@ const SystemFunctionManager = () => {
     setEditingId(null);
     setError(null);
     
-    // Auto expand parent if adding child
+    // 新增子項目時自動展開父項目
     if (parentId) {
         const newSet = new Set(expandedIds);
         newSet.add(parentId);

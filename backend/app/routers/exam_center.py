@@ -9,13 +9,13 @@ from .auth import get_current_user
 
 router = APIRouter(prefix="/exam", tags=["exam_center"])
 
-# --- Schemas for Exam Center ---
+# --- 考試中心資料結構 ---
 class ExamListItem(BaseModel):
     plan_id: int
     title: str
     training_date: date
     end_date: Optional[date]
-    status: str  # pending, active, completed, expired
+    status: str  # 狀態: pending(未開始), active(進行中), completed(已完成), expired(已過期)
     score: Optional[int]
     total_points: Optional[int]
     attempts: int = 0
@@ -30,10 +30,10 @@ class QuestionItem(BaseModel):
 class ExamStartResponse(BaseModel):
     plan_id: int
     title: str
-    limit_time: int = 0 # seconds
+    limit_time: int = 0 # 秒
     questions: List[QuestionItem]
 
-# --- Endpoints ---
+# --- API 端點 ---
 
 @router.get("/my_exams", response_model=List[ExamListItem])
 def get_my_exams(
@@ -82,12 +82,11 @@ def get_my_exams(
         
         status = "pending"
         score = None
-        total = 100 # Default total? Or calculate from questions?
+        total = 100 # 預設總分
         
         # Calculate total points from questions
-        # This might be N+1 query if not optimized, but distinct plan count is usually small.
-        # Alternatively, could pre-calculate or ignore for list view.
-        # Let's sum points.
+        # 若未優化可能導致 N+1 查詢，但通常計畫數不多，故暫時忽略
+        # 計算總分
         qs = plan.questions
         calculated_total = sum([q.points for q in qs]) if qs else 0
         total = calculated_total if calculated_total > 0 else 100

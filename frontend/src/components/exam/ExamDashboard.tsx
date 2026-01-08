@@ -81,8 +81,8 @@ const ExamDashboard = () => {
                                     navigate(`/exam/run/${exam.plan_id}`);
                                 }
                             }}
-                            className={`bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all group flex items-center justify-between
-                                ${(exam.status === 'active' || (exam.status === 'completed' && (exam.score !== null && exam.score < 60))) ? 'cursor-pointer ring-2 ring-transparent hover:ring-blue-100' : 'opacity-80 grayscale-[0.3]'}
+                            className={`bg-white p-6 rounded-2xl shadow-sm border border-gray-100 transition-all group flex items-center justify-between
+                                ${(exam.status === 'active' || (exam.status === 'completed' && (exam.score !== null && exam.score < 60))) ? 'cursor-pointer hover:shadow-md hover:border-blue-200 hover:bg-blue-50/30' : 'opacity-80 grayscale-[0.3]'}
                                 ${(exam.status === 'completed' && (exam.score === null || exam.score >= 60)) ? 'bg-gray-50/50' : ''}
                             `}
                         >
