@@ -142,7 +142,10 @@ def start_exam(
     if today < plan.training_date:
         raise HTTPException(status_code=400, detail="Exam has not started yet.")
     if plan.end_date and today > plan.end_date:
-        raise HTTPException(status_code=400, detail="Exam has expired.")
+        # 如果是重考 (有紀錄且未通過)，則允許忽略結束日期進行補考
+        # 若是首次參加或已通過 (雖然已通過會被前面擋住)，則檢查過期
+        if not (record and not record.is_passed):
+            raise HTTPException(status_code=400, detail="Exam has expired.")
 
     # Fetch questions
     # Note: We do NOT include 'answer' field here for security.

@@ -246,7 +246,7 @@ const ExamRunner = () => {
     };
 
     return (
-        <div className="fixed inset-0 bg-gray-50 flex flex-col mx-auto shadow-2xl overflow-hidden max-w-lg md:max-w-2xl lg:max-w-3xl border-x border-gray-100 z-50">
+        <div className="fixed inset-0 h-[100dvh] bg-gray-50 flex flex-col mx-auto shadow-2xl overflow-hidden max-w-lg md:max-w-2xl lg:max-w-3xl border-x border-gray-100 z-50">
             {/* 成績卡 (Score Card) 疊加層 */}
             {result && (
                 <ScoreCard 
@@ -343,7 +343,7 @@ const ExamRunner = () => {
             </div>
 
             {/* 導航頁尾 - 固定 */}
-            <div className="bg-white/90 backdrop-blur-md border-t border-gray-100 p-4 shrink-0 z-20 w-full">
+            <div className="bg-white/90 backdrop-blur-md border-t border-gray-100 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shrink-0 z-20 w-full">
                 <div className="flex items-center gap-3 w-full max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto">
                     <button 
                         type="button"
