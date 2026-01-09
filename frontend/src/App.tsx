@@ -14,6 +14,7 @@ import ReportDashboard from './components/admin/ReportDashboard';
 import ExamStudio from './components/admin/ExamStudio';
 import ExamDashboard from './components/exam/ExamDashboard';
 import ExamRunner from './components/exam/ExamRunner';
+import PersonalScorePage from './components/personal/PersonalScorePage';
 import type { User } from './types';
 import { useRef } from 'react';
 // ... (imports are fine, just adding one) ...
@@ -322,7 +323,8 @@ const App = () => {
                 <Route path="/exam/run/:planId" element={<ExamRunner />} />
                 <Route path="/plans" element={user.functions?.includes('menu:plan') || user.role === 'Admin' ? <TrainingPlanManager /> : <Navigate to="/" />} />
                 <Route path="/exams" element={user.role === 'Admin' ? <ExamStudio /> : <Navigate to="/" />} />
-                <Route path="/reports" element={<ReportDashboard />} />
+                <Route path="/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <PersonalScorePage />} />
+                <Route path="/reports/personal" element={<PersonalScorePage />} />
                 <Route path="/admin/departments" element={user.role === 'Admin' ? <DepartmentManager /> : <Navigate to="/" />} />
                 <Route path="/admin/categories" element={user.role === 'Admin' ? <CategoryManager /> : <Navigate to="/" />} />
                 <Route path="/admin/users" element={user.role === 'Admin' ? <UserManager /> : <Navigate to="/" />} />
