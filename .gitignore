@@ -32,3 +32,15 @@ build/
 
 # Local data
 data/*.db
+
+# Test files
+# 注意：tests/ 目錄和 1.docs/reviews/ 目錄應被版本控制
+# 只忽略測試產生的臨時文件
+test_materials/
+*.test.db
+*.test.sqlite3
+test_output/
+test_results/
+
+# Temporary files
+temp/
