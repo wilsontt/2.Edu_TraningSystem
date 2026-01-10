@@ -56,6 +56,7 @@ class User(Base):
     department = relationship("Department", back_populates="users")
     role = relationship("Role", back_populates="users")
     exam_records = relationship("ExamRecord", back_populates="user")
+    attendance_records = relationship("AttendanceRecord", back_populates="user")
 
 class MainCategory(Base):
     __tablename__ = "main_categories"
@@ -89,6 +90,8 @@ class TrainingPlan(Base):
     target_departments = relationship("Department", secondary=plan_target_departments, backref="target_plans") # 受課單位
     questions = relationship("Question", back_populates="training_plan")
     exam_records = relationship("ExamRecord", back_populates="training_plan")
+    attendance_records = relationship("AttendanceRecord", back_populates="training_plan")
+    expected_attendance = Column(Integer, nullable=True)  # 應到人數（可手動修改，預設為受課部門人數）
 
 class Question(Base):
     __tablename__ = "questions"
@@ -99,6 +102,7 @@ class Question(Base):
     options = Column(Text) # JSON 選項字串
     answer = Column(String)
     points = Column(Integer, default=10)
+    hint = Column(Text, nullable=True) # 提示內容（可選）
     
     training_plan = relationship("TrainingPlan", back_populates="questions")
 
@@ -110,6 +114,7 @@ class QuestionBank(Base):
     options = Column(Text, nullable=True) # JSON 字串
     answer = Column(String, nullable=False)
     tags = Column(Text, nullable=True) # JSON 字串陣列
+    hint = Column(Text, nullable=True) # 提示內容（可選）
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -138,3 +143,24 @@ class ExamDetail(Base):
     is_correct = Column(Boolean)
     
     record = relationship("ExamRecord", back_populates="details")
+
+class AttendanceRecord(Base):
+    __tablename__ = "attendance_records"
+    id = Column(Integer, primary_key=True, index=True)
+    emp_id = Column(String, ForeignKey("users.emp_id"))
+    plan_id = Column(Integer, ForeignKey("training_plans.id"))
+    checkin_time = Column(DateTime, default=datetime.datetime.utcnow)  # 報到時間
+    ip_address = Column(String, nullable=True)  # 報到時的 IP（可選）
+    
+    user = relationship("User", back_populates="attendance_records")
+    training_plan = relationship("TrainingPlan", back_populates="attendance_records")
+
+class LoginToken(Base):
+    __tablename__ = "login_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, index=True)  # 動態產生的 token
+    created_by = Column(String, ForeignKey("users.emp_id"))  # 建立者（Admin）
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime)  # 過期時間（例如：24小時後）
+    used_at = Column(DateTime, nullable=True)  # 使用時間
+    is_used = Column(Boolean, default=False)  # 是否已使用

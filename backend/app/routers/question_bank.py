@@ -68,6 +68,8 @@ def update_question_bank(
         db_q.answer = q_update.answer
     if q_update.tags is not None:
         db_q.tags = q_update.tags
+    if q_update.hint is not None:
+        db_q.hint = q_update.hint
         
     try:
         db.commit()
@@ -135,6 +137,7 @@ def import_questions_to_plan(
                 question_type=q.question_type,
                 options=q.options,
                 answer=q.answer,
+                hint=q.hint,  # 包含提示欄位
                 points=10 # 預設分數
             )
             db.add(new_q)

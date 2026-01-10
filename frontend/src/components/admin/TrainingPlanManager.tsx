@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AxiosError } from 'axios';
-import { Plus, Calendar, Clock, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool } from 'lucide-react';
+import { Plus, Calendar, Clock, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check } from 'lucide-react';
 import api from '../../api';
 
 interface SubCategory {
@@ -32,6 +32,25 @@ interface TrainingPlan {
   time_limit: number;
   passing_score: number;
   target_departments: Department[];
+  expected_attendance?: number | null;
+}
+
+interface AttendanceStats {
+  plan_id: number;
+  expected_count: number;
+  actual_count: number;
+  attendance_rate: number;
+  checked_in_users: Array<{
+    emp_id: string;
+    name: string;
+    dept_name: string;
+    checkin_time: string;
+  }>;
+  not_checked_in_users: Array<{
+    emp_id: string;
+    name: string;
+    dept_name: string;
+  }>;
 }
 
 const TrainingPlanManager = () => {
@@ -44,6 +63,22 @@ const TrainingPlanManager = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // 報到統計狀態
+  const [attendanceStats, setAttendanceStats] = useState<Record<number, AttendanceStats>>({});
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  
+  // 報到 QRcode 狀態
+  const [checkinQRCode, setCheckinQRCode] = useState<{
+    plan_id: number;
+    plan_title: string;
+    qrcode_url: string;
+    checkin_url: string;
+  } | null>(null);
+  const [generatingQRCode, setGeneratingQRCode] = useState(false);
+  const [copiedCheckinUrl, setCopiedCheckinUrl] = useState(false);
 
   // 表單資料
   const [formData, setFormData] = useState({
@@ -57,11 +92,29 @@ const TrainingPlanManager = () => {
     time_limit: 60,
     passing_score: 60,
     target_dept_ids: [] as string[],
+    expected_attendance: '',
   });
 
   // 下拉選單資料
   const [categories, setCategories] = useState<MainCategory[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  
+  // 載入報到統計
+  const fetchAttendanceStats = async (planId: number) => {
+    try {
+      const res = await api.get<AttendanceStats>(`/training/plans/${planId}/attendance/stats`);
+      setAttendanceStats(prev => ({ ...prev, [planId]: res.data }));
+    } catch (err: any) {
+      console.error('載入報到統計失敗', err);
+    }
+  };
+
+  // 載入所有計畫的報到統計
+  const fetchAllAttendanceStats = async () => {
+    for (const plan of plans) {
+      await fetchAttendanceStats(plan.id);
+    }
+  };
   
   // 取得初始資料
   useEffect(() => {
@@ -75,6 +128,16 @@ const TrainingPlanManager = () => {
         setPlans(plansRes.data);
         setCategories(catsRes.data);
         setDepartments(deptsRes.data);
+        
+        // 載入報到統計
+        for (const plan of plansRes.data) {
+          try {
+            const statsRes = await api.get<AttendanceStats>(`/training/plans/${plan.id}/attendance/stats`);
+            setAttendanceStats(prev => ({ ...prev, [plan.id]: statsRes.data }));
+          } catch {
+            // 忽略錯誤，可能計畫沒有報到資料
+          }
+        }
       } catch (err: unknown) {
         console.error('載入資料失敗', err);
       } finally {
@@ -110,6 +173,7 @@ const TrainingPlanManager = () => {
         time_limit: plan.time_limit,
         passing_score: plan.passing_score,
         target_dept_ids: plan.target_departments ? plan.target_departments.map(d => d.id.toString()) : [],
+        expected_attendance: plan.expected_attendance ? plan.expected_attendance.toString() : '',
       });
     } else {
       // 新增模式
@@ -126,6 +190,7 @@ const TrainingPlanManager = () => {
         time_limit: 60,
         passing_score: 60,
         target_dept_ids: [],
+        expected_attendance: '',
       });
     }
     setIsModalOpen(true);
@@ -149,6 +214,7 @@ const TrainingPlanManager = () => {
         time_limit: formData.timer_enabled ? formData.time_limit : 0,
         passing_score: formData.passing_score,
         target_dept_ids: formData.target_dept_ids.map(id => parseInt(id)),
+        expected_attendance: formData.expected_attendance ? parseInt(formData.expected_attendance) : null,
       };
 
       if (isEditing && editId) {
@@ -253,6 +319,8 @@ const TrainingPlanManager = () => {
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">開始日期</th>
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">結束日期</th>
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">計時</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">報到統計</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -298,7 +366,7 @@ const TrainingPlanManager = () => {
                        )}
                     </td>
                     <td className="px-6 py-4 text-sm font-bold">
-                       <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-1">
                            {plan.timer_enabled ? (
                              <div className="flex items-center gap-1 text-orange-600">
                                <Clock className="w-4 h-4" />
@@ -307,15 +375,49 @@ const TrainingPlanManager = () => {
                            ) : (
                              <span className="text-gray-400">-</span>
                            )}
-                           
-                           <button 
-                                onClick={() => openModal(plan)}
-                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                                title="編輯計畫"
-                           >
-                                <PenTool className="w-4 h-4" />
-                           </button>
                        </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {attendanceStats[plan.id] ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedPlanId(plan.id);
+                              setIsAttendanceModalOpen(true);
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-xs font-bold transition-colors"
+                          >
+                            <Users className="w-3 h-3" />
+                            <span>{attendanceStats[plan.id].actual_count}/{attendanceStats[plan.id].expected_count}</span>
+                            <span className="text-gray-500">({attendanceStats[plan.id].attendance_rate.toFixed(1)}%)</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => openModal(plan)}
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                          title="編輯計畫"
+                        >
+                          <PenTool className="w-4 h-4" />
+                        </button>
+                        {attendanceStats[plan.id] && (
+                          <button
+                            onClick={() => {
+                              setSelectedPlanId(plan.id);
+                              setIsAttendanceModalOpen(true);
+                            }}
+                            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                            title="查看報到統計"
+                          >
+                            <BarChart3 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                   );
@@ -498,6 +600,40 @@ const TrainingPlanManager = () => {
                 <p className="text-xs text-gray-400 font-bold">例如：總分 100 分，請填寫 60。</p>
               </div>
 
+              {/* Expected Attendance */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gray-500 uppercase">應到人數 (選填)</label>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        // 計算應到人數需要 plan_id，但新增時還沒有，所以只在編輯模式下可用
+                        if (editId) {
+                          const res = await api.get(`/training/plans/${editId}/calculate-expected-attendance`);
+                          setFormData({...formData, expected_attendance: res.data.calculated_count.toString()});
+                        }
+                      } catch (err: any) {
+                        console.error('計算應到人數失敗', err);
+                      }
+                    }}
+                    className="text-xs text-blue-600 font-bold hover:underline"
+                    disabled={!editId}
+                  >
+                    自動計算
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all"
+                  value={formData.expected_attendance || ''}
+                  onChange={e => setFormData({...formData, expected_attendance: e.target.value})}
+                  placeholder="留空將根據受課對象部門自動計算"
+                />
+                <p className="text-xs text-gray-400 font-bold">留空將根據受課對象部門人數自動計算</p>
+              </div>
+
               {/* Target Departments */}
               <div className="space-y-2">
                  <div className="flex items-center justify-between">
@@ -588,6 +724,269 @@ const TrainingPlanManager = () => {
               <button
                 type="button"
                 onClick={() => setErrorMessage(null)}
+                className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
+              >
+                關閉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 報到統計模態框 */}
+      {isAttendanceModalOpen && selectedPlanId && attendanceStats[selectedPlanId] && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-blue-600" />
+                報到統計
+              </h3>
+              <button 
+                onClick={() => {
+                  setIsAttendanceModalOpen(false);
+                  setSelectedPlanId(null);
+                }} 
+                className="p-2 hover:bg-white/50 rounded-xl transition-all"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6">
+              {(() => {
+                const stats = attendanceStats[selectedPlanId];
+                const plan = plans.find(p => p.id === selectedPlanId);
+                
+                return (
+                  <>
+                    {/* 統計卡片 */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                        <div className="text-sm font-bold text-blue-600 mb-1">應到人數</div>
+                        <div className="text-2xl font-black text-blue-800">{stats.expected_count}</div>
+                      </div>
+                      <div className="bg-green-50 p-4 rounded-xl border border-green-200">
+                        <div className="text-sm font-bold text-green-600 mb-1">實到人數</div>
+                        <div className="text-2xl font-black text-green-800">{stats.actual_count}</div>
+                      </div>
+                      <div className="bg-purple-50 p-4 rounded-xl border border-purple-200">
+                        <div className="text-sm font-bold text-purple-600 mb-1">出席率</div>
+                        <div className="text-2xl font-black text-purple-800">{stats.attendance_rate.toFixed(1)}%</div>
+                      </div>
+                    </div>
+
+                    {/* 報到 QRcode 生成 */}
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-bold text-blue-700 flex items-center gap-2">
+                          <QrCode className="w-4 h-4" />
+                          報到 QRcode
+                        </h4>
+                        <button
+                          onClick={async () => {
+                            try {
+                              setGeneratingQRCode(true);
+                              const res = await api.post(`/training/plans/${selectedPlanId}/checkin-qrcode/generate`);
+                              setCheckinQRCode(res.data);
+                            } catch (err: any) {
+                              alert(err.response?.data?.detail || '產生報到 QRcode 失敗');
+                            } finally {
+                              setGeneratingQRCode(false);
+                            }
+                          }}
+                          disabled={generatingQRCode}
+                          className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded font-bold transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed flex items-center gap-1"
+                        >
+                          {generatingQRCode ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span>產生中...</span>
+                            </>
+                          ) : (
+                            <>
+                              <QrCode className="w-3 h-3" />
+                              <span>產生 QRcode</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      {checkinQRCode && checkinQRCode.plan_id === selectedPlanId && (
+                        <div className="mt-3 flex flex-col items-center gap-3 p-4 bg-white rounded-lg border border-blue-300">
+                          <img 
+                            src={checkinQRCode.qrcode_url} 
+                            alt="Check-in QRcode" 
+                            className="w-48 h-48"
+                          />
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                              {checkinQRCode.checkin_url}
+                            </span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(checkinQRCode.checkin_url).then(() => {
+                                  setCopiedCheckinUrl(true);
+                                  setTimeout(() => setCopiedCheckinUrl(false), 2000);
+                                });
+                              }}
+                              className="p-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors"
+                              title="複製連結"
+                            >
+                              {copiedCheckinUrl ? (
+                                <Check className="w-3 h-3" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-500 text-center">
+                            掃描此 QRcode 可快速進入報到頁面
+                          </p>
+                        </div>
+                      )}
+                      {!checkinQRCode || checkinQRCode.plan_id !== selectedPlanId ? (
+                        <p className="text-xs text-gray-500 text-center mt-2">
+                          點擊上方按鈕產生報到 QRcode
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {/* 應到人數設定 */}
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-sm font-bold text-gray-700">應到人數設定</label>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await api.get(`/training/plans/${selectedPlanId}/calculate-expected-attendance`);
+                              await api.put(`/training/plans/${selectedPlanId}/expected-attendance`, {
+                                expected_attendance: res.data.calculated_count
+                              });
+                              // 重新載入統計
+                              await fetchAttendanceStats(selectedPlanId);
+                              // 重新載入計畫列表以更新 expected_attendance
+                              const plansRes = await api.get('/training/plans');
+                              setPlans(plansRes.data);
+                            } catch (err: any) {
+                              alert(err.response?.data?.detail || '更新失敗');
+                            }
+                          }}
+                          className="text-xs text-blue-600 font-bold hover:underline"
+                        >
+                          自動計算
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          min="0"
+                          className="w-32 px-3 py-2 border-2 border-gray-200 rounded-lg text-sm font-bold focus:outline-none focus:border-blue-500"
+                          value={stats.expected_count}
+                          onChange={async (e) => {
+                            const newValue = parseInt(e.target.value) || 0;
+                            try {
+                              await api.put(`/training/plans/${selectedPlanId}/expected-attendance`, {
+                                expected_attendance: newValue
+                              });
+                              // 更新本地狀態
+                              setAttendanceStats(prev => ({
+                                ...prev,
+                                [selectedPlanId]: {
+                                  ...prev[selectedPlanId],
+                                  expected_count: newValue,
+                                  attendance_rate: prev[selectedPlanId].actual_count / newValue * 100
+                                }
+                              }));
+                              // 重新載入計畫列表
+                              const plansRes = await api.get('/training/plans');
+                              setPlans(plansRes.data);
+                            } catch (err: any) {
+                              alert(err.response?.data?.detail || '更新失敗');
+                            }
+                          }}
+                        />
+                        <span className="text-xs text-gray-500">人</span>
+                      </div>
+                    </div>
+
+                    {/* 已報到用戶列表 */}
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        已報到用戶 ({stats.checked_in_users.length})
+                      </h4>
+                      <div className="border border-gray-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">員工編號</th>
+                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
+                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">部門</th>
+                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">報到時間</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {stats.checked_in_users.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="px-4 py-4 text-center text-gray-400 text-xs">尚無報到記錄</td>
+                              </tr>
+                            ) : (
+                              stats.checked_in_users.map((user, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50">
+                                  <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
+                                  <td className="px-4 py-2 font-bold">{user.name}</td>
+                                  <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
+                                  <td className="px-4 py-2 text-gray-500 text-xs">
+                                    {new Date(user.checkin_time).toLocaleString('zh-TW')}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* 未報到用戶列表 */}
+                    {stats.not_checked_in_users.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-orange-600" />
+                          未報到用戶 ({stats.not_checked_in_users.length})
+                        </h4>
+                        <div className="border border-gray-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50 sticky top-0">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">員工編號</th>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">部門</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {stats.not_checked_in_users.map((user, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50">
+                                  <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
+                                  <td className="px-4 py-2 font-bold">{user.name}</td>
+                                  <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="p-4 bg-gray-50 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  setIsAttendanceModalOpen(false);
+                  setSelectedPlanId(null);
+                }}
                 className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
               >
                 關閉

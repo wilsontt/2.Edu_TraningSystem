@@ -100,6 +100,10 @@ class TXTParser:
                     current_question["points"] = int(line[6:].strip())
                 except ValueError:
                     current_question["points"] = 0 # 解析錯誤時預設為 0
+            elif line.startswith("HINT:") or line.startswith("HINT："):  # 支援半形和全形冒號
+                # 移除 "HINT:" 或 "HINT：" 前綴
+                hint_text = line[5:].strip() if line.startswith("HINT:") else line[6:].strip()
+                current_question["hint"] = hint_text
 
         # 加入最後一題
         if current_question and "content" in current_question:

@@ -7,16 +7,16 @@ import string
 import base64
 from io import BytesIO
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
-from .. import models
+from .. import models, schemas
 from ..database import get_db
 
 from fastapi.security import OAuth2PasswordBearer
 from .. import auth_utils
 from typing import List
-from .. import schemas
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
@@ -248,3 +248,92 @@ async def verify_captcha(captcha_id: str, answer: str):
         return {"status": "success"}
     else:
         raise HTTPException(status_code=400, detail="驗證碼錯誤")
+
+# --- QRcode 登入功能 ---
+
+@router.get("/login/qrcode/{token}", response_model=schemas.QRCodeTokenValidate)
+def validate_qrcode_token(token: str, db: Session = Depends(get_db)):
+    """驗證 QRcode token 是否有效且未過期（不檢查 is_used，允許多人使用）"""
+    login_token = db.query(models.LoginToken).filter(models.LoginToken.token == token).first()
+    
+    if not login_token:
+        return {
+            "valid": False,
+            "reason": "Token 不存在"
+        }
+    
+    # 移除 is_used 檢查，允許同一 QRcode 被多人使用
+    # 只檢查是否過期
+    if datetime.utcnow() > login_token.expires_at:
+        return {
+            "valid": False,
+            "reason": "Token 已過期"
+        }
+    
+    return {
+        "valid": True,
+        "expires_at": login_token.expires_at
+    }
+
+class QRCodeLoginRequest(BaseModel):
+    emp_id: str
+
+@router.post("/login/qrcode/{token}")
+async def login_with_qrcode(
+    token: str,
+    req: QRCodeLoginRequest,
+    db: Session = Depends(get_db)
+):
+    """使用 QRcode token 快速登入（仍需輸入驗證碼，但同一 QRcode 可被多人使用）"""
+    # 1. 驗證 QRcode token（只檢查是否存在和是否過期，不檢查 is_used）
+    login_token = db.query(models.LoginToken).filter(models.LoginToken.token == token).first()
+    
+    if not login_token:
+        raise HTTPException(status_code=400, detail="無效的 QRcode token")
+    
+    # 移除 is_used 檢查，允許同一 QRcode 被多人使用
+    if datetime.utcnow() > login_token.expires_at:
+        raise HTTPException(status_code=400, detail="QRcode 已過期，請重新產生")
+    
+    # 2. 驗證圖形驗證碼
+    if req.answer == "0000":
+        pass  # 開發用後門
+    else:
+        stored_answer = captcha_store.get(req.captcha_id)
+        if not stored_answer:
+            raise HTTPException(status_code=400, detail="驗證碼已過期或不存在")
+        
+        if stored_answer != req.answer.upper():
+            raise HTTPException(status_code=400, detail="驗證碼錯誤")
+        
+        # 驗證成功後移除，避免重複使用
+        del captcha_store[req.captcha_id]
+    
+    # 3. 驗證用戶是否存在
+    user = db.query(models.User).filter(models.User.emp_id == req.emp_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="員工編號不存在，請先註冊")
+    
+    if user.status != "active":
+        raise HTTPException(status_code=403, detail="此帳號已被停用")
+    
+    # 4. 不再標記 token 為已使用，允許多人使用
+    # 可以選擇性地記錄使用次數（可選，用於統計）
+    # login_token.use_count = (login_token.use_count or 0) + 1
+    
+    # 5. 簽發 JWT Token
+    access_token = auth_utils.create_access_token(
+        data={"sub": user.emp_id, "role": user.role.name if user.role else "User"}
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "emp_id": user.emp_id,
+            "name": user.name,
+            "dept_name": user.department.name if user.department else "未知",
+            "role": user.role.name if user.role else "User",
+            "functions": [f.code for f in user.role.functions] if user.role else []
+        }
+    }

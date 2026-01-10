@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Trash2, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Trash2, Loader2, ChevronLeft, ChevronRight, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react';
 import api from '../../api';
 
 interface QuestionBankItem {
@@ -9,6 +9,7 @@ interface QuestionBankItem {
     options: string;
     answer: string;
     tags: string; // JSON string
+    hint?: string; // 提示內容（可選）
     created_at: string;
 }
 
@@ -26,6 +27,9 @@ const QuestionBankManager = () => {
     const [keyword, setKeyword] = useState('');
     const [questionType, setQuestionType] = useState('all');
     const [tagFilter, setTagFilter] = useState('');
+    
+    // 提示展開狀態
+    const [expandedHints, setExpandedHints] = useState<Record<number, boolean>>({});
 
     const fetchQuestions = useCallback(async () => {
         try {
@@ -166,6 +170,31 @@ const QuestionBankManager = () => {
                                         <div className="text-xs text-green-600 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                             Ans: {q.answer}
                                         </div>
+                                        {q.hint && (
+                                            <div className="mt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExpandedHints(prev => ({
+                                                        ...prev,
+                                                        [q.id]: !prev[q.id]
+                                                    }))}
+                                                    className="flex items-center gap-1 text-xs font-bold text-yellow-600 hover:text-yellow-700 transition-colors"
+                                                >
+                                                    <Lightbulb className="w-3 h-3" />
+                                                    <span>提示</span>
+                                                    {expandedHints[q.id] ? (
+                                                        <ChevronUp className="w-3 h-3" />
+                                                    ) : (
+                                                        <ChevronDown className="w-3 h-3" />
+                                                    )}
+                                                </button>
+                                                {expandedHints[q.id] && (
+                                                    <div className="mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-gray-700 leading-relaxed">
+                                                        {q.hint}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </td>
                                     <td className="px-6 py-3">
                                         {renderTags(q.tags)}

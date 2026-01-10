@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle, Send, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle, Send, Loader2, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api';
 import ExamTimer from './ExamTimer';
@@ -20,6 +20,8 @@ interface Question {
     options: string;
     /** 分數 */
     points: number;
+    /** 提示內容（可選） */
+    hint?: string;
 }
 
 /** 考試初始資料結構 */
@@ -70,6 +72,9 @@ const ExamRunner = () => {
 
     // 離開確認模態框狀態
     const [exitModal, setExitModal] = useState(false);
+    
+    // 提示展開狀態（以題目 ID 為 key）
+    const [hintExpanded, setHintExpanded] = useState<Record<number, boolean>>({});
 
     // 客製化 Hook 處理作答進度
     const { answers, saveAnswer, clearProgress } = useExamProgress(planId, user?.emp_id);
@@ -82,7 +87,20 @@ const ExamRunner = () => {
                 const userRes = await api.get('/auth/me');
                 setUser(userRes.data);
 
-                // 2. 取得考試內容
+                // 2. 檢查報到狀態
+                try {
+                    const attendanceRes = await api.get(`/exam/plan/${planId}/attendance/status`);
+                    if (!attendanceRes.data.is_checked_in) {
+                        setError("您尚未報到，請先返回考試中心完成報到後再開始考試。");
+                        setLoading(false);
+                        return;
+                    }
+                } catch (attendanceErr: any) {
+                    // 如果 API 不存在或出錯，允許繼續（向後兼容）
+                    console.warn('Attendance check failed, allowing exam to continue:', attendanceErr);
+                }
+
+                // 3. 取得考試內容
                 const res = await api.get(`/exam/start/${planId}`);
                 setExamData(res.data);
             } catch (err: unknown) {
@@ -173,23 +191,38 @@ const ExamRunner = () => {
         </div>
     );
 
-    if (error || !examData) return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <AlertCircle className="w-8 h-8 text-red-600" />
+    if (error || !examData) {
+        const isNotCheckedIn = error && error.includes("尚未報到");
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+                    <div className={`w-16 h-16 ${isNotCheckedIn ? 'bg-yellow-100' : 'bg-red-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                        <AlertCircle className={`w-8 h-8 ${isNotCheckedIn ? 'text-yellow-600' : 'text-red-600'}`} />
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">
+                        {isNotCheckedIn ? "請先完成報到" : "無法開始考試"}
+                    </h2>
+                    <p className="text-gray-500 mb-6">{error}</p>
+                    <div className="space-y-3">
+                        {isNotCheckedIn ? (
+                            <button 
+                                onClick={() => navigate('/')}
+                                className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors"
+                            >
+                                返回考試中心
+                            </button>
+                        ) : null}
+                        <button 
+                            onClick={() => navigate('/')}
+                            className={`w-full py-3 ${isNotCheckedIn ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-gray-900 text-white hover:bg-black'} rounded-xl font-bold transition-colors`}
+                        >
+                            回首頁
+                        </button>
+                    </div>
                 </div>
-                <h2 className="text-xl font-bold text-gray-900 mb-2">無法開始考試</h2>
-                <p className="text-gray-500 mb-6">{error}</p>
-                <button 
-                    onClick={() => navigate('/')}
-                    className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-colors"
-                >
-                    回首頁
-                </button>
             </div>
-        </div>
-    );
+        );
+    }
 
     const totalQuestions = examData.questions?.length || 0;
     
@@ -307,6 +340,49 @@ const ExamRunner = () => {
                                 {currentQuestion.content}
                             </h2>
                         </div>
+
+                        {/* 提示按鈕和內容 */}
+                        {currentQuestion.hint && (
+                            <div className="mb-6">
+                                <button
+                                    type="button"
+                                    onClick={() => setHintExpanded(prev => ({
+                                        ...prev,
+                                        [currentQuestion.id]: !prev[currentQuestion.id]
+                                    }))}
+                                    className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Lightbulb className="w-4 h-4 text-yellow-500" />
+                                        <span className="text-sm font-medium text-gray-700">提示</span>
+                                    </div>
+                                    {hintExpanded[currentQuestion.id] ? (
+                                        <ChevronUp className="w-4 h-4 text-gray-500" />
+                                    ) : (
+                                        <ChevronDown className="w-4 h-4 text-gray-500" />
+                                    )}
+                                </button>
+                                
+                                <AnimatePresence>
+                                    {hintExpanded[currentQuestion.id] && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: "auto" }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                            transition={{ duration: 0.2 }}
+                                            className="mt-3 p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <Lightbulb className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+                                                <p className="text-sm text-gray-700 leading-relaxed">
+                                                    {currentQuestion.hint}
+                                                </p>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        )}
 
                         <div className="space-y-3">
                             {Object.entries(optionsMap).map(([key, value]) => {
