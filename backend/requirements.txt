@@ -12,3 +12,4 @@ reportlab
 pypdf
 google-generativeai
 pandas
+qrcode[pil]

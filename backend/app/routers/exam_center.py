@@ -1,10 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request as FastAPIRequest
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from pydantic import BaseModel
-from .. import models
+from .. import models, schemas
 from ..database import get_db
 from .auth import get_current_user
 
@@ -662,4 +662,97 @@ def get_exam_record_detail(
             "attempts": record.attempts
         },
         "question_details": question_details
+    }
+
+# --- 報到功能 API ---
+
+@router.get("/plan/{plan_id}/attendance/status", response_model=schemas.AttendanceStatus)
+def get_attendance_status(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """檢查當前用戶是否已報到該計畫"""
+    # 查詢報到記錄
+    attendance = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.emp_id == current_user.emp_id,
+        models.AttendanceRecord.plan_id == plan_id
+    ).first()
+    
+    if attendance:
+        return {
+            "is_checked_in": True,
+            "checkin_time": attendance.checkin_time
+        }
+    else:
+        return {
+            "is_checked_in": False,
+            "checkin_time": None
+        }
+
+@router.post("/plan/{plan_id}/attendance/checkin", response_model=schemas.CheckInResponse)
+def check_in_attendance(
+    plan_id: int,
+    request: FastAPIRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """執行報到動作"""
+    # 1. 檢查計畫是否存在
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    
+    # 2. 檢查是否已報到（避免重複報到）
+    existing = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.emp_id == current_user.emp_id,
+        models.AttendanceRecord.plan_id == plan_id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="您已經報到過此訓練計畫")
+    
+    # 3. 檢查計畫是否在有效期間內
+    today = date.today()
+    if today < plan.training_date:
+        raise HTTPException(status_code=400, detail="訓練計畫尚未開始")
+    if plan.end_date and today > plan.end_date:
+        raise HTTPException(status_code=400, detail="訓練計畫已結束")
+    
+    # 4. 檢查用戶是否在受課對象中
+    if plan.target_departments:
+        user_dept_ids = [dept.id for dept in plan.target_departments]
+        if current_user.dept_id not in user_dept_ids:
+            raise HTTPException(status_code=403, detail="您不在本訓練計畫的受課對象中")
+    
+    # 5. 獲取客戶端 IP 地址
+    client_ip = None
+    if request:
+        # 嘗試從多個 header 中獲取 IP（考慮代理情況）
+        if "x-forwarded-for" in request.headers:
+            client_ip = request.headers["x-forwarded-for"].split(",")[0].strip()
+        elif "x-real-ip" in request.headers:
+            client_ip = request.headers["x-real-ip"]
+        else:
+            client_ip = request.client.host if request.client else None
+    
+    # 6. 建立報到記錄
+    attendance = models.AttendanceRecord(
+        emp_id=current_user.emp_id,
+        plan_id=plan_id,
+        checkin_time=datetime.utcnow(),
+        ip_address=client_ip
+    )
+    
+    db.add(attendance)
+    try:
+        db.commit()
+        db.refresh(attendance)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"報到失敗：{str(e)}")
+    
+    return {
+        "success": True,
+        "checkin_time": attendance.checkin_time
     }

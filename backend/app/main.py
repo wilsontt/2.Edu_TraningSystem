@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import auth, admin, training
+from .routers import auth, admin, training, qrcode
 
 app = FastAPI()
 
@@ -24,6 +24,7 @@ from .routers import exam_center
 app.include_router(exam_center.router, prefix="/api")
 from .routers import question_bank
 app.include_router(question_bank.router, prefix="/api")
+app.include_router(qrcode.router, prefix="/api")
 
 @app.get("/")
 async def root():

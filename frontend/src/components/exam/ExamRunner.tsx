@@ -87,7 +87,20 @@ const ExamRunner = () => {
                 const userRes = await api.get('/auth/me');
                 setUser(userRes.data);
 
-                // 2. 取得考試內容
+                // 2. 檢查報到狀態
+                try {
+                    const attendanceRes = await api.get(`/exam/plan/${planId}/attendance/status`);
+                    if (!attendanceRes.data.is_checked_in) {
+                        setError("您尚未報到，請先返回考試中心完成報到後再開始考試。");
+                        setLoading(false);
+                        return;
+                    }
+                } catch (attendanceErr: any) {
+                    // 如果 API 不存在或出錯，允許繼續（向後兼容）
+                    console.warn('Attendance check failed, allowing exam to continue:', attendanceErr);
+                }
+
+                // 3. 取得考試內容
                 const res = await api.get(`/exam/start/${planId}`);
                 setExamData(res.data);
             } catch (err: unknown) {
@@ -178,23 +191,38 @@ const ExamRunner = () => {
         </div>
     );
 
-    if (error || !examData) return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <AlertCircle className="w-8 h-8 text-red-600" />
+    if (error || !examData) {
+        const isNotCheckedIn = error && error.includes("尚未報到");
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+                    <div className={`w-16 h-16 ${isNotCheckedIn ? 'bg-yellow-100' : 'bg-red-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                        <AlertCircle className={`w-8 h-8 ${isNotCheckedIn ? 'text-yellow-600' : 'text-red-600'}`} />
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">
+                        {isNotCheckedIn ? "請先完成報到" : "無法開始考試"}
+                    </h2>
+                    <p className="text-gray-500 mb-6">{error}</p>
+                    <div className="space-y-3">
+                        {isNotCheckedIn ? (
+                            <button 
+                                onClick={() => navigate('/')}
+                                className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors"
+                            >
+                                返回考試中心
+                            </button>
+                        ) : null}
+                        <button 
+                            onClick={() => navigate('/')}
+                            className={`w-full py-3 ${isNotCheckedIn ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-gray-900 text-white hover:bg-black'} rounded-xl font-bold transition-colors`}
+                        >
+                            回首頁
+                        </button>
+                    </div>
                 </div>
-                <h2 className="text-xl font-bold text-gray-900 mb-2">無法開始考試</h2>
-                <p className="text-gray-500 mb-6">{error}</p>
-                <button 
-                    onClick={() => navigate('/')}
-                    className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-colors"
-                >
-                    回首頁
-                </button>
             </div>
-        </div>
-    );
+        );
+    }
 
     const totalQuestions = examData.questions?.length || 0;
     

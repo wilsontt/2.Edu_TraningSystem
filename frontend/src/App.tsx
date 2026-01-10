@@ -12,9 +12,12 @@ import PermissionManager from './components/admin/PermissionManager';
 import SystemFunctionManager from './components/admin/SystemFunctionManager';
 import ReportDashboard from './components/admin/ReportDashboard';
 import ExamStudio from './components/admin/ExamStudio';
+import QRCodeManager from './components/admin/QRCodeManager';
 import ExamDashboard from './components/exam/ExamDashboard';
 import ExamRunner from './components/exam/ExamRunner';
 import PersonalScorePage from './components/personal/PersonalScorePage';
+import QRCodeLoginPage from './components/QRCodeLoginPage';
+import CheckInPage from './components/exam/CheckInPage';
 import type { User } from './types';
 import { useRef } from 'react';
 // ... (imports are fine, just adding one) ...
@@ -108,6 +111,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     { name: '角色管理', path: '/admin/roles', code: 'menu:admin:role' },
     { name: '權限管理', path: '/admin/permissions', code: 'menu:admin:perm' },
     { name: '功能清單管理', path: '/admin/functions', code: 'menu:admin:func' },
+    { name: 'QRcode 管理', path: '/admin/qrcode', code: 'menu:admin' },
   ].filter(item => functions.includes(item.code));
 
   const hasAdminAccess = functions.includes('menu:admin') || adminSubItems.length > 0;
@@ -312,31 +316,38 @@ const App = () => {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
-        {!user ? (
-          <LoginPage onLoginSuccess={(u: User) => setUser(u)} />
-        ) : (
-          <>
-            <Navbar user={user} onLogout={handleLogout} />
-            <main className="max-w-7xl mx-auto px-4 md:px-6">
-              <Routes>
-                <Route path="/" element={<ExamDashboard />} />
-                <Route path="/exam/run/:planId" element={<ExamRunner />} />
-                <Route path="/plans" element={user.functions?.includes('menu:plan') || user.role === 'Admin' ? <TrainingPlanManager /> : <Navigate to="/" />} />
-                <Route path="/exams" element={user.role === 'Admin' ? <ExamStudio /> : <Navigate to="/" />} />
-                <Route path="/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <PersonalScorePage />} />
-                <Route path="/reports/personal" element={<PersonalScorePage />} />
-                <Route path="/admin/departments" element={user.role === 'Admin' ? <DepartmentManager /> : <Navigate to="/" />} />
-                <Route path="/admin/categories" element={user.role === 'Admin' ? <CategoryManager /> : <Navigate to="/" />} />
-                <Route path="/admin/users" element={user.role === 'Admin' ? <UserManager /> : <Navigate to="/" />} />
-                <Route path="/admin/roles" element={user.role === 'Admin' ? <RoleManager /> : <Navigate to="/" />} />
-                <Route path="/admin/permissions" element={user.role === 'Admin' ? <PermissionManager /> : <Navigate to="/" />} />
-                <Route path="/admin/functions" element={user.role === 'Admin' ? <SystemFunctionManager /> : <Navigate to="/" />} />
-                <Route path="/admin/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <Navigate to="/" />} />
-                <Route path="*" element={<Navigate to="/" />} />
-              </Routes>
-            </main>
-          </>
-        )}
+        <Routes>
+          <Route path="/auth/login/qrcode/:token" element={<QRCodeLoginPage onLoginSuccess={(u: User) => setUser(u)} />} />
+          <Route path="*" element={
+            !user ? (
+              <LoginPage onLoginSuccess={(u: User) => setUser(u)} />
+            ) : (
+              <>
+                <Navbar user={user} onLogout={handleLogout} />
+                <main className="max-w-7xl mx-auto px-4 md:px-6">
+                  <Routes>
+                    <Route path="/checkin" element={<CheckInPage />} />
+                    <Route path="/" element={<ExamDashboard />} />
+                    <Route path="/exam/run/:planId" element={<ExamRunner />} />
+                    <Route path="/plans" element={user.functions?.includes('menu:plan') || user.role === 'Admin' ? <TrainingPlanManager /> : <Navigate to="/" />} />
+                    <Route path="/exams" element={user.role === 'Admin' ? <ExamStudio /> : <Navigate to="/" />} />
+                    <Route path="/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <PersonalScorePage />} />
+                    <Route path="/reports/personal" element={<PersonalScorePage />} />
+                    <Route path="/admin/departments" element={user.role === 'Admin' ? <DepartmentManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/categories" element={user.role === 'Admin' ? <CategoryManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/users" element={user.role === 'Admin' ? <UserManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/roles" element={user.role === 'Admin' ? <RoleManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/permissions" element={user.role === 'Admin' ? <PermissionManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/functions" element={user.role === 'Admin' ? <SystemFunctionManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/qrcode" element={user.role === 'Admin' ? <QRCodeManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <Navigate to="/" />} />
+                    <Route path="*" element={<Navigate to="/" />} />
+                  </Routes>
+                </main>
+              </>
+            )
+          } />
+        </Routes>
       </div>
     </Router>
   );

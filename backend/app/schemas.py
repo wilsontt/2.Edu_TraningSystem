@@ -54,11 +54,13 @@ class TrainingPlanBase(BaseModel):
 
 class TrainingPlanCreate(TrainingPlanBase):
     target_dept_ids: List[int] = [] # 新增受課單位 IDs
+    expected_attendance: Optional[int] = None  # 應到人數（可選）
 
 class TrainingPlan(TrainingPlanBase):
     id: int
     year: Optional[str] = None # 改為可選
     target_departments: List['Department'] = [] # 回傳受課單位詳情
+    expected_attendance: Optional[int] = None  # 應到人數
     
     class Config:
         from_attributes = True
@@ -188,5 +190,83 @@ class QuestionBankList(BaseModel):
     page: int
     size: int
     total_pages: int
+
+# --- 報到記錄資料結構 ---
+class AttendanceRecordBase(BaseModel):
+    plan_id: int
+
+class AttendanceRecordCreate(AttendanceRecordBase):
+    ip_address: Optional[str] = None
+
+class AttendanceRecord(AttendanceRecordBase):
+    id: int
+    emp_id: str
+    checkin_time: datetime
+    ip_address: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+class AttendanceStatus(BaseModel):
+    is_checked_in: bool
+    checkin_time: Optional[datetime] = None
+
+class CheckInResponse(BaseModel):
+    success: bool
+    checkin_time: datetime
+
+# --- 報到統計資料結構 ---
+class AttendanceStats(BaseModel):
+    plan_id: int
+    expected_count: int  # 應到人數
+    actual_count: int    # 實到人數
+    attendance_rate: float  # 出席率
+    checked_in_users: List[dict] = []  # 已報到用戶列表
+    not_checked_in_users: List[dict] = []  # 未報到用戶列表
+
+class ExpectedAttendanceUpdate(BaseModel):
+    expected_attendance: int
+
+class CalculatedAttendance(BaseModel):
+    calculated_count: int
+
+# --- 登入 Token 資料結構 ---
+class LoginTokenBase(BaseModel):
+    expires_at: datetime
+
+class LoginTokenCreate(LoginTokenBase):
+    pass
+
+class LoginToken(LoginTokenBase):
+    id: int
+    token: str
+    created_by: str
+    created_at: datetime
+    used_at: Optional[datetime] = None
+    is_used: bool
+    
+    class Config:
+        from_attributes = True
+
+class QRCodeGenerateResponse(BaseModel):
+    token: str
+    qrcode_url: str  # Base64 編碼的圖片
+    expires_at: datetime
+
+class QRCodeTokenValidate(BaseModel):
+    valid: bool
+    expires_at: Optional[datetime] = None
+    reason: Optional[str] = None
+
+class QRCodeLoginRequest(BaseModel):
+    emp_id: str
+    captcha_id: str
+    answer: str
+
+class CheckInQRCodeResponse(BaseModel):
+    plan_id: int
+    plan_title: str
+    qrcode_url: str  # Base64 編碼的圖片
+    checkin_url: str  # 報到 URL（供複製使用）
 
 SystemFunction.update_forward_refs()

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BookOpen, Clock, CheckCircle, AlertCircle, ChevronRight, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api';
+import CheckInButton from './CheckInButton';
 
 interface ExamItem {
     plan_id: number;
@@ -75,46 +76,67 @@ const ExamDashboard = () => {
                     {exams.map((exam) => (
                         <div 
                             key={exam.plan_id} 
-                            onClick={() => {
-                                const isRetakable = exam.status === 'completed' && (exam.score !== null && exam.score < 60);
-                                if (exam.status === 'active' || isRetakable) {
-                                    navigate(`/exam/run/${exam.plan_id}`);
-                                }
-                            }}
-                            className={`bg-white p-6 rounded-2xl shadow-sm border border-gray-100 transition-all group flex items-center justify-between
-                                ${(exam.status === 'active' || (exam.status === 'completed' && (exam.score !== null && exam.score < 60))) ? 'cursor-pointer hover:shadow-md hover:border-blue-200 hover:bg-blue-50/30' : 'opacity-80 grayscale-[0.3]'}
+                            className={`bg-white p-6 rounded-2xl shadow-sm border border-gray-100 transition-all group
+                                ${(exam.status === 'active' || (exam.status === 'completed' && (exam.score !== null && exam.score < 60))) ? 'hover:shadow-md hover:border-blue-200 hover:bg-blue-50/30' : 'opacity-80 grayscale-[0.3]'}
                                 ${(exam.status === 'completed' && (exam.score === null || exam.score >= 60)) ? 'bg-gray-50/50' : ''}
                             `}
                         >
-                            <div className="flex items-start gap-4">
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg
-                                    ${(exam.status === 'active' || (exam.status === 'completed' && exam.score !== null && exam.score < 60)) ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 
-                                      exam.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}
-                                `}>
-                                    {(exam.status === 'active') ? 'Go' : 
-                                     (exam.status === 'completed' && exam.score !== null && exam.score < 60) ? <span className="text-xs">Retry</span> :
-                                     <BookOpen className="w-6 h-6" />}
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-lg text-gray-800 mb-1 group-hover:text-blue-600 transition-colors">
-                                        {exam.title}
-                                    </h3>
-                                    <div className="flex items-center gap-3 text-sm text-gray-500 font-mono">
-                                        <span>開放時間: {exam.training_date}</span>
-                                        {exam.end_date && <span>~ {exam.end_date}</span>}
-                                        {exam.attempts > 0 && (
-                                            <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600 font-bold ml-2">
-                                                挑戰次數: {exam.attempts}
-                                            </span>
-                                        )}
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-start gap-4 flex-1">
+                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg
+                                        ${(exam.status === 'active' || (exam.status === 'completed' && exam.score !== null && exam.score < 60)) ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 
+                                          exam.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}
+                                    `}>
+                                        {(exam.status === 'active') ? 'Go' : 
+                                         (exam.status === 'completed' && exam.score !== null && exam.score < 60) ? <span className="text-xs">Retry</span> :
+                                         <BookOpen className="w-6 h-6" />}
                                     </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-bold text-lg text-gray-800 mb-1 group-hover:text-blue-600 transition-colors">
+                                            {exam.title}
+                                        </h3>
+                                        <div className="flex items-center gap-3 text-sm text-gray-500 font-mono">
+                                            <span>開放時間: {exam.training_date}</span>
+                                            {exam.end_date && <span>~ {exam.end_date}</span>}
+                                            {exam.attempts > 0 && (
+                                                <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600 font-bold ml-2">
+                                                    挑戰次數: {exam.attempts}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-4">
+                                    {getStatusBadge(exam.status, exam.score)}
+                                    {exam.status === 'active' && <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />}
                                 </div>
                             </div>
                             
-                            <div className="flex items-center gap-4">
-                                {getStatusBadge(exam.status, exam.score)}
-                                {exam.status === 'active' && <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />}
-                            </div>
+                            {/* 報到按鈕區域 - 僅在 active 狀態時顯示 */}
+                            {exam.status === 'active' && (
+                                <div className="pt-4 border-t border-gray-100">
+                                    <CheckInButton 
+                                        planId={exam.plan_id}
+                                        onCheckInSuccess={() => {
+                                            // 報到成功後可以選擇自動進入考試或重新載入列表
+                                            // 這裡我們先不自動進入，讓用戶點擊卡片進入
+                                        }}
+                                    />
+                                </div>
+                            )}
+                            
+                            {/* 可點擊區域 - 點擊卡片進入考試 */}
+                            {(exam.status === 'active' || (exam.status === 'completed' && (exam.score !== null && exam.score < 60))) && (
+                                <div 
+                                    onClick={() => {
+                                        navigate(`/exam/run/${exam.plan_id}`);
+                                    }}
+                                    className="mt-4 pt-4 border-t border-gray-100 cursor-pointer text-center text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors"
+                                >
+                                    開始考試 →
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
