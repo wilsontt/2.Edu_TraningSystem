@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download } from 'lucide-react';
+import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react';
 import { AxiosError } from 'axios';
 import api from '../../api';
 import QuestionEditorModal from './QuestionEditorModal';
@@ -34,6 +34,7 @@ interface Question {
     options: string; // JSON string
     answer: string;
     points: number;
+    hint?: string;
 }
 
 const ExamStudio = () => {
@@ -54,6 +55,7 @@ const ExamStudio = () => {
     const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
     const [mode, setMode] = useState<'plan' | 'bank'>('plan');
     const [showImportModal, setShowImportModal] = useState(false);
+    const [expandedHints, setExpandedHints] = useState<Record<number, boolean>>({});
 
     useEffect(() => {
         fetchPlans();
@@ -408,6 +410,7 @@ const ExamStudio = () => {
                                                 <div>Q: 資訊安全很重要，對嗎？</div>
                                                 <div className="text-green-600 font-bold">ANS: Y</div>
                                                 <div>SCORE: 10</div>
+                                                <div className="text-yellow-600 font-bold mt-1">HINT: 資訊安全是保護資訊資產的重要措施</div>
                                             </div>
                                         </div>
                                         <div className="space-y-2">
@@ -419,6 +422,7 @@ const ExamStudio = () => {
                                                 <div>C: 方便性</div>
                                                 <div className="text-green-600 font-bold">ANS: C</div>
                                                 <div>SCORE: 10</div>
+                                                <div className="text-yellow-600 font-bold mt-1">HINT: 資安三要素是 CIA：機密性、完整性、可用性</div>
                                             </div>
                                         </div>
                                         <div className="space-y-2">
@@ -430,7 +434,14 @@ const ExamStudio = () => {
                                                 <div>C: 可用性</div>
                                                 <div className="text-green-600 font-bold">ANS: ABC</div>
                                                 <div>SCORE: 20</div>
+                                                <div className="text-yellow-600 font-bold mt-1">HINT: 記住 CIA 三要素的英文縮寫</div>
                                             </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                        <div className="text-xs text-blue-700 leading-relaxed">
+                                            <span className="font-bold">提示欄位說明：</span>
+                                            <span className="ml-1">HINT 為選填欄位，可提供給考生考試時的提示內容。格式為 <code className="bg-white px-1 py-0.5 rounded">HINT: 提示內容</code></span>
                                         </div>
                                     </div>
                                 </div>
@@ -524,6 +535,12 @@ const ExamStudio = () => {
                                                                 {q.question_type === 'true_false' ? '是非題' : q.question_type === 'multiple' ? '多選題' : '單選題'}
                                                             </span>
                                                             <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">Score: {q.points}</span>
+                                                            {q.hint && (
+                                                                <span className="inline-flex items-center gap-1 text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-1 rounded">
+                                                                    <Lightbulb className="w-3 h-3" />
+                                                                    有提示
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                                                             <button 
@@ -556,11 +573,41 @@ const ExamStudio = () => {
                                                                         {(key === q.answer || (q.answer?.includes(key) && q.question_type === 'multiple')) && ' ✓'}
                                                                     </div>
                                                                 ));
-                                                            } catch (_) { return <div className="text-red-500 text-sm">選項解析錯誤</div>; }
+                                                            } catch { return <div className="text-red-500 text-sm">選項解析錯誤</div>; }
                                                         })()}
                                                         {q.question_type === 'true_false' && (
                                                             <div className="text-sm font-bold text-green-600">
                                                                 答案: {q.answer === 'Y' ? '是 (Yes)' : '否 (No)'}
+                                                            </div>
+                                                        )}
+                                                        {q.hint && (
+                                                            <div className="mt-3 pt-3 border-t border-gray-200">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setExpandedHints(prev => ({
+                                                                        ...prev,
+                                                                        [q.id]: !prev[q.id]
+                                                                    }))}
+                                                                    className="flex items-center gap-2 text-xs font-bold text-yellow-600 hover:text-yellow-700 transition-colors"
+                                                                >
+                                                                    <Lightbulb className="w-4 h-4" />
+                                                                    <span>提示</span>
+                                                                    {expandedHints[q.id] ? (
+                                                                        <ChevronUp className="w-3 h-3" />
+                                                                    ) : (
+                                                                        <ChevronDown className="w-3 h-3" />
+                                                                    )}
+                                                                </button>
+                                                                {expandedHints[q.id] && (
+                                                                    <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                                                        <div className="flex items-start gap-2">
+                                                                            <Lightbulb className="w-4 h-4 text-yellow-600 shrink-0 mt-0.5" />
+                                                                            <p className="text-xs text-gray-700 leading-relaxed">
+                                                                                {q.hint}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>

@@ -99,6 +99,7 @@ class Question(Base):
     options = Column(Text) # JSON 選項字串
     answer = Column(String)
     points = Column(Integer, default=10)
+    hint = Column(Text, nullable=True) # 提示內容（可選）
     
     training_plan = relationship("TrainingPlan", back_populates="questions")
 
@@ -110,6 +111,7 @@ class QuestionBank(Base):
     options = Column(Text, nullable=True) # JSON 字串
     answer = Column(String, nullable=False)
     tags = Column(Text, nullable=True) # JSON 字串陣列
+    hint = Column(Text, nullable=True) # 提示內容（可選）
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 

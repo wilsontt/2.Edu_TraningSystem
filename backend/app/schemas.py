@@ -134,6 +134,7 @@ class QuestionBase(BaseModel):
     options: Optional[str] = None
     answer: str
     points: int = 10
+    hint: Optional[str] = None
 
 class QuestionCreate(QuestionBase):
     plan_id: int
@@ -144,6 +145,7 @@ class QuestionUpdate(BaseModel):
     options: Optional[str] = None
     answer: Optional[str] = None
     points: Optional[int] = None
+    hint: Optional[str] = None
 
 class Question(QuestionBase):
     id: int
@@ -159,6 +161,7 @@ class QuestionBankBase(BaseModel):
     options: Optional[str] = None
     answer: str
     tags: Optional[str] = None
+    hint: Optional[str] = None
 
 class QuestionBankCreate(QuestionBankBase):
     pass
@@ -169,6 +172,7 @@ class QuestionBankUpdate(BaseModel):
     options: Optional[str] = None
     answer: Optional[str] = None
     tags: Optional[str] = None
+    hint: Optional[str] = None
 
 class QuestionBank(QuestionBankBase):
     id: int

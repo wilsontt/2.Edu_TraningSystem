@@ -27,6 +27,7 @@ class QuestionItem(BaseModel):
     question_type: str
     options: Optional[str] = None # JSON string
     points: int
+    hint: Optional[str] = None # 提示內容（可選）
 
 class ExamStartResponse(BaseModel):
     plan_id: int
@@ -161,7 +162,8 @@ def start_exam(
             content=q.content,
             question_type=q.question_type,
             options=q.options,
-            points=q.points
+            points=q.points,
+            hint=q.hint  # 包含提示欄位
         ))
         
     return ExamStartResponse(

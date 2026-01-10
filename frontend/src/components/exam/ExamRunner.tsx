@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle, Send, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle, Send, Loader2, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api';
 import ExamTimer from './ExamTimer';
@@ -20,6 +20,8 @@ interface Question {
     options: string;
     /** 分數 */
     points: number;
+    /** 提示內容（可選） */
+    hint?: string;
 }
 
 /** 考試初始資料結構 */
@@ -70,6 +72,9 @@ const ExamRunner = () => {
 
     // 離開確認模態框狀態
     const [exitModal, setExitModal] = useState(false);
+    
+    // 提示展開狀態（以題目 ID 為 key）
+    const [hintExpanded, setHintExpanded] = useState<Record<number, boolean>>({});
 
     // 客製化 Hook 處理作答進度
     const { answers, saveAnswer, clearProgress } = useExamProgress(planId, user?.emp_id);
@@ -307,6 +312,49 @@ const ExamRunner = () => {
                                 {currentQuestion.content}
                             </h2>
                         </div>
+
+                        {/* 提示按鈕和內容 */}
+                        {currentQuestion.hint && (
+                            <div className="mb-6">
+                                <button
+                                    type="button"
+                                    onClick={() => setHintExpanded(prev => ({
+                                        ...prev,
+                                        [currentQuestion.id]: !prev[currentQuestion.id]
+                                    }))}
+                                    className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Lightbulb className="w-4 h-4 text-yellow-500" />
+                                        <span className="text-sm font-medium text-gray-700">提示</span>
+                                    </div>
+                                    {hintExpanded[currentQuestion.id] ? (
+                                        <ChevronUp className="w-4 h-4 text-gray-500" />
+                                    ) : (
+                                        <ChevronDown className="w-4 h-4 text-gray-500" />
+                                    )}
+                                </button>
+                                
+                                <AnimatePresence>
+                                    {hintExpanded[currentQuestion.id] && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: "auto" }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                            transition={{ duration: 0.2 }}
+                                            className="mt-3 p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <Lightbulb className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+                                                <p className="text-sm text-gray-700 leading-relaxed">
+                                                    {currentQuestion.hint}
+                                                </p>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        )}
 
                         <div className="space-y-3">
                             {Object.entries(optionsMap).map(([key, value]) => {

@@ -9,6 +9,7 @@ interface Question {
     options: string; // JSON string
     answer: string;
     points: number;
+    hint?: string;
 }
 
 interface QuestionEditorModalProps {
@@ -23,7 +24,8 @@ const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalP
         question_type: 'single',
         answer: '',
         points: 10,
-        options: {} as Record<string, string>
+        options: {} as Record<string, string>,
+        hint: ''
     });
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,8 @@ const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalP
                 question_type: question.question_type,
                 answer: question.answer,
                 points: question.points,
-                options: parsedOptions
+                options: parsedOptions,
+                hint: question.hint || ''
             });
         }
     }, [question]);
@@ -102,7 +105,8 @@ const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalP
                 question_type: formData.question_type,
                 answer: formData.answer,
                 points: formData.points,
-                options: JSON.stringify(formData.options)
+                options: JSON.stringify(formData.options),
+                hint: formData.hint || null
             };
 
             await api.put(`/admin/exams/questions/${question.id}`, payload);
@@ -167,6 +171,19 @@ const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalP
                             onChange={(e) => setFormData({...formData, content: e.target.value})}
                             className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium min-h-[100px]"
                             placeholder="請輸入題目內容..."
+                        />
+                    </div>
+
+                    {/* 提示內容 */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">
+                            提示內容 <span className="text-gray-400 font-normal">（選填）</span>
+                        </label>
+                        <textarea 
+                            value={formData.hint}
+                            onChange={(e) => setFormData({...formData, hint: e.target.value})}
+                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium min-h-[80px]"
+                            placeholder="輸入提示內容，幫助考生思考..."
                         />
                     </div>
 

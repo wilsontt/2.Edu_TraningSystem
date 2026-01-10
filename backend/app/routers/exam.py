@@ -72,6 +72,7 @@ async def upload_material(
                 content=q["content"],
                 options=q["options"],
                 answer=q["answer"],
+                hint=q.get("hint"),  # 支援提示欄位
                 points=q.get("points", 10)
             )
             db.add(new_q)
@@ -97,6 +98,7 @@ async def upload_material(
                     options=q["options"],
                     answer=q["answer"],
                     tags=json.dumps(tags_list, ensure_ascii=False),
+                    hint=q.get("hint"),  # 支援提示欄位
                     created_by=current_user.emp_id if hasattr(current_user, 'emp_id') else 'system'
                 )
                 db.add(qb)
@@ -250,6 +252,8 @@ def update_question(
         db_q.answer = q_update.answer
     if q_update.points is not None:
         db_q.points = q_update.points
+    if q_update.hint is not None:
+        db_q.hint = q_update.hint
         
     try:
         db.commit()
