@@ -177,8 +177,9 @@ export default function ReportDashboard() {
       const headers = { 'Authorization': `Bearer ${token}` };
 
       // 建立時間篩選參數
-      let deptUrl = 'http://localhost:8000/api/admin/reports/department';
-      let planUrl = 'http://localhost:8000/api/admin/reports/plan';
+      const baseURL = `http://${window.location.hostname}:8000/api`;
+      let deptUrl = `${baseURL}/admin/reports/department`;
+      let planUrl = `${baseURL}/admin/reports/plan`;
       const params = new URLSearchParams();
       
       if (timeFilter.type === 'year' && timeFilter.year) {
@@ -210,15 +211,15 @@ export default function ReportDashboard() {
         expiringRes,
         retakeRes
       ] = await Promise.all([
-        fetch('http://localhost:8000/api/admin/reports/overview', { headers }),
+        fetch(`${baseURL}/admin/reports/overview`, { headers }),
         fetch(deptUrl, { headers }),
         fetch(planUrl, { headers }),
-        fetch(`http://localhost:8000/api/admin/reports/trends?months=${trendMonths}`, { headers }),
-        fetch('http://localhost:8000/api/admin/reports/department-comparison', { headers }),
-        fetch('http://localhost:8000/api/admin/reports/plan-popularity?limit=10', { headers }),
-        fetch('http://localhost:8000/api/admin/reports/active-exams', { headers }),
-        fetch('http://localhost:8000/api/admin/reports/expiring-soon?days=3', { headers }),
-        fetch('http://localhost:8000/api/admin/reports/retake-needed', { headers })
+        fetch(`${baseURL}/admin/reports/trends?months=${trendMonths}`, { headers }),
+        fetch(`${baseURL}/admin/reports/department-comparison`, { headers }),
+        fetch(`${baseURL}/admin/reports/plan-popularity?limit=10`, { headers }),
+        fetch(`${baseURL}/admin/reports/active-exams`, { headers }),
+        fetch(`${baseURL}/admin/reports/expiring-soon?days=3`, { headers }),
+        fetch(`${baseURL}/admin/reports/retake-needed`, { headers })
       ]);
 
       if (overviewRes.ok) setOverview(await overviewRes.json());
@@ -241,7 +242,8 @@ export default function ReportDashboard() {
   const handleExportPDF = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8000/api/admin/reports/export/pdf', {
+      const baseURL = `http://${window.location.hostname}:8000/api`;
+      const response = await fetch(`${baseURL}/admin/reports/export/pdf`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -344,7 +346,7 @@ export default function ReportDashboard() {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold tracking-tight text-gray-900">統計報表</h2>
+        <h2 className="text-3xl font-bold tracking-tight text-gray-900">成績中心 統計報表</h2>
         <div className="flex gap-2">
           <button
             onClick={fetchData}
@@ -829,8 +831,9 @@ export default function ReportDashboard() {
                                     if (!deptDetails[itemId]) {
                                       try {
                                         const token = localStorage.getItem('token');
+                                        const baseURL = `http://${window.location.hostname}:8000/api`;
                                         const res = await fetch(
-                                          `http://localhost:8000/api/admin/reports/department/${itemId}/details?page=1&page_size=10`,
+                                          `${baseURL}/admin/reports/department/${itemId}/details?page=1&page_size=10`,
                                           { headers: { 'Authorization': `Bearer ${token}` } }
                                         );
                                         if (res.ok) {
@@ -851,8 +854,9 @@ export default function ReportDashboard() {
                                     if (!planDetails[itemId]) {
                                       try {
                                         const token = localStorage.getItem('token');
+                                        const baseURL = `http://${window.location.hostname}:8000/api`;
                                         const res = await fetch(
-                                          `http://localhost:8000/api/admin/reports/plan/${itemId}/details?page=1&page_size=10`,
+                                          `${baseURL}/admin/reports/plan/${itemId}/details?page=1&page_size=10`,
                                           { headers: { 'Authorization': `Bearer ${token}` } }
                                         );
                                         if (res.ok) {

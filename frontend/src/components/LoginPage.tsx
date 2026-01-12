@@ -53,15 +53,23 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       return;
     }
 
+    if (!captchaData?.captcha_id) {
+      setError('驗證碼尚未載入，請稍候');
+      await fetchCaptcha();
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      const response = await api.post<LoginResponse>('/auth/login', {
+      const loginPayload = {
         emp_id: empId,
-        captcha_id: captchaData?.captcha_id,
+        captcha_id: captchaData.captcha_id,
         answer: captchaText
-      });
+      };
+      console.log('DEBUG LOGIN: Sending login request', loginPayload);
+      const response = await api.post<LoginResponse>('/auth/login', loginPayload);
 
       const { access_token, user } = response.data;
       localStorage.setItem('token', access_token);

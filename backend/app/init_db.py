@@ -103,6 +103,21 @@ def init_db():
                 
                 db.commit()
 
+        # 6. 建立預設管理員帳號（如果不存在）
+        admin_user = db.query(models.User).filter(models.User.emp_id == "admin").first()
+        if not admin_user:
+            admin_user = models.User(
+                emp_id="admin",
+                name="系統管理員",
+                dept_id=it_dept.id,
+                role_id=admin_role.id,
+                status="active"
+            )
+            db.add(admin_user)
+            db.commit()
+            print("Created default admin user: admin")
+        else:
+            print(f"Admin user already exists: {admin_user.emp_id}")
         
         print("Database initialized successfully!")
         

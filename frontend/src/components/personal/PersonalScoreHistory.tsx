@@ -65,8 +65,9 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
       if (empId) {
         params.append('emp_id', empId);
       }
+      const baseURL = `http://${window.location.hostname}:8000/api`;
       const response = await fetch(
-        `http://localhost:8000/api/exam/personal/history?${params.toString()}`,
+        `${baseURL}/exam/personal/history?${params.toString()}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
 

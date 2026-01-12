@@ -1012,63 +1012,315 @@ def get_retake_needed(
 from fastapi.responses import StreamingResponse
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from io import BytesIO
 from typing import Optional
+import platform
+import os
+import sys
+import tempfile
+
+# 嘗試導入 fontTools 來處理 TTC 檔案
+try:
+    from fontTools.ttLib import TTFont as FTTTFont
+    FONTTOOLS_AVAILABLE = True
+except ImportError:
+    FONTTOOLS_AVAILABLE = False
+    print("Warning: fontTools not available. TTC fonts may not work properly.")
+
+# 全域變數：已註冊的字體名稱
+_registered_chinese_font = None
+
+# 註冊中文字體（跨平台支援）
+def register_chinese_fonts():
+    """註冊系統中文字體以支援中文顯示（支援 macOS、Windows、Linux）"""
+    global _registered_chinese_font
+    
+    # 如果已經註冊過，直接返回
+    if _registered_chinese_font:
+        return _registered_chinese_font
+    
+    system = platform.system()
+    font_name = "ChineseFont"
+    
+    try:
+        # macOS 字體路徑
+        if system == "Darwin":  # macOS
+            font_paths = [
+                # 嘗試 TTF 格式的字體（ReportLab 更相容）
+                "/Library/Fonts/Microsoft/Microsoft YaHei.ttf",  # 微軟雅黑（如果安裝了 Office）
+                "/System/Library/Fonts/Supplemental/STHeiti Light.ttc",  # 華文黑體
+                "/System/Library/Fonts/STHeiti Light.ttc",  # 華文黑體
+                "/System/Library/Fonts/STHeiti Medium.ttc",  # 華文黑體 Medium
+                "/System/Library/Fonts/Supplemental/STSong.ttc",  # 華文宋體
+                "/System/Library/Fonts/STSong.ttc",  # 華文宋體
+                "/System/Library/Fonts/PingFang.ttc",  # 蘋方
+            ]
+            
+            # 嘗試註冊字體
+            for path in font_paths:
+                if os.path.exists(path):
+                    try:
+                        # TTC 檔案需要特殊處理
+                        if path.endswith('.ttc'):
+                            if FONTTOOLS_AVAILABLE:
+                                # 使用 fontTools 提取 TTC 中的第一個字體
+                                try:
+                                    ttc = FTTTFont(path, fontNumber=0)
+                                    # 創建臨時 TTF 檔案
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix='.ttf') as tmp:
+                                        ttc.save(tmp.name)
+                                        tmp_path = tmp.name
+                                    
+                                    # 註冊提取的字體
+                                    pdfmetrics.registerFont(TTFont(font_name, tmp_path))
+                                    _registered_chinese_font = font_name
+                                    print(f"Successfully registered Chinese font from TTC: {path}")
+                                    return font_name
+                                except Exception as e:
+                                    print(f"Failed to extract font from TTC {path}: {e}")
+                                    continue
+                            else:
+                                # 如果沒有 fontTools，嘗試使用 UnicodeCIDFont
+                                try:
+                                    pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+                                    _registered_chinese_font = "STSong-Light"
+                                    print(f"Successfully registered Chinese font: STSong-Light (CID)")
+                                    return _registered_chinese_font
+                                except:
+                                    print(f"Failed to register TTC font as CID: {path}")
+                                    continue
+                        else:
+                            # TTF 檔案直接註冊
+                            pdfmetrics.registerFont(TTFont(font_name, path))
+                            _registered_chinese_font = font_name
+                            print(f"Successfully registered Chinese font: {path}")
+                            return font_name
+                    except Exception as e:
+                        print(f"Failed to register font {path}: {e}")
+                        continue
+        
+        # Windows 字體路徑
+        elif system == "Windows":
+            font_paths = [
+                "C:/Windows/Fonts/msyh.ttf",  # 微軟雅黑（TTF 格式）
+                "C:/Windows/Fonts/msyh.ttc",  # 微軟雅黑（TTC 格式）
+                "C:/Windows/Fonts/simhei.ttf",  # 黑體
+                "C:/Windows/Fonts/simsun.ttc",  # 宋體
+                "C:/Windows/Fonts/simsun.ttf",  # 宋體（TTF 格式）
+            ]
+            
+            for path in font_paths:
+                if os.path.exists(path):
+                    try:
+                        if path.endswith('.ttc'):
+                            if FONTTOOLS_AVAILABLE:
+                                # 使用 fontTools 提取 TTC 中的第一個字體
+                                try:
+                                    ttc = FTTTFont(path, fontNumber=0)
+                                    # 創建臨時 TTF 檔案
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix='.ttf') as tmp:
+                                        ttc.save(tmp.name)
+                                        tmp_path = tmp.name
+                                    
+                                    # 註冊提取的字體
+                                    pdfmetrics.registerFont(TTFont(font_name, tmp_path))
+                                    _registered_chinese_font = font_name
+                                    print(f"Successfully registered Chinese font from TTC: {path}")
+                                    return font_name
+                                except Exception as e:
+                                    print(f"Failed to extract font from TTC {path}: {e}")
+                                    continue
+                            else:
+                                # 如果沒有 fontTools，嘗試使用 UnicodeCIDFont
+                                try:
+                                    pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+                                    _registered_chinese_font = "STSong-Light"
+                                    print(f"Successfully registered Chinese font: STSong-Light (CID)")
+                                    return _registered_chinese_font
+                                except:
+                                    print(f"Failed to register TTC font as CID: {path}")
+                                    continue
+                        else:
+                            # TTF 檔案直接註冊
+                            pdfmetrics.registerFont(TTFont(font_name, path))
+                            _registered_chinese_font = font_name
+                            print(f"Successfully registered Chinese font: {path}")
+                            return font_name
+                    except Exception as e:
+                        print(f"Failed to register font {path}: {e}")
+                        continue
+        
+        # Linux 字體路徑
+        else:
+            font_paths = [
+                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",  # 文泉驛微米黑
+                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # 文泉驛正黑
+                "/usr/share/fonts/truetype/arphic/uming.ttc",  # AR PL UMing
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",  # Noto Sans CJK
+            ]
+            
+            for path in font_paths:
+                if os.path.exists(path):
+                    try:
+                        if path.endswith('.ttc'):
+                            if FONTTOOLS_AVAILABLE:
+                                # 使用 fontTools 提取 TTC 中的第一個字體
+                                try:
+                                    ttc = FTTTFont(path, fontNumber=0)
+                                    # 創建臨時 TTF 檔案
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix='.ttf') as tmp:
+                                        ttc.save(tmp.name)
+                                        tmp_path = tmp.name
+                                    
+                                    # 註冊提取的字體
+                                    pdfmetrics.registerFont(TTFont(font_name, tmp_path))
+                                    _registered_chinese_font = font_name
+                                    print(f"Successfully registered Chinese font from TTC: {path}")
+                                    return font_name
+                                except Exception as e:
+                                    print(f"Failed to extract font from TTC {path}: {e}")
+                                    continue
+                            else:
+                                # 如果沒有 fontTools，嘗試使用 UnicodeCIDFont
+                                try:
+                                    pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+                                    _registered_chinese_font = "STSong-Light"
+                                    print(f"Successfully registered Chinese font: STSong-Light (CID)")
+                                    return _registered_chinese_font
+                                except:
+                                    print(f"Failed to register TTC font as CID: {path}")
+                                    continue
+                        else:
+                            # TTF 檔案直接註冊
+                            pdfmetrics.registerFont(TTFont(font_name, path))
+                            _registered_chinese_font = font_name
+                            print(f"Successfully registered Chinese font: {path}")
+                            return font_name
+                    except Exception as e:
+                        print(f"Failed to register font {path}: {e}")
+                        continue
+        
+        # 如果所有字體都註冊失敗，嘗試使用 ReportLab 內建的 CID 字體
+        try:
+            pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+            _registered_chinese_font = "STSong-Light"
+            print("Using built-in CID font: STSong-Light")
+            return _registered_chinese_font
+        except:
+            pass
+        
+        # 最後的備選方案：使用 Helvetica（中文會顯示為方塊，但至少不會報錯）
+        print("Warning: Could not register any Chinese font. Chinese characters may not display correctly.")
+        _registered_chinese_font = "Helvetica"
+        return _registered_chinese_font
+        
+    except Exception as e:
+        print(f"Error registering Chinese font: {e}")
+        import traceback
+        traceback.print_exc()
+        _registered_chinese_font = "Helvetica"
+        return _registered_chinese_font
 
 @router.get("/export/pdf")
 def export_pdf(plan_id: Optional[int] = None, db: Session = Depends(get_db)): # current_user removed for easy browser testing
     """
-    導出成績單 PDF
+    導出成績單 PDF（支援中文顯示，跨平台）
+    內容從上往下排列，不置中
     """
+    # 註冊中文字體
+    chinese_font = register_chinese_fonts()
+    
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
+    # 從頁面頂部開始（不置中）
+    y = height - 50  # 從頂部往下 50 點開始
+    
     # 標題
-    p.setFont("Helvetica-Bold", 20)
-    p.drawString(100, height - 50, "Training Exam Report")
+    p.setFont(chinese_font, 20)
+    p.drawString(50, y, "教育訓練成績報告")
+    y -= 40
 
-    # 內容
-    y = height - 100
-    p.setFont("Helvetica", 12)
-
+    # 查詢資料
     if plan_id:
         plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
-        title = f"Plan: {plan.title}" if plan else "Unknown Plan"
-        records = db.query(models.ExamRecord).filter(models.ExamRecord.plan_id == plan_id).all()
+        if plan:
+            title = f"訓練計畫：{plan.title}"
+            records = db.query(models.ExamRecord).filter(models.ExamRecord.plan_id == plan_id).order_by(models.ExamRecord.submit_time.desc()).all()
+        else:
+            title = "未知計畫"
+            records = []
     else:
-        title = "All Plans Overview"
-        records = db.query(models.ExamRecord).all()
+        title = "全部計畫總覽"
+        records = db.query(models.ExamRecord).order_by(models.ExamRecord.submit_time.desc()).all()
 
+    # 計畫標題
+    p.setFont(chinese_font, 12)
     p.drawString(50, y, title)
-    y -= 30
+    y -= 25
     
-    p.drawString(50, y, f"Total Records: {len(records)}")
+    # 總記錄數
+    p.drawString(50, y, f"總記錄數：{len(records)}")
     y -= 30
+
+    # 如果沒有記錄，直接結束
+    if not records:
+        p.save()
+        buffer.seek(0)
+        return StreamingResponse(
+            buffer, 
+            media_type="application/pdf", 
+            headers={"Content-Disposition": "attachment; filename=report.pdf"}
+        )
 
     # 表格標題
-    headers = ["Emp ID", "Score", "Result", "Date"]
-    x_positions = [50, 150, 250, 350]
+    headers = ["員工編號", "姓名", "分數", "結果", "日期"]
+    x_positions = [50, 130, 220, 280, 380]
     
+    p.setFont(chinese_font, 11)
     for i, h in enumerate(headers):
         p.drawString(x_positions[i], y, h)
     
     y -= 20
-    p.line(50, y+15, 500, y+15)
+    # 畫分隔線
+    p.line(50, y+10, width - 50, y+10)
+    y -= 15
 
-    # 表格資料
+    # 表格資料（從上往下排列）
+    p.setFont(chinese_font, 10)
+    page_bottom = 50  # 頁面底部邊距
+    
     for r in records:
-        if y < 50:
+        # 檢查是否需要換頁
+        if y < page_bottom:
             p.showPage()
-            y = height - 50
+            y = height - 50  # 新頁面從頂部開始
+            # 在新頁面重複表頭
+            p.setFont(chinese_font, 11)
+            for i, h in enumerate(headers):
+                p.drawString(x_positions[i], y, h)
+            y -= 20
+            p.line(50, y+10, width - 50, y+10)
+            y -= 15
+            p.setFont(chinese_font, 10)
         
+        # 取得使用者姓名和部門
+        user = db.query(models.User).filter(models.User.emp_id == r.emp_id).first()
+        user_name = user.name if user else r.emp_id
+        
+        # 繪製資料行
         p.drawString(x_positions[0], y, str(r.emp_id))
-        p.drawString(x_positions[1], y, str(r.total_score))
-        p.drawString(x_positions[2], y, "Pass" if r.is_passed else "Fail")
-        p.drawString(x_positions[3], y, str(r.submit_time.date()) if r.submit_time else "-")
+        p.drawString(x_positions[1], y, user_name)
+        p.drawString(x_positions[2], y, str(r.total_score))
+        p.drawString(x_positions[3], y, "通過" if r.is_passed else "未通過")
+        p.drawString(x_positions[4], y, str(r.submit_time.date()) if r.submit_time else "-")
         y -= 20
 
-    p.showPage()
+    # 不添加額外的空白頁（移除 p.showPage()）
     p.save()
 
     buffer.seek(0)

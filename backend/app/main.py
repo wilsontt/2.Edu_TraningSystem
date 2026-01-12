@@ -1,12 +1,21 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import auth, admin, training, qrcode
+from .database import engine, Base
+from . import models
 
 app = FastAPI()
 
+# 在應用啟動時初始化資料庫表
+@app.on_event("startup")
+async def startup_event():
+    # 建立所有資料表（如果不存在）
+    Base.metadata.create_all(bind=engine)
+    print("Database tables initialized")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex="https?://.*", # 允許所有 HTTP/HTTPS 來源並支援憑證
+    allow_origins=["*"],  # 開發環境允許所有來源，生產環境應限制特定域名
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

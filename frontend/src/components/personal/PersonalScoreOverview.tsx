@@ -28,9 +28,10 @@ export default function PersonalScoreOverview({ empId }: PersonalScoreOverviewPr
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      const baseURL = `http://${window.location.hostname}:8000/api`;
       const url = empId 
-        ? `http://localhost:8000/api/exam/personal/overview?emp_id=${empId}`
-        : 'http://localhost:8000/api/exam/personal/overview';
+        ? `${baseURL}/exam/personal/overview?emp_id=${empId}`
+        : `${baseURL}/exam/personal/overview`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });

@@ -62,8 +62,9 @@ export default function ScoreDetailModal({ recordId, isOpen, onClose }: ScoreDet
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      const baseURL = `http://${window.location.hostname}:8000/api`;
       const response = await fetch(
-        `http://localhost:8000/api/exam/record/${recordId}/detail`,
+        `${baseURL}/exam/record/${recordId}/detail`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
 

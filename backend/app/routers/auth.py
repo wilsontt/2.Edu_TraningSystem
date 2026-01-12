@@ -113,7 +113,7 @@ async def get_captcha():
     # 生成唯一辨識碼來追蹤這筆驗證碼
     captcha_id = str(uuid.uuid4())
     captcha_store[captcha_id] = captcha_text.upper()
-    print(f"DEBUG CAPTCHA: {captcha_text}")
+    print(f"DEBUG CAPTCHA: Generated captcha_id={captcha_id}, text={captcha_text}, store_size={len(captcha_store)}")
     
     return {
         "captcha_id": captcha_id,
@@ -161,22 +161,40 @@ async def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login")
 async def login(req: LoginRequest, db: Session = Depends(get_db)):
+    print(f"DEBUG LOGIN: emp_id={req.emp_id}, captcha_id={req.captcha_id}, answer={req.answer}")
+    print(f"DEBUG LOGIN: captcha_store size={len(captcha_store)}, keys={list(captcha_store.keys())[:3]}")
+    
     # 1. 驗證圖形驗證碼
     if req.answer == "0000":
+        print("DEBUG LOGIN: Using bypass code 0000")
         pass
     else:
+        # 檢查 captcha_id 是否存在
+        if not req.captcha_id:
+            print("DEBUG LOGIN: captcha_id is missing")
+            raise HTTPException(status_code=400, detail="驗證碼 ID 不存在，請重新取得驗證碼")
+        
         stored_answer = captcha_store.get(req.captcha_id)
         if not stored_answer:
-            raise HTTPException(status_code=400, detail="驗證碼已過期或不存在")
+            print(f"DEBUG LOGIN: captcha_id={req.captcha_id} not found in store")
+            print(f"DEBUG LOGIN: Available keys={list(captcha_store.keys())[:5]}")
+            raise HTTPException(status_code=400, detail="驗證碼已過期或不存在，請重新取得驗證碼")
         
+        print(f"DEBUG LOGIN: stored_answer={stored_answer}, user_answer={req.answer.upper()}")
         if stored_answer != req.answer.upper():
+            print(f"DEBUG LOGIN: Captcha mismatch")
             raise HTTPException(status_code=400, detail="驗證碼錯誤")
         
+        print("DEBUG LOGIN: Captcha verified successfully")
         # 驗證成功後移除，避免重複使用
         del captcha_store[req.captcha_id]
 
-    # 2. 驗證用戶是否存在
-    user = db.query(models.User).filter(models.User.emp_id == req.emp_id).first()
+    # 2. 驗證用戶是否存在，並預載入關聯資料
+    user = db.query(models.User).options(
+        joinedload(models.User.department),
+        joinedload(models.User.role).joinedload(models.Role.functions)
+    ).filter(models.User.emp_id == req.emp_id).first()
+    
     if not user:
         raise HTTPException(status_code=404, detail="員工編號不存在，請先註冊")
     
@@ -184,8 +202,9 @@ async def login(req: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="此帳號已被停用")
     
     # 3. 簽發 JWT Token
+    role_name = user.role.name if user.role else "User"
     access_token = auth_utils.create_access_token(
-        data={"sub": user.emp_id, "role": user.role.name}
+        data={"sub": user.emp_id, "role": role_name}
     )
 
     return {
@@ -194,9 +213,9 @@ async def login(req: LoginRequest, db: Session = Depends(get_db)):
         "user": {
             "emp_id": user.emp_id,
             "name": user.name,
-            "dept_name": user.department.name,
-            "role": user.role.name,
-            "functions": [f.code for f in user.role.functions]
+            "dept_name": user.department.name if user.department else "未知",
+            "role": role_name,
+            "functions": [f.code for f in user.role.functions] if user.role and user.role.functions else []
         }
     }
 

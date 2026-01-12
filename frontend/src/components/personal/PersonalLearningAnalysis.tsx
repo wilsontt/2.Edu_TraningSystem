@@ -58,9 +58,10 @@ export default function PersonalLearningAnalysis({ empId }: PersonalLearningAnal
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      const baseURL = `http://${window.location.hostname}:8000/api`;
       const url = empId
-        ? `http://localhost:8000/api/exam/personal/analysis?emp_id=${empId}`
-        : 'http://localhost:8000/api/exam/personal/analysis';
+        ? `${baseURL}/exam/personal/analysis?emp_id=${empId}`
+        : `${baseURL}/exam/personal/analysis`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
