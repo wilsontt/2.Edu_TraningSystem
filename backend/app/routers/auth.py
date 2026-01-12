@@ -110,6 +110,7 @@ async def get_captcha():
     image.save(buffered, format="PNG")
     img_b64 = base64.b64encode(buffered.getvalue()).decode()
     
+    # 生成唯一辨識碼來追蹤這筆驗證碼
     captcha_id = str(uuid.uuid4())
     captcha_store[captcha_id] = captcha_text.upper()
     print(f"DEBUG CAPTCHA: {captcha_text}")
