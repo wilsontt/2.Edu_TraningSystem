@@ -6,7 +6,7 @@
 
 **版本 Version**：v1.2.0  
 **核准日期 Ratified**：2026-01-02  
-**最近修訂 Last Amended**：2026-01-10
+**最近修訂 Last Amended**：2025-01-09
 
 ---
 
@@ -25,6 +25,33 @@
 
 ## ⚡ 快速啟動 (Quick Start)
 
+### 首次安裝與資料庫初始化
+
+#### 1. 初始化資料庫（首次使用或資料庫不存在時）
+
+```bash
+cd backend
+.venv/bin/python3 -c "from app.init_db import init_db; init_db()"
+```
+
+> ⚠️ **重要提示**: 
+> - 此命令會創建所有資料表並初始化基礎資料（角色、部門、功能選單等）
+> - 如果資料庫已存在且有資料，請先備份資料庫
+> - 詳細說明請參考 [資料庫遷移指南](1.docs/資料庫遷移/MIGRATION_GUIDE.md)
+
+#### 2. 檢查資料庫狀態
+
+```bash
+# 檢查資料庫檔案是否存在
+ls -la ../data/education_training.db
+
+# 檢查資料庫中的表
+sqlite3 ../data/education_training.db ".tables"
+
+# 檢查用戶數量
+sqlite3 ../data/education_training.db "SELECT COUNT(*) FROM users"
+```
+
 ### 後端服務 (Backend)
 
 ```bash
@@ -33,6 +60,9 @@ export PYTHONPATH=$PYTHONPATH:.
 # 加入 --host 0.0.0.0 以允許外部裝置 (手機/平板) 連線
 .venv/bin/python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+> **注意**: 後端啟動時會自動檢查並創建不存在的資料表，但不會初始化基礎資料。首次使用請先執行資料庫初始化。
+
 <!-- export PYTHONPATH=$PYTHONPATH:. && .venv/bin/python3 -m uvicorn app.main:app --reload   -->
 
 ### 前端服務 (Frontend)
@@ -63,12 +93,42 @@ npm run dev
 
 ## 📁 目錄說明
 - `0.standards/`: 存放專案憲章、規格書、技術計畫等規範文件。
+- `1.docs/`: 存放開發文件、測試記錄、修復記錄等。
+  - `reviews/`: 測試報告、修復記錄、開發記錄
+  - `資料庫遷移/`: 資料庫遷移腳本和指南
 - `backend/`: FastAPI 後端專案目錄。
+  - `app/`: 應用程式核心程式碼
+  - `restore_training_data.py`: 資料恢復腳本（緊急使用）
 - `frontend/`: React 前端專案目錄。
 - `data/`: 存放 SQLite 資料庫檔案與年度教材檔案。
+  - `education_training.db`: 主資料庫檔案
+  - `education_training 2.db`: 備份資料庫檔案（手動備份）
 
 ## 📝 開發規範
 請參考 [**專案憲章**](0.standards/1.綠地專案文件/0.專案憲章.md) 了解編碼風格、安全性與在地化（zh-TW）之不可協商原則。
+
+## ⚠️ 重要注意事項
+
+### 資料庫操作安全
+
+1. **資料庫備份**:
+   - 在執行任何資料庫操作前，請務必備份資料庫
+   - 建議定期備份 `data/education_training.db` 檔案
+   - 備份檔案命名建議: `education_training_YYYYMMDD_HHMMSS.db`
+
+2. **資料庫初始化**:
+   - 首次使用或資料庫不存在時才執行 `init_db()`
+   - 如果資料庫已有資料，執行初始化可能會導致資料遺失
+   - 詳細說明請參考 [資料庫遷移指南](1.docs/資料庫遷移/MIGRATION_GUIDE.md)
+
+3. **資料恢復**:
+   - 如遇資料遺失，請參考 [資料庫資料遺失與恢復記錄](1.docs/reviews/2025-01-09-資料庫資料遺失與恢復記錄.md)
+   - 使用 `backend/restore_training_data.py` 腳本進行資料恢復
+
+4. **已知問題**:
+   - 後端啟動時會自動檢查並創建不存在的資料表，但不會初始化基礎資料
+   - 表結構變更時可能需要手動遷移資料
+   - 詳細問題記錄請參考 `1.docs/reviews/` 目錄
 
 ## 📈 開發進度
 
@@ -87,3 +147,16 @@ npm run dev
 - 🔄 **T6: 整合測試與優化** - 功能測試、效能優化、響應式設計（0%）
 
 詳細進度請參考 [成績中心開發任務清單](0.standards/2.棕地專案/2.成績中心開發任務.md)。
+
+## 📚 相關文件
+
+### 開發文件
+- [專案憲章](0.standards/1.綠地專案文件/0.專案憲章.md) - 編碼規範、安全性原則
+- [資料庫遷移指南](1.docs/資料庫遷移/MIGRATION_GUIDE.md) - 資料庫遷移與維護說明
+
+### 問題記錄
+- [2025-01-09 資料庫資料遺失與恢復記錄](1.docs/reviews/2025-01-09-資料庫資料遺失與恢復記錄.md) - 🔴 重要事件記錄
+- [測試文件與審查報告目錄](1.docs/reviews/README.md) - 所有測試和修復記錄
+
+### 開發記錄
+- 詳細的開發記錄請參考 `1.docs/reviews/` 目錄
