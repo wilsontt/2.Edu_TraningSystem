@@ -44,3 +44,11 @@ test_results/
 
 # Temporary files
 temp/
+
+# Backup files (檔案系統自動產生的備份)
+* 2.*
+* (1).*
+* (2).*
+* (3).*
+* 拷貝.*
+* 拷貝2.*
