@@ -16,7 +16,6 @@ interface LoginToken {
     created_by: string;
     created_at: string;
     expires_at: string;
-    used_at: string | null;
     is_used: boolean;
 }
 
@@ -36,7 +35,18 @@ const QRCodeManager = () => {
         try {
             setLoading(true);
             const res = await api.get<LoginToken[]>('/admin/qrcode/login/tokens');
-            setTokens(res.data);
+            
+            // 分離未過期和已過期的 token
+            const validTokens = res.data.filter(token => !isExpired(token.expires_at));
+            const expiredTokens = res.data.filter(token => isExpired(token.expires_at));
+            
+            // 已過期的 token 按過期時間排序（最新的在前），只取前 5 筆
+            const recentExpiredTokens = expiredTokens
+                .sort((a, b) => new Date(b.expires_at).getTime() - new Date(a.expires_at).getTime())
+                .slice(0, 5);
+            
+            // 合併：未過期的全部 + 最近 5 筆已過期的
+            setTokens([...validTokens, ...recentExpiredTokens]);
         } catch (err) {
             console.error('Failed to fetch tokens', err);
         } finally {
@@ -110,15 +120,20 @@ const QRCodeManager = () => {
         }
     };
 
-    // 格式化時間
+    // 格式化時間（明確處理 UTC 時間轉換為台灣時區）
     const formatDateTime = (dateString: string) => {
-        return new Date(dateString).toLocaleString('zh-TW', {
+        // 如果字串沒有時區資訊，加上 'Z' 表示 UTC
+        const utcString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
+        const date = new Date(utcString);
+        
+        return date.toLocaleString('zh-TW', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit'
+            second: '2-digit',
+            timeZone: 'Asia/Taipei' // 明確指定台灣時區
         });
     };
 
@@ -292,7 +307,6 @@ const QRCodeManager = () => {
                                     <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">Token</th>
                                     <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">建立時間</th>
                                     <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">過期時間</th>
-                                    <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">使用時間</th>
                                     <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">狀態</th>
                                     <th className="text-left py-3 px-4 text-sm font-bold text-gray-700">操作</th>
                                 </tr>
@@ -314,9 +328,6 @@ const QRCodeManager = () => {
                                         <td className="py-3 px-4 text-sm text-gray-600">
                                             {formatDateTime(token.expires_at)}
                                         </td>
-                                        <td className="py-3 px-4 text-sm text-gray-600">
-                                            {token.used_at ? formatDateTime(token.used_at) : '-'}
-                                        </td>
                                         <td className="py-3 px-4">
                                             {isExpired(token.expires_at) ? (
                                                 <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-bold flex items-center gap-1 w-fit">
@@ -327,11 +338,6 @@ const QRCodeManager = () => {
                                                 <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center gap-1 w-fit">
                                                     <Clock className="w-3 h-3" />
                                                     有效中（可多人使用）
-                                                </span>
-                                            )}
-                                            {token.is_used && token.used_at && !isExpired(token.expires_at) && (
-                                                <span className="ml-2 text-xs text-gray-500">
-                                                    （已有人使用過）
                                                 </span>
                                             )}
                                         </td>

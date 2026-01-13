@@ -242,7 +242,6 @@ class LoginToken(LoginTokenBase):
     token: str
     created_by: str
     created_at: datetime
-    used_at: Optional[datetime] = None
     is_used: bool
     
     class Config:

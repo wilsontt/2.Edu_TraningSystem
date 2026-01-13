@@ -20,6 +20,23 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
   const [captchaData, setCaptchaData] = useState<{ captcha_id: string; image: string } | null>(null);
   const [tokenInfo, setTokenInfo] = useState<{ expires_at?: string } | null>(null);
 
+  // 格式化時間（明確處理 UTC 時間轉換為台灣時區）
+  const formatDateTime = (dateString: string) => {
+    // 如果字串沒有時區資訊，加上 'Z' 表示 UTC
+    const utcString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
+    const date = new Date(utcString);
+    
+    return date.toLocaleString('zh-TW', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZone: 'Asia/Taipei' // 明確指定台灣時區
+    });
+  };
+
   // 載入驗證碼
   const fetchCaptcha = async () => {
     try {
@@ -180,7 +197,7 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
             <div className="bg-blue-50 border-l-4 border-blue-500 p-4 text-blue-700 text-sm rounded-r-lg">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 shrink-0" />
-                <span>QRcode 有效，將於 {new Date(tokenInfo.expires_at).toLocaleString('zh-TW')} 過期</span>
+                <span>QRcode 有效，將於 {formatDateTime(tokenInfo.expires_at)} 過期</span>
               </div>
             </div>
           )}

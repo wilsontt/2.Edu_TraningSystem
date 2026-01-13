@@ -329,8 +329,12 @@ async def login_with_qrcode(
         # 驗證成功後移除，避免重複使用
         del captcha_store[req.captcha_id]
     
-    # 3. 驗證用戶是否存在
-    user = db.query(models.User).filter(models.User.emp_id == req.emp_id).first()
+    # 3. 驗證用戶是否存在，並預載入關聯資料
+    user = db.query(models.User).options(
+        joinedload(models.User.department),
+        joinedload(models.User.role).joinedload(models.Role.functions)
+    ).filter(models.User.emp_id == req.emp_id).first()
+    
     if not user:
         raise HTTPException(status_code=404, detail="員工編號不存在，請先註冊")
     
