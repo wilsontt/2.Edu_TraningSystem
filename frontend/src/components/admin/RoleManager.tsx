@@ -69,8 +69,10 @@ const RoleManager = () => {
       setIsLoading(true);
       const res = await api.get('/admin/roles');
       setRoles(res.data);
+      return res.data; // 返回角色列表
     } catch (err) {
       console.error('Failed to fetch roles', err);
+      return [];
     } finally {
       setIsLoading(false);
     }
@@ -229,8 +231,10 @@ const RoleManager = () => {
       await api.put(`/admin/users/${empId}`, {
         role_id: detailModal.roleId
       });
+      // 重新載入角色列表以更新成員數
+      const updatedRoles = await fetchRoles();
       // 重新載入成員列表
-      const role = roles.find(r => r.id === detailModal.roleId);
+      const role = updatedRoles.find((r: Role) => r.id === detailModal.roleId);
       if (role) {
         await handleShowDetail(role, 'user');
       }
@@ -256,8 +260,10 @@ const RoleManager = () => {
       await api.put(`/admin/users/${removingMemberFromRole.emp_id}`, {
         role_id: targetRoleId || null
       });
+      // 重新載入角色列表以更新成員數
+      const updatedRoles = await fetchRoles();
       // 重新載入成員列表
-      const role = roles.find(r => r.id === detailModal.roleId);
+      const role = updatedRoles.find((r: Role) => r.id === detailModal.roleId);
       if (role) {
         await handleShowDetail(role, 'user');
       }
@@ -303,7 +309,15 @@ const RoleManager = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
             {roles.map((role, index) => (
-              <div key={role.id} className="p-6 bg-white border-2 border-gray-100 rounded-2xl hover:border-purple-200 hover:shadow-md transition-all group">
+              <div 
+                key={role.id} 
+                className="p-6 bg-white border-2 border-gray-100 rounded-2xl hover:border-purple-200 hover:shadow-md transition-all group cursor-pointer"
+                onDoubleClick={() => {
+                  if (role.name !== 'Admin') {
+                    openEditModal(role);
+                  }
+                }}
+              >
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
                     <Shield className="w-5 h-5" />

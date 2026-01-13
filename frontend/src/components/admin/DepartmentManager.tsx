@@ -154,6 +154,8 @@ const DepartmentManager = () => {
       await api.put(`/admin/users/${empId}`, {
         dept_id: viewingDeptUsers.department_id
       });
+      // 重新載入單位列表以更新成員數
+      await fetchDepartments();
       // 重新載入成員列表
       await handleViewUsers(viewingDeptUsers.department_id);
       setIsAddingMember(false);
@@ -178,6 +180,8 @@ const DepartmentManager = () => {
       await api.put(`/admin/users/${editingMember.emp_id}`, {
         dept_id: newDeptId
       });
+      // 重新載入單位列表以更新成員數（A單位和B單位都需要更新）
+      await fetchDepartments();
       // 重新載入成員列表
       await handleViewUsers(viewingDeptUsers.department_id);
       setEditingMember(null);
@@ -202,6 +206,8 @@ const DepartmentManager = () => {
       await api.put(`/admin/users/${removingMember.emp_id}`, {
         dept_id: targetDeptId
       });
+      // 重新載入單位列表以更新成員數（A單位和B單位都需要更新）
+      await fetchDepartments();
       // 重新載入成員列表
       await handleViewUsers(viewingDeptUsers.department_id);
       setRemovingMember(null);
@@ -217,7 +223,9 @@ const DepartmentManager = () => {
     }
   };
 
-  const filteredDepts = departments.filter(d => 
+  // 按單位名稱排序，然後過濾
+  const sortedDepts = [...departments].sort((a, b) => a.name.localeCompare(b.name));
+  const filteredDepts = sortedDepts.filter(d => 
     d.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -701,7 +709,7 @@ const DepartmentManager = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50/30">
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider w-24 text-center">ID</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider w-24 text-center">項次</th>
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">單位名稱</th>
                 <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider text-right">操作</th>
               </tr>
@@ -744,9 +752,16 @@ const DepartmentManager = () => {
                   </td>
                 </tr>
               ) : (
-                filteredDepts.map((dept) => (
-                  <tr key={dept.id} className="table-row-zebra table-row-hover transition-colors group">
-                    <td className="px-6 py-4 text-center text-sm font-mono text-gray-400 font-medium">#{dept.id}</td>
+                filteredDepts.map((dept, index) => (
+                  <tr 
+                    key={dept.id} 
+                    className="table-row-zebra table-row-hover transition-colors group"
+                    onDoubleClick={() => {
+                      setIsEditing(dept.id);
+                      setEditName(dept.name);
+                    }}
+                  >
+                    <td className="px-6 py-4 text-center text-sm font-mono text-gray-400 font-medium">{index + 1}</td>
                     <td className="px-6 py-4">
                       {isEditing === dept.id ? (
                         <input
@@ -773,6 +788,14 @@ const DepartmentManager = () => {
                     <td className="px-6 py-4 text-right">
                       {isEditing === dept.id ? (
                         <div className="flex justify-end gap-2">
+                          <button 
+                            type="button"
+                            onClick={() => handleViewUsers(dept.id)}
+                            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all text-sm"
+                          >
+                            <Users className="w-4 h-4" />
+                            查看成員
+                          </button>
                           <button type="button" onClick={(e) => handleUpdate(dept.id, e)} className="p-2.5 text-green-600 hover:bg-green-100 rounded-xl transition-all shadow-sm bg-white">
                             <Check className="w-5 h-5" />
                           </button>
@@ -781,21 +804,31 @@ const DepartmentManager = () => {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-1 group-hover:translate-x-0">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleViewUsers(dept.id)}
+                            className="p-4 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-xl transition-all"
+                            title="查看成員"
+                          >
+                            <Users className="w-4 h-4" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => {
                               setIsEditing(dept.id);
                               setEditName(dept.name);
                             }}
-                            className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                            className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                            title="編輯單位名稱"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
                             onClick={(e) => handleDelete(dept.id, e)}
-                            className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                            className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                            title="刪除單位"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
