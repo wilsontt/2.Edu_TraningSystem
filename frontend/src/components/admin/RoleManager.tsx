@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AxiosError } from 'axios';
-import { Plus, Shield, Check, X, Loader2, AlertCircle, PenTool, Trash2 } from 'lucide-react';
+import { Plus, Shield, Check, X, Loader2, AlertCircle, PenTool, Trash2, Search } from 'lucide-react';
 import api from '../../api';
 import ConfirmModal from '../ConfirmModal';
 
@@ -32,8 +32,20 @@ const RoleManager = () => {
     title: string;
     items: string[];
     type: 'user' | 'function';
+    roleId?: number;
+    roleName?: string;
   }>({ isOpen: false, title: '', items: [], type: 'user' });
   const [loadingDetail, setLoadingDetail] = useState(false);
+  
+  // 成員管理狀態
+  const [isAddingMemberToRole, setIsAddingMemberToRole] = useState(false);
+  const [removingMemberFromRole, setRemovingMemberFromRole] = useState<{emp_id: string; name: string} | null>(null);
+  const [allUsers, setAllUsers] = useState<Array<{emp_id: string; name: string; role_id: number | null; department?: {name: string}}>>([]);
+  const [loadingAllUsers, setLoadingAllUsers] = useState(false);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [targetRoleId, setTargetRoleId] = useState<number | null>(null);
+  const [isSubmittingMember, setIsSubmittingMember] = useState(false);
+  const [roleUsers, setRoleUsers] = useState<Array<{emp_id: string; name: string; role_id: number}>>([]);
   
   // 新增/編輯狀態
   const [isAdding, setIsAdding] = useState(false);
@@ -151,14 +163,18 @@ const RoleManager = () => {
   /** 顯示詳情 (成員或權限) */
   const handleShowDetail = async (role: Role, type: 'user' | 'function') => {
     setLoadingDetail(true);
-    setDetailModal({ isOpen: true, title: `載入中...`, items: [], type });
+    setDetailModal({ isOpen: true, title: `載入中...`, items: [], type, roleId: role.id, roleName: role.name });
     
     try {
         let items: string[] = [];
         if (type === 'user') {
             // 取得該角色的使用者列表 (目前改用前端過濾，未來可改為後端API)
             const res = await api.get('/admin/users');
-            items = res.data.filter((u: { role_id: number; name: string; emp_id: string }) => u.role_id === role.id).map((u: { name: string; emp_id: string }) => `${u.name} (${u.emp_id})`);
+            const users = res.data.filter((u: { role_id: number; name: string; emp_id: string }) => u.role_id === role.id);
+            items = users.map((u: { name: string; emp_id: string }) => `${u.name} (${u.emp_id})`);
+            setRoleUsers(users);
+            // 預載入所有用戶列表（用於新增成員）
+            setAllUsers(res.data);
         } else {
             // 取得權限列表，需將 ID 轉換為功能名稱
             const [permRes, funcRes] = await Promise.all([
@@ -192,13 +208,69 @@ const RoleManager = () => {
             isOpen: true,
             title: `${role.name} 的${type === 'user' ? '成員' : '權限'}清單`,
             items: items.length > 0 ? items : ['(無資料)'],
-            type
+            type,
+            roleId: role.id,
+            roleName: role.name
         });
     } catch (err) {
         console.error(err);
         setDetailModal({ isOpen: false, title: '', items: [], type: 'user' });
     } finally {
         setLoadingDetail(false);
+    }
+  };
+
+  const handleAddMemberToRole = async (empId: string) => {
+    if (!detailModal.roleId) return;
+    
+    try {
+      setIsSubmittingMember(true);
+      setError(null);
+      await api.put(`/admin/users/${empId}`, {
+        role_id: detailModal.roleId
+      });
+      // 重新載入成員列表
+      const role = roles.find(r => r.id === detailModal.roleId);
+      if (role) {
+        await handleShowDetail(role, 'user');
+      }
+      setIsAddingMemberToRole(false);
+      setUserSearchTerm('');
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        setError(err.response.data.detail || '新增成員失敗');
+      } else {
+        setError('發生未預期錯誤');
+      }
+    } finally {
+      setIsSubmittingMember(false);
+    }
+  };
+
+  const handleRemoveMemberFromRole = async () => {
+    if (!removingMemberFromRole || !detailModal.roleId) return;
+    
+    try {
+      setIsSubmittingMember(true);
+      setError(null);
+      await api.put(`/admin/users/${removingMemberFromRole.emp_id}`, {
+        role_id: targetRoleId || null
+      });
+      // 重新載入成員列表
+      const role = roles.find(r => r.id === detailModal.roleId);
+      if (role) {
+        await handleShowDetail(role, 'user');
+      }
+      setRemovingMemberFromRole(null);
+      setTargetRoleId(null);
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        setError(err.response.data.detail || '移除成員失敗');
+      } else {
+        setError('發生未預期錯誤');
+      }
+    } finally {
+      setIsSubmittingMember(false);
     }
   };
 
@@ -290,24 +362,85 @@ const RoleManager = () => {
         )}
       </div>
 
-      {/* Add Role Modal */}
+      {/* Detail Modal (Members or Permissions) */}
       {detailModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-              <h3 className="text-base font-black text-gray-900">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50">
+              <h3 className="text-lg font-black text-gray-900">
                 {detailModal.title}
               </h3>
-              <button 
-                onClick={() => setDetailModal({ ...detailModal, isOpen: false })}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {detailModal.type === 'user' && detailModal.roleId && (
+                  <button
+                    onClick={() => {
+                      setIsAddingMemberToRole(true);
+                      if (allUsers.length === 0) {
+                        api.get('/admin/users').then(res => setAllUsers(res.data));
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    新增成員
+                  </button>
+                )}
+                <button 
+                  onClick={() => {
+                    setDetailModal({ ...detailModal, isOpen: false });
+                    setIsAddingMemberToRole(false);
+                    setRemovingMemberFromRole(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-            <div className="p-0 max-h-[60vh] overflow-y-auto">
+            <div className="p-6 overflow-y-auto flex-1">
                 {loadingDetail ? (
-                    <div className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-300"/></div>
+                    <div className="flex flex-col items-center justify-center py-12 gap-4">
+                      <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                      <p className="text-gray-500 font-bold">載入中...</p>
+                    </div>
+                ) : detailModal.type === 'user' ? (
+                    <div className="space-y-3">
+                        {roleUsers.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-12 gap-4">
+                            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+                              <Shield className="w-8 h-8 text-gray-400" />
+                            </div>
+                            <p className="text-gray-500 font-bold">目前無成員</p>
+                          </div>
+                        ) : (
+                          roleUsers.map((user: {emp_id: string; name: string; role_id: number}) => (
+                            <div
+                              key={user.emp_id}
+                              className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all group"
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-black text-sm">
+                                  {user.name.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="font-bold text-gray-900">{user.name}</p>
+                                  <p className="text-xs text-gray-500 font-medium">員工編號：{user.emp_id}</p>
+                                </div>
+                              </div>
+                              {user.emp_id.toLowerCase() !== 'admin' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setRemovingMemberFromRole({emp_id: user.emp_id, name: user.name})}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                  title="移除成員"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          ))
+                        )}
+                    </div>
                 ) : (
                     <div className="divide-y divide-gray-50">
                         {detailModal.items.map((item, idx) => (
@@ -317,6 +450,223 @@ const RoleManager = () => {
                         ))}
                     </div>
                 )}
+            </div>
+            <div className="p-4 bg-gray-50 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailModal({ ...detailModal, isOpen: false });
+                  setIsAddingMemberToRole(false);
+                  setRemovingMemberFromRole(null);
+                }}
+                className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
+              >
+                關閉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 新增成員到角色對話框 */}
+      {isAddingMemberToRole && detailModal.roleId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-purple-600" />
+                新增成員到 {detailModal.roleName}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAddingMemberToRole(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={isSubmittingMember}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto">
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="搜尋用戶姓名或員工編號..."
+                    className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-100 focus:border-purple-400 transition-all font-bold"
+                    value={userSearchTerm}
+                    onChange={(e) => setUserSearchTerm(e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              {loadingAllUsers ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
+                  <p className="text-gray-500 font-bold">載入用戶列表中...</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {allUsers
+                    .filter(user => {
+                      // 排除已有當前角色的用戶
+                      if (user.role_id === detailModal.roleId) return false;
+                      
+                      // 搜尋過濾
+                      if (userSearchTerm) {
+                        const searchLower = userSearchTerm.toLowerCase();
+                        return user.name.toLowerCase().includes(searchLower) || 
+                               user.emp_id.toLowerCase().includes(searchLower);
+                      }
+                      return true;
+                    })
+                    .map((user) => (
+                      <button
+                        key={user.emp_id}
+                        type="button"
+                        onClick={() => handleAddMemberToRole(user.emp_id)}
+                        disabled={isSubmittingMember}
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-purple-50 rounded-xl transition-all text-left group disabled:opacity-50"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-black text-sm">
+                            {user.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-900">{user.name}</p>
+                            <p className="text-xs text-gray-500 font-medium">員工編號：{user.emp_id}</p>
+                            {user.department && (
+                              <p className="text-xs text-gray-400 font-medium">部門：{user.department.name}</p>
+                            )}
+                          </div>
+                        </div>
+                        {isSubmittingMember ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                        ) : (
+                          <Plus className="w-5 h-5 text-purple-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                      </button>
+                    ))}
+                  {allUsers.filter(user => {
+                    if (user.role_id === detailModal.roleId) return false;
+                    if (userSearchTerm) {
+                      const searchLower = userSearchTerm.toLowerCase();
+                      return user.name.toLowerCase().includes(searchLower) || 
+                             user.emp_id.toLowerCase().includes(searchLower);
+                    }
+                    return true;
+                  }).length === 0 && (
+                    <div className="text-center py-12 text-gray-400 font-bold">
+                      {userSearchTerm ? '找不到符合條件的用戶' : '所有用戶都已擁有此角色'}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {error && (
+                <div className="mt-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  {error}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 bg-gray-50 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingMemberToRole(false);
+                  setError(null);
+                  setUserSearchTerm('');
+                }}
+                className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
+                disabled={isSubmittingMember}
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 移除成員確認對話框 */}
+      {removingMemberFromRole && detailModal.roleId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-red-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-red-600" />
+                移除成員角色
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setRemovingMemberFromRole(null);
+                  setTargetRoleId(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={isSubmittingMember}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="space-y-2 bg-red-50/50 p-4 rounded-xl border border-red-100">
+                <p className="text-sm font-bold text-gray-700">
+                  確定要移除 <span className="text-red-600 font-black">{removingMemberFromRole.name}</span> 的 <span className="text-red-600 font-black">{detailModal.roleName}</span> 角色嗎？
+                </p>
+                <p className="text-xs text-gray-500 font-medium">請選擇其他角色或移除角色（設為未分配）</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">設為角色</label>
+                <select
+                  value={targetRoleId || ''}
+                  onChange={(e) => setTargetRoleId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-red-500 outline-none transition-all font-medium text-gray-800"
+                  disabled={isSubmittingMember}
+                >
+                  <option value="">未分配（移除角色）</option>
+                  {roles
+                    .filter(role => role.id !== detailModal.roleId)
+                    .map(role => (
+                      <option key={role.id} value={role.id}>{role.name}</option>
+                    ))}
+                </select>
+              </div>
+              
+              {error && (
+                <div className="p-3 bg-red-50 text-red-600 rounded-xl text-sm font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  {error}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setRemovingMemberFromRole(null);
+                  setTargetRoleId(null);
+                  setError(null);
+                }}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all"
+                disabled={isSubmittingMember}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleRemoveMemberFromRole}
+                disabled={isSubmittingMember}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-red-600 shadow-md shadow-red-200 hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+              >
+                {isSubmittingMember ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                確認移除
+              </button>
             </div>
           </div>
         </div>

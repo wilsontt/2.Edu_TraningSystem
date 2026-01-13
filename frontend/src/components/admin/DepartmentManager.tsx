@@ -40,6 +40,16 @@ const DepartmentManager = () => {
   // 使用者模態框狀態
   const [viewingDeptUsers, setViewingDeptUsers] = useState<DepartmentUsersData | null>(null);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  
+  // 成員管理狀態
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [editingMember, setEditingMember] = useState<DepartmentUser | null>(null);
+  const [removingMember, setRemovingMember] = useState<DepartmentUser | null>(null);
+  const [allUsers, setAllUsers] = useState<Array<{emp_id: string; name: string; dept_id: number; department?: {name: string}}>>([]);
+  const [loadingAllUsers, setLoadingAllUsers] = useState(false);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [targetDeptId, setTargetDeptId] = useState<number | null>(null);
+  const [isSubmittingMember, setIsSubmittingMember] = useState(false);
 
   const fetchDepartments = async () => {
     try {
@@ -110,6 +120,8 @@ const DepartmentManager = () => {
     try {
       const res = await api.get<DepartmentUsersData>(`/admin/departments/${deptId}/users`);
       setViewingDeptUsers(res.data);
+      // 預載入所有用戶列表（用於新增成員）
+      await fetchAllUsers();
     } catch (err: unknown) {
       if (err instanceof AxiosError && err.response?.data?.detail) {
         setErrorMessage(err.response.data.detail);
@@ -118,6 +130,90 @@ const DepartmentManager = () => {
       }
     } finally {
       setLoadingUsers(false);
+    }
+  };
+
+  const fetchAllUsers = async () => {
+    try {
+      setLoadingAllUsers(true);
+      const res = await api.get('/admin/users');
+      setAllUsers(res.data);
+    } catch (err) {
+      console.error('無法載入所有用戶', err);
+    } finally {
+      setLoadingAllUsers(false);
+    }
+  };
+
+  const handleAddMember = async (empId: string) => {
+    if (!viewingDeptUsers) return;
+    
+    try {
+      setIsSubmittingMember(true);
+      setErrorMessage(null);
+      await api.put(`/admin/users/${empId}`, {
+        dept_id: viewingDeptUsers.department_id
+      });
+      // 重新載入成員列表
+      await handleViewUsers(viewingDeptUsers.department_id);
+      setIsAddingMember(false);
+      setUserSearchTerm('');
+    } catch (err: unknown) {
+      if (err instanceof AxiosError && err.response?.data?.detail) {
+        setErrorMessage(err.response.data.detail);
+      } else {
+        setErrorMessage('新增成員失敗');
+      }
+    } finally {
+      setIsSubmittingMember(false);
+    }
+  };
+
+  const handleEditMember = async (newDeptId: number) => {
+    if (!editingMember || !viewingDeptUsers) return;
+    
+    try {
+      setIsSubmittingMember(true);
+      setErrorMessage(null);
+      await api.put(`/admin/users/${editingMember.emp_id}`, {
+        dept_id: newDeptId
+      });
+      // 重新載入成員列表
+      await handleViewUsers(viewingDeptUsers.department_id);
+      setEditingMember(null);
+      setTargetDeptId(null);
+    } catch (err: unknown) {
+      if (err instanceof AxiosError && err.response?.data?.detail) {
+        setErrorMessage(err.response.data.detail);
+      } else {
+        setErrorMessage('更新成員失敗');
+      }
+    } finally {
+      setIsSubmittingMember(false);
+    }
+  };
+
+  const handleRemoveMember = async () => {
+    if (!removingMember || !viewingDeptUsers || !targetDeptId) return;
+    
+    try {
+      setIsSubmittingMember(true);
+      setErrorMessage(null);
+      await api.put(`/admin/users/${removingMember.emp_id}`, {
+        dept_id: targetDeptId
+      });
+      // 重新載入成員列表
+      await handleViewUsers(viewingDeptUsers.department_id);
+      setRemovingMember(null);
+      setTargetDeptId(null);
+    } catch (err: unknown) {
+      if (err instanceof AxiosError && err.response?.data?.detail) {
+        setErrorMessage(err.response.data.detail);
+      } else {
+        setErrorMessage('移除成員失敗');
+      }
+    } finally {
+      setIsSubmittingMember(false);
     }
   };
 
@@ -176,13 +272,31 @@ const DepartmentManager = () => {
                   <p className="text-sm font-bold text-gray-500">共 {viewingDeptUsers.user_count} 位使用者</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setViewingDeptUsers(null)}
-                className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-all"
-              >
-                <X className="w-5 h-5 text-blue-600" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingMember(true);
+                    fetchAllUsers();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all text-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  新增成員
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewingDeptUsers(null);
+                    setIsAddingMember(false);
+                    setEditingMember(null);
+                    setRemovingMember(null);
+                  }}
+                  className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-all"
+                >
+                  <X className="w-5 h-5 text-blue-600" />
+                </button>
+              </div>
             </div>
             
             <div className="p-6 overflow-y-auto flex-1">
@@ -229,6 +343,26 @@ const DepartmentManager = () => {
                         }`}>
                           {user.status === 'active' ? '啟用' : '停用'}
                         </span>
+                        {user.emp_id.toLowerCase() !== 'admin' && (
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={() => setEditingMember(user)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                              title="編輯成員"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRemovingMember(user)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="移除成員"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -239,10 +373,292 @@ const DepartmentManager = () => {
             <div className="p-4 bg-gray-50 border-t border-gray-100">
               <button
                 type="button"
-                onClick={() => setViewingDeptUsers(null)}
+                onClick={() => {
+                  setViewingDeptUsers(null);
+                  setIsAddingMember(false);
+                  setEditingMember(null);
+                  setRemovingMember(null);
+                }}
                 className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
               >
                 關閉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 新增成員對話框 */}
+      {isAddingMember && viewingDeptUsers && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-blue-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-blue-600" />
+                新增成員到 {viewingDeptUsers.department_name}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAddingMember(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={isSubmittingMember}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto">
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="搜尋用戶姓名或員工編號..."
+                    className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all font-bold"
+                    value={userSearchTerm}
+                    onChange={(e) => setUserSearchTerm(e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              {loadingAllUsers ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                  <p className="text-gray-500 font-bold">載入用戶列表中...</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {allUsers
+                    .filter(user => {
+                      // 排除已在當前部門的用戶
+                      const isInCurrentDept = viewingDeptUsers.users.some(u => u.emp_id === user.emp_id);
+                      if (isInCurrentDept) return false;
+                      
+                      // 搜尋過濾
+                      if (userSearchTerm) {
+                        const searchLower = userSearchTerm.toLowerCase();
+                        return user.name.toLowerCase().includes(searchLower) || 
+                               user.emp_id.toLowerCase().includes(searchLower);
+                      }
+                      return true;
+                    })
+                    .map((user) => (
+                      <button
+                        key={user.emp_id}
+                        type="button"
+                        onClick={() => handleAddMember(user.emp_id)}
+                        disabled={isSubmittingMember}
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-blue-50 rounded-xl transition-all text-left group disabled:opacity-50"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-black text-sm">
+                            {user.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-900">{user.name}</p>
+                            <p className="text-xs text-gray-500 font-medium">員工編號：{user.emp_id}</p>
+                            {user.department && (
+                              <p className="text-xs text-gray-400 font-medium">目前部門：{user.department.name}</p>
+                            )}
+                          </div>
+                        </div>
+                        {isSubmittingMember ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                        ) : (
+                          <Plus className="w-5 h-5 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                      </button>
+                    ))}
+                  {allUsers.filter(user => {
+                    const isInCurrentDept = viewingDeptUsers.users.some(u => u.emp_id === user.emp_id);
+                    if (isInCurrentDept) return false;
+                    if (userSearchTerm) {
+                      const searchLower = userSearchTerm.toLowerCase();
+                      return user.name.toLowerCase().includes(searchLower) || 
+                             user.emp_id.toLowerCase().includes(searchLower);
+                    }
+                    return true;
+                  }).length === 0 && (
+                    <div className="text-center py-12 text-gray-400 font-bold">
+                      {userSearchTerm ? '找不到符合條件的用戶' : '所有用戶都已在此部門中'}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 bg-gray-50 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setIsAddingMember(false)}
+                className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
+                disabled={isSubmittingMember}
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 編輯成員對話框 */}
+      {editingMember && viewingDeptUsers && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-blue-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-blue-600" />
+                編輯成員部門
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingMember(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={isSubmittingMember}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="space-y-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500 font-bold">員工編號</span>
+                  <span className="text-sm font-mono font-black text-gray-800">{editingMember.emp_id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500 font-bold">姓名</span>
+                  <span className="text-sm font-black text-gray-800">{editingMember.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500 font-bold">目前部門</span>
+                  <span className="text-sm font-black text-gray-800">{viewingDeptUsers.department_name}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">移至部門</label>
+                <select
+                  value={targetDeptId || ''}
+                  onChange={(e) => setTargetDeptId(Number(e.target.value))}
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-blue-500 outline-none transition-all font-medium text-gray-800"
+                  disabled={isSubmittingMember}
+                >
+                  <option value="">請選擇部門</option>
+                  {departments
+                    .filter(dept => dept.id !== viewingDeptUsers.department_id)
+                    .map(dept => (
+                      <option key={dept.id} value={dept.id}>{dept.name}</option>
+                    ))}
+                </select>
+              </div>
+
+              {errorMessage && (
+                <div className="p-3 bg-red-50 text-red-600 rounded-xl text-sm font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  {errorMessage}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingMember(null)}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all"
+                disabled={isSubmittingMember}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => targetDeptId && handleEditMember(targetDeptId)}
+                disabled={!targetDeptId || isSubmittingMember}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-blue-600 shadow-md shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmittingMember ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+                確認變更
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 移除成員確認對話框 */}
+      {removingMember && viewingDeptUsers && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-red-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-red-600" />
+                移除成員
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setRemovingMember(null);
+                  setTargetDeptId(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={isSubmittingMember}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="space-y-2 bg-red-50/50 p-4 rounded-xl border border-red-100">
+                <p className="text-sm font-bold text-gray-700">
+                  確定要將 <span className="text-red-600 font-black">{removingMember.name}</span> 從 <span className="text-red-600 font-black">{viewingDeptUsers.department_name}</span> 移除嗎？
+                </p>
+                <p className="text-xs text-gray-500 font-medium">請選擇目標部門，成員將被移至該部門</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">移至部門</label>
+                <select
+                  value={targetDeptId || ''}
+                  onChange={(e) => setTargetDeptId(Number(e.target.value))}
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-red-500 outline-none transition-all font-medium text-gray-800"
+                  disabled={isSubmittingMember}
+                >
+                  <option value="">請選擇目標部門</option>
+                  {departments
+                    .filter(dept => dept.id !== viewingDeptUsers.department_id)
+                    .map(dept => (
+                      <option key={dept.id} value={dept.id}>{dept.name}</option>
+                    ))}
+                </select>
+              </div>
+
+              {errorMessage && (
+                <div className="p-3 bg-red-50 text-red-600 rounded-xl text-sm font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  {errorMessage}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setRemovingMember(null);
+                  setTargetDeptId(null);
+                }}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all"
+                disabled={isSubmittingMember}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleRemoveMember}
+                disabled={!targetDeptId || isSubmittingMember}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-red-600 shadow-md shadow-red-200 hover:bg-red-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmittingMember ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                確認移除
               </button>
             </div>
           </div>
