@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AxiosError } from 'axios';
-import { Search, Edit2, Check, X, User as UserIcon, Shield, Building2, Loader2, AlertCircle } from 'lucide-react';
+import { Search, Edit2, Check, X, User as UserIcon, Shield, Building2, Loader2, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import api from '../../api';
 
 interface User {
@@ -46,6 +46,15 @@ const UserManager = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  
+  // 排序狀態
+  const [sortConfig, setSortConfig] = useState<{
+    field: 'emp_id' | 'name' | 'dept_id' | 'role_id' | 'status' | null;
+    direction: 'asc' | 'desc' | null;
+  }>({
+    field: 'emp_id', // 預設按員工編號
+    direction: 'asc'  // 預設遞增
+  });
 
   useEffect(() => {
     fetchData();
@@ -128,10 +137,86 @@ const UserManager = () => {
     }
   };
 
-  const filteredUsers = users.filter(user => 
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    user.emp_id.includes(searchTerm)
-  );
+  // 排序邏輯函數
+  const getSortedUsers = (usersToSort: User[]) => {
+    // 1. 分離 admin 和其他用戶
+    const adminUser = usersToSort.find(u => u.emp_id.toLowerCase() === 'admin');
+    const otherUsers = usersToSort.filter(u => u.emp_id.toLowerCase() !== 'admin');
+    
+    // 2. 對其他用戶進行排序
+    let sortedOthers = [...otherUsers];
+    
+    // 如果沒有排序設定，使用預設排序（員工編號遞增）
+    const effectiveField = sortConfig.field || 'emp_id';
+    const effectiveDirection = sortConfig.direction || 'asc';
+    
+    sortedOthers.sort((a, b) => {
+      let aValue: string | number;
+      let bValue: string | number;
+      
+      switch (effectiveField) {
+        case 'emp_id':
+          aValue = a.emp_id;
+          bValue = b.emp_id;
+          break;
+        case 'name':
+          aValue = a.name;
+          bValue = b.name;
+          break;
+        case 'dept_id':
+          aValue = a.department?.name || '';
+          bValue = b.department?.name || '';
+          break;
+        case 'role_id':
+          aValue = a.role?.name || '';
+          bValue = b.role?.name || '';
+          break;
+        case 'status':
+          aValue = a.status;
+          bValue = b.status;
+          break;
+        default:
+          return 0;
+      }
+      
+      // 字串比較（使用 localeCompare 支援中文）
+      const comparison = String(aValue).localeCompare(String(bValue), 'zh-TW');
+      return effectiveDirection === 'asc' ? comparison : -comparison;
+    });
+    
+    // 3. 合併：admin 在前，其他在後
+    return adminUser ? [adminUser, ...sortedOthers] : sortedOthers;
+  };
+
+  // 表頭點擊處理
+  const handleSort = (field: 'emp_id' | 'name' | 'dept_id' | 'role_id' | 'status') => {
+    setSortConfig(prev => {
+      // 如果點擊的是當前欄位，切換排序方向
+      if (prev.field === field) {
+        if (prev.direction === 'asc') {
+          // 遞增 → 遞減
+          return { field, direction: 'desc' };
+        } else if (prev.direction === 'desc') {
+          // 遞減 → 無排序（回到預設）
+          return { field: null, direction: null };
+        }
+      }
+      // 點擊新欄位，設為遞增
+      return { field, direction: 'asc' };
+    });
+  };
+
+  // 整合搜尋與排序
+  const processedUsers = useMemo(() => {
+    // 1. 搜尋過濾
+    const filtered = users.filter(user => 
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      user.emp_id.includes(searchTerm)
+    );
+    
+    // 2. 排序（包含 admin 固定第一）
+    return getSortedUsers(filtered);
+  }, [users, searchTerm, sortConfig]);
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -172,16 +257,96 @@ const UserManager = () => {
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider w-16">項次</th>
-                  <th className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider">員工編號</th>
-                  <th className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider">姓名</th>
-                  <th className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider">部門</th>
-                  <th className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider">角色</th>
-                  <th className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider">狀態</th>
+                  <th 
+                    onClick={() => handleSort('emp_id')}
+                    className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>員工編號</span>
+                      {sortConfig.field === 'emp_id' ? (
+                        sortConfig.direction === 'asc' ? (
+                          <ArrowUp className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <ArrowDown className="w-4 h-4 text-blue-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort('name')}
+                    className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>姓名</span>
+                      {sortConfig.field === 'name' ? (
+                        sortConfig.direction === 'asc' ? (
+                          <ArrowUp className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <ArrowDown className="w-4 h-4 text-blue-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort('dept_id')}
+                    className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>部門</span>
+                      {sortConfig.field === 'dept_id' ? (
+                        sortConfig.direction === 'asc' ? (
+                          <ArrowUp className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <ArrowDown className="w-4 h-4 text-blue-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort('role_id')}
+                    className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>角色</span>
+                      {sortConfig.field === 'role_id' ? (
+                        sortConfig.direction === 'asc' ? (
+                          <ArrowUp className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <ArrowDown className="w-4 h-4 text-blue-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort('status')}
+                    className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>狀態</span>
+                      {sortConfig.field === 'status' ? (
+                        sortConfig.direction === 'asc' ? (
+                          <ArrowUp className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <ArrowDown className="w-4 h-4 text-blue-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
                   <th className="px-6 py-4 text-right text-sm font-black text-gray-400 uppercase tracking-wider">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredUsers.map((user, index) => {
+                {processedUsers.map((user, index) => {
                     const isSelected = selectedUserIds.has(user.emp_id);
                     return (
                   <tr 
