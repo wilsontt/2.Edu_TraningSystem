@@ -9,7 +9,8 @@ from io import BytesIO
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+import re
 from sqlalchemy.orm import Session, joinedload
 from .. import models, schemas
 from ..database import get_db
@@ -44,14 +45,41 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Pydantic 模型的請求資料
 class RegisterRequest(BaseModel):
-    emp_id: str
-    name: str
+    emp_id: str = Field(..., min_length=1, max_length=10, description="員工編號，必須是1-10碼的數字")
+    name: str = Field(..., min_length=1, max_length=20, description="姓名，最長20個字符")
     dept_id: int
+    
+    @field_validator('emp_id')
+    @classmethod
+    def validate_emp_id(cls, v: str) -> str:
+        """驗證員工編號必須是1-10碼的數字"""
+        if not re.match(r'^[0-9]{1,10}$', v):
+            raise ValueError('員工編號必須是1-10碼的數字')
+        return v
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """驗證姓名長度"""
+        v = v.strip()
+        if len(v) == 0:
+            raise ValueError('姓名不能為空')
+        if len(v) > 20:
+            raise ValueError('姓名最長20個字符')
+        return v
 
 class LoginRequest(BaseModel):
-    emp_id: str
+    emp_id: str = Field(..., min_length=1, max_length=10, description="員工編號，必須是1-10碼的數字")
     captcha_id: str
     answer: str
+    
+    @field_validator('emp_id')
+    @classmethod
+    def validate_emp_id(cls, v: str) -> str:
+        """驗證員工編號必須是1-10碼的數字"""
+        if not re.match(r'^[0-9]{1,10}$', v):
+            raise ValueError('員工編號必須是1-10碼的數字')
+        return v
 
 # 暫存驗證碼答案 (正式環境建議用 Redis)
 captcha_store = {}
@@ -295,13 +323,10 @@ def validate_qrcode_token(token: str, db: Session = Depends(get_db)):
         "expires_at": login_token.expires_at
     }
 
-class QRCodeLoginRequest(BaseModel):
-    emp_id: str
-
 @router.post("/login/qrcode/{token}")
 async def login_with_qrcode(
     token: str,
-    req: QRCodeLoginRequest,
+    req: schemas.QRCodeLoginRequest,
     db: Session = Depends(get_db)
 ):
     """使用 QRcode token 快速登入（仍需輸入驗證碼，但同一 QRcode 可被多人使用）"""

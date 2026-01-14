@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import api from '../api';
 import axios from 'axios';
-import { LogIn, UserPlus, RefreshCw, Smartphone, Building2, User as UserIcon, ShieldCheck } from 'lucide-react';
+import { LogIn, UserPlus, RefreshCw, Smartphone, Building2, User as UserIcon, ShieldCheck, CheckCircle, X } from 'lucide-react';
 import type { User, CaptchaData, LoginResponse, Department } from '../types';
 
 interface LoginPageProps {
@@ -21,6 +21,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [captchaData, setCaptchaData] = useState<CaptchaData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const fetchCaptcha = async () => {
     try {
@@ -44,12 +45,27 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   useEffect(() => {
     fetchCaptcha();
     fetchDepartments();
+    
+    // 檢查是否有保存的員工編號（從 QRcode 登入失敗而來）
+    const pendingEmpId = localStorage.getItem('pendingRegistrationEmpId');
+    if (pendingEmpId) {
+      console.log('Found pending registration employee ID:', pendingEmpId);
+      setEmpId(pendingEmpId);
+      setIsRegister(true); // 自動切換到註冊模式
+      localStorage.removeItem('pendingRegistrationEmpId'); // 清除保存的值
+    }
   }, []);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     if (!empId || !captchaText) {
       setError('請輸入員工編號與驗證碼');
+      return;
+    }
+    
+    // 驗證員工編號格式：必須是1-10碼的數字
+    if (!/^[0-9]{1,10}$/.test(empId)) {
+      setError('員工編號必須是1-10碼的數字');
       return;
     }
 
@@ -93,6 +109,23 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setError('請填寫所有欄位');
       return;
     }
+    
+    // 驗證員工編號格式：必須是1-10碼的數字
+    if (!/^[0-9]{1,10}$/.test(empId)) {
+      setError('員工編號必須是1-10碼的數字');
+      return;
+    }
+    
+    // 驗證姓名長度：最長20個字符
+    if (name.length > 20) {
+      setError('姓名最長20個字符');
+      return;
+    }
+    
+    if (name.trim().length === 0) {
+      setError('請輸入有效的姓名');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -106,7 +139,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       
       setIsRegister(false);
       setError('');
-      alert('註冊成功，請開始登入');
+      setSuccess('註冊成功，請開始登入');
+      // 3秒後自動清除成功訊息
+      setTimeout(() => setSuccess(''), 3000);
       fetchCaptcha();
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
@@ -148,6 +183,25 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </div>
             </div>
           )}
+          
+          {success && (
+            <div className="bg-green-50 border-l-4 border-green-500 p-4 text-green-700 text-sm rounded-r-lg animate-in fade-in slide-in-from-top-4 duration-300">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  <span>{success}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSuccess('')}
+                  className="text-green-600 hover:text-green-800 transition-colors"
+                  aria-label="關閉"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-5">
             <div className="space-y-1.5">
@@ -158,10 +212,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
                 <input
                   type="text"
-                  placeholder="例如: E123456"
+                  placeholder="請輸入10碼以內的數字"
                   className="block w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium"
                   value={empId}
-                  onChange={(e) => setEmpId(e.target.value)}
+                  onChange={(e) => {
+                    // 只允許數字，且最長10碼
+                    const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                    setEmpId(value);
+                  }}
+                  maxLength={10}
+                  pattern="[0-9]*"
+                  inputMode="numeric"
                 />
               </div>
             </div>
@@ -176,10 +237,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     </div>
                     <input
                       type="text"
-                      placeholder="請輸入您的姓名"
+                      placeholder="請輸入您的姓名（最長20個字符）"
                       className="block w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => {
+                        // 最長20個字符（中英混合）
+                        const value = e.target.value.slice(0, 20);
+                        setName(value);
+                      }}
+                      maxLength={20}
                     />
                   </div>
                 </div>
@@ -218,10 +284,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     </div>
                     <input
                       type="text"
-                      placeholder="不分大小寫"
-                      className="block w-full pl-11 pr-3 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-bold tracking-widest uppercase"
+                      placeholder="請輸入4碼數字驗證碼"
+                      className="block w-full pl-11 pr-3 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-bold tracking-widest"
                       value={captchaText}
-                      onChange={(e) => setCaptchaText(e.target.value)}
+                      onChange={(e) => {
+                        // 只允許數字，且最長4碼
+                        const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                        setCaptchaText(value);
+                      }}
+                      maxLength={4}
+                      pattern="[0-9]*"
+                      inputMode="numeric"
                     />
                   </div>
                   <div className="relative flex items-center bg-gray-50 rounded-2xl border border-gray-200 p-1 group">

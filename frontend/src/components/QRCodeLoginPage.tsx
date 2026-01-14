@@ -4,8 +4,10 @@ import { QrCode, Loader2, AlertCircle, CheckCircle, LogIn, RefreshCw } from 'luc
 import api from '../api';
 import { AxiosError } from 'axios';
 
+import type { User } from '../types';
+
 interface QRCodeLoginPageProps {
-  onLoginSuccess: (user: any) => void;
+  onLoginSuccess: (user: User) => void;
 }
 
 const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => {
@@ -92,6 +94,12 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
       setError('請輸入員工編號');
       return;
     }
+    
+    // 驗證員工編號格式：必須是1-10碼的數字
+    if (!/^[0-9]{1,10}$/.test(empId.trim())) {
+      setError('員工編號必須是1-10碼的數字');
+      return;
+    }
 
     if (!captchaText.trim()) {
       setError('請輸入驗證碼');
@@ -125,7 +133,18 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
     } catch (err) {
       console.error('QRcode login failed', err);
       const error = err as AxiosError<{ detail: string }>;
-      setError(error.response?.data?.detail || '登入失敗，請檢查員工編號與驗證碼');
+      const errorMessage = error.response?.data?.detail || '登入失敗，請檢查員工編號與驗證碼';
+      const statusCode = error.response?.status;
+      setError(errorMessage);
+      
+      // 如果錯誤是「員工編號不存在，請先註冊」（HTTP 404），保存員工編號到 localStorage
+      if (statusCode === 404 && (errorMessage.includes('員工編號不存在') || errorMessage.includes('請先註冊'))) {
+        if (empId.trim()) {
+          console.log('Saving employee ID for registration:', empId.trim());
+          localStorage.setItem('pendingRegistrationEmpId', empId.trim());
+        }
+      }
+      
       // 登入失敗後重新載入驗證碼
       fetchCaptcha();
     } finally {
@@ -210,10 +229,17 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
               </div>
               <input
                 type="text"
-                placeholder="例如: E123456"
+                placeholder="請輸入10碼以內的數字"
                 className="block w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium"
                 value={empId}
-                onChange={(e) => setEmpId(e.target.value)}
+                onChange={(e) => {
+                  // 只允許數字，且最長10碼
+                  const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                  setEmpId(value);
+                }}
+                maxLength={10}
+                pattern="[0-9]*"
+                inputMode="numeric"
                 autoFocus
               />
             </div>
@@ -225,11 +251,17 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
               <div className="relative group flex-1">
                 <input
                   type="text"
-                  placeholder="請輸入驗證碼"
+                  placeholder="請輸入4碼數字驗證碼"
                   className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium"
                   value={captchaText}
-                  onChange={(e) => setCaptchaText(e.target.value)}
+                  onChange={(e) => {
+                    // 只允許數字，且最長4碼
+                    const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                    setCaptchaText(value);
+                  }}
                   maxLength={4}
+                  pattern="[0-9]*"
+                  inputMode="numeric"
                 />
               </div>
               <div className="flex flex-col items-center gap-1">
@@ -272,7 +304,14 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
           <div className="pt-6 text-center border-t border-gray-100">
             <button
               type="button"
-              onClick={() => navigate('/')}
+              onClick={() => {
+                // 如果用戶已經輸入了員工編號但還沒成功登入，且頁面上顯示的是「員工編號不存在」的錯誤，則保存員工編號
+                if (empId.trim() && error && (error.includes('員工編號不存在') || error.includes('請先註冊'))) {
+                  console.log('Saving employee ID before navigating away:', empId.trim());
+                  localStorage.setItem('pendingRegistrationEmpId', empId.trim());
+                }
+                navigate('/');
+              }}
               className="text-gray-500 hover:text-blue-600 text-sm font-semibold transition-colors"
             >
               返回一般登入頁面

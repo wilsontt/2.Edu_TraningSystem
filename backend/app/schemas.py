@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 from datetime import date, datetime
+import re
 
 # --- 部門資料結構 ---
 class DepartmentBase(BaseModel):
@@ -67,18 +68,54 @@ class TrainingPlan(TrainingPlanBase):
 
 # --- 用戶與認證擴充 ---
 class UserBase(BaseModel):
+    """用戶基礎模型（用於輸出，不包含驗證規則）"""
     emp_id: str
     name: str
 
-class UserCreate(UserBase):
+class UserCreate(BaseModel):
+    """創建用戶請求（包含驗證規則）"""
+    emp_id: str = Field(..., min_length=1, max_length=10, description="員工編號，必須是1-10碼的數字")
+    name: str = Field(..., min_length=1, max_length=20, description="姓名，最長20個字符")
     dept_id: int
     password: Optional[str] = None # 註冊時使用（如有需要）
+    
+    @field_validator('emp_id')
+    @classmethod
+    def validate_emp_id(cls, v: str) -> str:
+        """驗證員工編號必須是1-10碼的數字"""
+        if not re.match(r'^[0-9]{1,10}$', v):
+            raise ValueError('員工編號必須是1-10碼的數字')
+        return v
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """驗證姓名長度"""
+        v = v.strip()
+        if len(v) == 0:
+            raise ValueError('姓名不能為空')
+        if len(v) > 20:
+            raise ValueError('姓名最長20個字符')
+        return v
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=20, description="姓名，最長20個字符")
     dept_id: Optional[int] = None
     role_id: Optional[int] = None
     status: Optional[str] = None
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: Optional[str]) -> Optional[str]:
+        """驗證姓名長度"""
+        if v is None:
+            return v
+        v = v.strip()
+        if len(v) == 0:
+            raise ValueError('姓名不能為空')
+        if len(v) > 20:
+            raise ValueError('姓名最長20個字符')
+        return v
 
 class User(UserBase):
     dept_id: int
@@ -258,9 +295,17 @@ class QRCodeTokenValidate(BaseModel):
     reason: Optional[str] = None
 
 class QRCodeLoginRequest(BaseModel):
-    emp_id: str
+    emp_id: str = Field(..., min_length=1, max_length=10, description="員工編號，必須是1-10碼的數字")
     captcha_id: str
     answer: str
+    
+    @field_validator('emp_id')
+    @classmethod
+    def validate_emp_id(cls, v: str) -> str:
+        """驗證員工編號必須是1-10碼的數字"""
+        if not re.match(r'^[0-9]{1,10}$', v):
+            raise ValueError('員工編號必須是1-10碼的數字')
+        return v
 
 class CheckInQRCodeResponse(BaseModel):
     plan_id: int
