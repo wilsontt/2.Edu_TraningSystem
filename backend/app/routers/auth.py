@@ -52,10 +52,11 @@ class RegisterRequest(BaseModel):
     @field_validator('emp_id')
     @classmethod
     def validate_emp_id(cls, v: str) -> str:
-        """驗證員工編號必須是1-10碼的數字"""
-        if not re.match(r'^[0-9]{1,10}$', v):
+        """驗證員工編號必須是1-10碼的數字，或特殊帳號 admin"""
+        v_lower = v.lower()
+        if v_lower != 'admin' and not re.match(r'^[0-9]{1,10}$', v):
             raise ValueError('員工編號必須是1-10碼的數字')
-        return v
+        return v_lower if v_lower == 'admin' else v
     
     @field_validator('name')
     @classmethod
@@ -76,10 +77,11 @@ class LoginRequest(BaseModel):
     @field_validator('emp_id')
     @classmethod
     def validate_emp_id(cls, v: str) -> str:
-        """驗證員工編號必須是1-10碼的數字"""
-        if not re.match(r'^[0-9]{1,10}$', v):
+        """驗證員工編號必須是1-10碼的數字，或特殊帳號 admin"""
+        v_lower = v.lower()
+        if v_lower != 'admin' and not re.match(r'^[0-9]{1,10}$', v):
             raise ValueError('員工編號必須是1-10碼的數字')
-        return v
+        return v_lower if v_lower == 'admin' else v
 
 # 暫存驗證碼答案 (正式環境建議用 Redis)
 captcha_store = {}

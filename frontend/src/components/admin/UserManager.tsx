@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { AxiosError } from 'axios';
-import { Search, Edit2, Check, X, User as UserIcon, Shield, Building2, Loader2, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Search, Edit2, Check, X, User as UserIcon, Shield, Building2, Loader2, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../../api';
 
 interface User {
@@ -55,6 +55,11 @@ const UserManager = () => {
     field: 'emp_id', // 預設按員工編號
     direction: 'asc'  // 預設遞增
   });
+  
+  // 分頁狀態
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [pageInput, setPageInput] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -137,14 +142,14 @@ const UserManager = () => {
     }
   };
 
-  // 排序邏輯函數
-  const getSortedUsers = (usersToSort: User[]) => {
+  // 排序邏輯函數（使用 useCallback 避免依賴問題）
+  const getSortedUsers = useCallback((usersToSort: User[]) => {
     // 1. 分離 admin 和其他用戶
     const adminUser = usersToSort.find(u => u.emp_id.toLowerCase() === 'admin');
     const otherUsers = usersToSort.filter(u => u.emp_id.toLowerCase() !== 'admin');
     
     // 2. 對其他用戶進行排序
-    let sortedOthers = [...otherUsers];
+    const sortedOthers = [...otherUsers];
     
     // 如果沒有排序設定，使用預設排序（員工編號遞增）
     const effectiveField = sortConfig.field || 'emp_id';
@@ -186,7 +191,7 @@ const UserManager = () => {
     
     // 3. 合併：admin 在前，其他在後
     return adminUser ? [adminUser, ...sortedOthers] : sortedOthers;
-  };
+  }, [sortConfig]);
 
   // 表頭點擊處理
   const handleSort = (field: 'emp_id' | 'name' | 'dept_id' | 'role_id' | 'status') => {
@@ -216,7 +221,43 @@ const UserManager = () => {
     
     // 2. 排序（包含 admin 固定第一）
     return getSortedUsers(filtered);
-  }, [users, searchTerm, sortConfig]);
+  }, [users, searchTerm, getSortedUsers]);
+
+  // 分頁計算
+  const totalPages = Math.ceil(processedUsers.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedUsers = processedUsers.slice(startIndex, endIndex);
+
+  // 當搜尋或每頁筆數改變時，重置到第一頁
+  useEffect(() => {
+    setCurrentPage(1);
+    setPageInput('');
+  }, [searchTerm, pageSize]);
+
+  // 分頁處理函數
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      setPageInput('');
+    }
+  };
+
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setPageInput(value);
+  };
+
+  const handlePageInputSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pageNum = parseInt(pageInput);
+    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
+      setCurrentPage(pageNum);
+      setPageInput('');
+    } else {
+      setPageInput('');
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -346,8 +387,9 @@ const UserManager = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {processedUsers.map((user, index) => {
+                {paginatedUsers.map((user, index) => {
                     const isSelected = selectedUserIds.has(user.emp_id);
+                    const displayIndex = startIndex + index + 1;
                     return (
                   <tr 
                     key={user.emp_id} 
@@ -356,7 +398,7 @@ const UserManager = () => {
                     onDoubleClick={() => handleEdit(user)}
                   >
                     <td className="px-6 py-4 whitespace-nowrap border-l-4 border-transparent text-sm font-black text-gray-300">
-                      {index + 1}
+                      {displayIndex}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap border-l-4 border-transparent">
                       <div className="text-sm font-bold text-gray-900 font-mono">{user.emp_id}</div>
@@ -411,6 +453,71 @@ const UserManager = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        
+        {/* 分頁控制 */}
+        {!isLoading && processedUsers.length > 0 && (
+          <div className="border-t border-gray-100 bg-gray-50 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* 左側：每頁筆數選擇 */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600 font-medium">每頁顯示：</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
+              <span className="text-sm text-gray-600 font-medium">
+                共 {processedUsers.length} 筆
+              </span>
+            </div>
+
+            {/* 右側：分頁導航 */}
+            <div className="flex items-center gap-2">
+              {/* 上一頁 */}
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="p-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="上一頁"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+
+              {/* 頁碼輸入 */}
+              <form onSubmit={handlePageInputSubmit} className="flex items-center gap-1">
+                <span className="text-sm text-gray-600 font-medium">第</span>
+                <input
+                  type="text"
+                  value={pageInput !== '' ? pageInput : currentPage}
+                  onChange={handlePageInputChange}
+                  onBlur={handlePageInputSubmit}
+                  onFocus={(e) => {
+                    setPageInput(currentPage.toString());
+                    e.target.select();
+                  }}
+                  className="w-12 px-2 py-1 text-center border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <span className="text-sm text-gray-600 font-medium">頁 / 共 {totalPages} 頁</span>
+              </form>
+
+              {/* 下一頁 */}
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="下一頁"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         )}
       </div>

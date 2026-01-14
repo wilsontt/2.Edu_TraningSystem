@@ -95,8 +95,8 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
       return;
     }
     
-    // 驗證員工編號格式：必須是1-10碼的數字
-    if (!/^[0-9]{1,10}$/.test(empId.trim())) {
+    // 驗證員工編號格式：必須是1-10碼的數字，或特殊帳號 "admin"
+    if (empId.trim().toLowerCase() !== 'admin' && !/^[0-9]{1,10}$/.test(empId.trim())) {
       setError('員工編號必須是1-10碼的數字');
       return;
     }
@@ -229,17 +229,38 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
               </div>
               <input
                 type="text"
-                placeholder="請輸入10碼以內的數字"
+                placeholder="請輸入員工編號"
                 className="block w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium"
                 value={empId}
                 onChange={(e) => {
-                  // 只允許數字，且最長10碼
-                  const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                  let value = e.target.value;
+                  // 允許 admin 或數字
+                  const lowerValue = value.toLowerCase();
+                  // 如果輸入的是 admin（不區分大小寫），保留
+                  if (lowerValue === 'admin' || lowerValue.startsWith('admin')) {
+                    value = 'admin';
+                  } else if (/^[0-9]*$/.test(value)) {
+                    // 如果全是數字，保留（最多10碼）
+                    value = value.slice(0, 10);
+                  } else if (/^[a-zA-Z]*$/.test(value)) {
+                    // 如果全是字母，檢查是否在輸入 admin
+                    const lower = value.toLowerCase();
+                    if (lower.startsWith('admin')) {
+                      value = 'admin';
+                    } else if ('admin'.startsWith(lower)) {
+                      // 允許輸入 admin 的過程中
+                      value = value;
+                    } else {
+                      // 不是 admin 的開頭，清空
+                      value = '';
+                    }
+                  } else {
+                    // 混合字符，只保留數字部分
+                    value = value.replace(/[^0-9]/g, '').slice(0, 10);
+                  }
                   setEmpId(value);
                 }}
                 maxLength={10}
-                pattern="[0-9]*"
-                inputMode="numeric"
                 autoFocus
               />
             </div>
