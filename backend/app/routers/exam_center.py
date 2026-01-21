@@ -274,11 +274,31 @@ def submit_exam(
         db.add(d)
         
     # Save History Record (New Feature)
+    # Serialize details to JSON
+    import json
+    details_json = json.dumps([
+        {
+            "question_id": d.question_id,
+            "user_answer": d.user_answer,
+            "is_correct": d.is_correct,
+            # We need to store points here because question points might change in the future
+            # But d (ExamDetail) doesn't have points. We need to look it up from 'questions' list.
+            # Optimization: Create a map of q.id -> q
+            "points": next((q.points for q in questions if q.id == d.question_id), 0),
+            "content": next((q.content for q in questions if q.id == d.question_id), ""),
+            "question_type": next((q.question_type for q in questions if q.id == d.question_id), ""),
+            "options": next((q.options for q in questions if q.id == d.question_id), ""),
+            "correct_answer": next((q.answer for q in questions if q.id == d.question_id), "")
+        }
+        for d in details_to_save
+    ], ensure_ascii=False)
+
     history_record = models.ExamHistory(
         record_id=record_id,
         submit_time=datetime.now(),
         total_score=earned_score,
-        is_passed=is_passed
+        is_passed=is_passed,
+        details=details_json
     )
     db.add(history_record)
         
@@ -660,6 +680,7 @@ def get_exam_record_detail(
     history_list = []
     for h in history_records:
         history_list.append({
+            "id": h.id,
             "submit_time": h.submit_time.isoformat() if h.submit_time else None,
             "total_score": h.total_score,
             "is_passed": h.is_passed
@@ -682,6 +703,100 @@ def get_exam_record_detail(
             "submit_time": record.submit_time.isoformat() if record.submit_time else None,
             "duration": round(duration, 0) if duration else None,  # 秒數
             "attempts": record.attempts
+        },
+        "question_details": question_details,
+        "history": history_list
+    }
+
+@router.get("/history/{history_id}")
+def get_exam_history_detail(
+    history_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    T4.2: 獲取單筆歷史紀錄詳情 (Snapshot)
+    """
+    # 1. 取得歷史紀錄
+    history = db.query(models.ExamHistory).filter(models.ExamHistory.id == history_id).first()
+    if not history:
+        raise HTTPException(status_code=404, detail="歷史紀錄不存在")
+    
+    # 2. 取得關聯的 ExamRecord
+    record = db.query(models.ExamRecord).filter(models.ExamRecord.id == history.record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="關聯的考試紀錄不存在")
+        
+    # 3. 權限控制
+    is_admin = current_user.role and current_user.role.name == "Admin"
+    if not is_admin and record.emp_id != current_user.emp_id:
+        raise HTTPException(status_code=403, detail="您只能查看自己的成績詳情")
+        
+    # 4. 取得使用者資訊
+    user = db.query(models.User).filter(models.User.emp_id == record.emp_id).first()
+    
+    # 5. 取得部門資訊
+    dept = db.query(models.Department).filter(models.Department.id == user.dept_id).first()
+    
+    # 6. 取得訓練計畫資訊
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == record.plan_id).first()
+    
+    # 7. 解析 details JSON
+    import json
+    question_details = []
+    if history.details:
+        try:
+            raw_details = json.loads(history.details)
+            # 轉換格式以符合 ScoreDetail 介面
+            for idx, d in enumerate(raw_details):
+                question_details.append({
+                    "question_id": d["question_id"],
+                    "question_number": idx + 1,
+                    "content": d["content"],
+                    "question_type": d["question_type"],
+                    "options": d["options"],
+                    "correct_answer": d["correct_answer"],
+                    "user_answer": d["user_answer"],
+                    "is_correct": d["is_correct"],
+                    "points": d["points"],
+                    "earned_points": d["points"] if d["is_correct"] else 0
+                })
+        except Exception as e:
+            print(f"Failed to parse history details: {e}")
+            # Fallback: empty details or error message
+            
+    # 8. 取得歷史紀錄列表（同一 record 的所有嘗試）
+    history_records = db.query(models.ExamHistory).filter(
+        models.ExamHistory.record_id == record.id
+    ).order_by(models.ExamHistory.submit_time.asc()).all()
+    history_list = []
+    for h in history_records:
+        history_list.append({
+            "id": h.id,
+            "submit_time": h.submit_time.isoformat() if h.submit_time else None,
+            "total_score": h.total_score,
+            "is_passed": h.is_passed
+        })
+
+    # 9. 回傳資料
+    return {
+        "record_id": record.id, # 為了相容前端介面，這裡仍回傳 record_id
+        "history_id": history.id,
+        "basic_info": {
+            "emp_id": user.emp_id,
+            "name": user.name,
+            "dept_name": dept.name if dept else "未知",
+            "plan_id": plan.id,
+            "plan_title": plan.title,
+            "training_date": plan.training_date.isoformat() if plan.training_date else None,
+            "end_date": plan.end_date.isoformat() if plan.end_date else None,
+            "passing_score": plan.passing_score,
+            "total_score": history.total_score, # 使用歷史紀錄的分數
+            "is_passed": history.is_passed,     # 使用歷史紀錄的狀態
+            "start_time": None, # 歷史紀錄目前沒存 start_time，暫時為 null
+            "submit_time": history.submit_time.isoformat() if history.submit_time else None,
+            "duration": None,   # 同上
+            "attempts": record.attempts # 這是總次數，非當次次數，但可接受
         },
         "question_details": question_details,
         "history": history_list

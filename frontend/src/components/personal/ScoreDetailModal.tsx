@@ -1,77 +1,42 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { X, CheckCircle, XCircle, Clock, User, FileText, Award, Printer } from 'lucide-react';
 import clsx from 'clsx';
+import type { ScoreDetail } from './types';
 
 // 動態導入以避免循環依賴
 const ScoreCardPreview = lazy(() => import('./ScoreCardPreview'));
 
-export interface QuestionDetail {
-  question_id: number;
-  question_number: number;
-  content: string;
-  question_type: string;
-  options: string | null;
-  correct_answer: string;
-  user_answer: string | null;
-  is_correct: boolean;
-  points: number;
-  earned_points: number;
-}
-
-export interface ExamHistoryItem {
-  submit_time: string | null;
-  total_score: number;
-  is_passed: boolean;
-}
-
-export interface BasicInfo {
-  emp_id: string;
-  name: string;
-  dept_name: string;
-  plan_id: number;
-  plan_title: string;
-  training_date: string | null;
-  end_date: string | null;
-  passing_score: number;
-  total_score: number;
-  is_passed: boolean;
-  start_time: string | null;
-  submit_time: string | null;
-  duration: number | null;
-  attempts: number;
-}
-
-export interface ScoreDetail {
-  record_id: number;
-  basic_info: BasicInfo;
-  question_details: QuestionDetail[];
-  history?: ExamHistoryItem[];
-}
-
 interface ScoreDetailModalProps {
   recordId: number;
+  historyId?: number; // 新增：支援顯示特定歷史紀錄
   isOpen: boolean;
   onClose: () => void;
 }
 
-export default function ScoreDetailModal({ recordId, isOpen, onClose }: ScoreDetailModalProps) {
+export default function ScoreDetailModal({ recordId, historyId, isOpen, onClose }: ScoreDetailModalProps) {
   const [detail, setDetail] = useState<ScoreDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
-    if (isOpen && recordId) {
+    if (isOpen && (recordId || historyId)) {
       fetchDetail();
     }
-  }, [isOpen, recordId]);
+  }, [isOpen, recordId, historyId]);
 
   const fetchDetail = async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
       const baseURL = `http://${window.location.hostname}:8000/api`;
+      
+      let url = `${baseURL}/exam/record/${recordId}/detail`;
+      if (historyId) {
+        url = `${baseURL}/exam/history/${historyId}`;
+      }
+
       const response = await fetch(
-        `${baseURL}/exam/record/${recordId}/detail`,
+        url,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
 

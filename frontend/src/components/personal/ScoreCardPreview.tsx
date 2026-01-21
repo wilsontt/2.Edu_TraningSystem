@@ -1,6 +1,6 @@
 import { X, Printer } from 'lucide-react';
 import clsx from 'clsx';
-import type { ScoreDetail } from './ScoreDetailModal';
+import type { ScoreDetail } from './types';
 
 interface ScoreCardPreviewProps {
   detail: ScoreDetail;
@@ -65,9 +65,13 @@ function ScoreCardContent({ detail }: {
             <div className="h-full flex flex-col">
               <div className="flex-1 border-2 border-gray-800 p-4 flex flex-col justify-center items-center">
                 <div className="text-base text-gray-600 mb-2">總分 / Total Score</div>
-                <div className="text-7xl font-bold text-red-600 font-['Caveat'] transform -rotate-3" style={{ 
-                  textShadow: '2px 2px 0px rgba(0,0,0,0.1)',
-                }}>
+                <div 
+                  className="text-7xl font-bold text-red-600 transform -rotate-3" 
+                  style={{ 
+                    textShadow: '2px 2px 0px rgba(0,0,0,0.1)',
+                    fontFamily: "Caveat, 'Comic Sans MS', 'Patrick Hand', cursive"
+                  }}
+                >
                   {detail.basic_info.total_score}
                 </div>
               </div>

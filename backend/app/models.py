@@ -142,6 +142,7 @@ class ExamHistory(Base):
     submit_time = Column(DateTime, default=datetime.datetime.utcnow)
     total_score = Column(Integer)
     is_passed = Column(Boolean)
+    details = Column(Text, nullable=True) # JSON 字串，儲存考試快照
     
     exam_record = relationship("ExamRecord", back_populates="history")
 
