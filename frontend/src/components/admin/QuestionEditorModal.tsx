@@ -16,9 +16,10 @@ interface QuestionEditorModalProps {
     question: Question;
     onClose: () => void;
     onSave: () => void;
+    apiUrl?: string; // 選填：自訂 API 更新路徑，預設為 /admin/exams/questions/{id}
 }
 
-const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalProps) => {
+const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEditorModalProps) => {
     const [formData, setFormData] = useState({
         content: '',
         question_type: 'single',
@@ -109,7 +110,8 @@ const QuestionEditorModal = ({ question, onClose, onSave }: QuestionEditorModalP
                 hint: formData.hint || null
             };
 
-            await api.put(`/admin/exams/questions/${question.id}`, payload);
+            const url = apiUrl || `/admin/exams/questions/${question.id}`;
+            await api.put(url, payload);
             onSave();
             onClose();
         } catch (err: any) {

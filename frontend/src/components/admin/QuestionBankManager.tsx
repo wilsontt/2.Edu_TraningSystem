@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Trash2, Loader2, ChevronLeft, ChevronRight, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, Trash2, Loader2, ChevronLeft, ChevronRight, Lightbulb, ChevronUp, ChevronDown, Edit } from 'lucide-react';
 import api from '../../api';
+import QuestionEditorModal from './QuestionEditorModal';
 
 interface QuestionBankItem {
     id: number;
@@ -30,6 +31,9 @@ const QuestionBankManager = () => {
     
     // 提示展開狀態
     const [expandedHints, setExpandedHints] = useState<Record<number, boolean>>({});
+    
+    // 編輯狀態
+    const [editingQuestion, setEditingQuestion] = useState<QuestionBankItem | null>(null);
 
     const fetchQuestions = useCallback(async () => {
         try {
@@ -200,12 +204,22 @@ const QuestionBankManager = () => {
                                         {renderTags(q.tags)}
                                     </td>
                                     <td className="px-6 py-3 text-right">
-                                        <button 
-                                            onClick={() => handleDelete(q.id)}
-                                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        <div className="flex justify-end gap-2">
+                                            <button 
+                                                onClick={() => setEditingQuestion(q)}
+                                                className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                                title="編輯題目"
+                                            >
+                                                <Edit className="w-4 h-4" />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(q.id)}
+                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                title="刪除題目"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))
@@ -234,6 +248,22 @@ const QuestionBankManager = () => {
                     下一頁 <ChevronRight className="w-4 h-4" />
                 </button>
             </div>
+
+            {/* 編輯題目 Modal */}
+            {editingQuestion && (
+                <QuestionEditorModal
+                    question={{
+                        ...editingQuestion,
+                        points: 10 // 題庫中無分數欄位，給予預設值以符合編輯器介面
+                    }}
+                    onClose={() => setEditingQuestion(null)}
+                    onSave={() => {
+                        fetchQuestions();
+                        setEditingQuestion(null);
+                    }}
+                    apiUrl={`/admin/question-bank/${editingQuestion.id}`}
+                />
+            )}
         </div>
     );
 };

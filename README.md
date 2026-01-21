@@ -1,4 +1,5 @@
-# 教育訓練教材及線上考卷系統
+# 教育訓練教材及線上考卷系統 Educational training materials and online examination system.
+（Edu_TraningSystem）
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![Status](https://img.shields.io/badge/status-Implementing-orange)
