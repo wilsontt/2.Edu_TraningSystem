@@ -18,6 +18,12 @@ export interface QuestionDetail {
   earned_points: number;
 }
 
+export interface ExamHistoryItem {
+  submit_time: string | null;
+  total_score: number;
+  is_passed: boolean;
+}
+
 export interface BasicInfo {
   emp_id: string;
   name: string;
@@ -39,6 +45,7 @@ export interface ScoreDetail {
   record_id: number;
   basic_info: BasicInfo;
   question_details: QuestionDetail[];
+  history?: ExamHistoryItem[];
 }
 
 interface ScoreDetailModalProps {

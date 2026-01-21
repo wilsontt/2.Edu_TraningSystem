@@ -133,6 +133,17 @@ class ExamRecord(Base):
     user = relationship("User", back_populates="exam_records")
     training_plan = relationship("TrainingPlan", back_populates="exam_records")
     details = relationship("ExamDetail", back_populates="record")
+    history = relationship("ExamHistory", back_populates="exam_record")
+
+class ExamHistory(Base):
+    __tablename__ = "exam_history"
+    id = Column(Integer, primary_key=True, index=True)
+    record_id = Column(Integer, ForeignKey("exam_records.id"))
+    submit_time = Column(DateTime, default=datetime.datetime.utcnow)
+    total_score = Column(Integer)
+    is_passed = Column(Boolean)
+    
+    exam_record = relationship("ExamRecord", back_populates="history")
 
 class ExamDetail(Base):
     __tablename__ = "exam_details"

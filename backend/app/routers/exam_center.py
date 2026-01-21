@@ -273,6 +273,15 @@ def submit_exam(
         d.record_id = record_id
         db.add(d)
         
+    # Save History Record (New Feature)
+    history_record = models.ExamHistory(
+        record_id=record_id,
+        submit_time=datetime.now(),
+        total_score=earned_score,
+        is_passed=is_passed
+    )
+    db.add(history_record)
+        
     db.commit()
     
     return ExamResultResponse(
@@ -643,6 +652,19 @@ def get_exam_record_detail(
     # 按題目 ID 排序（保持原始順序）
     question_details.sort(key=lambda x: x["question_id"])
     
+    # 取得歷史紀錄
+    history_records = db.query(models.ExamHistory).filter(
+        models.ExamHistory.record_id == record_id
+    ).order_by(models.ExamHistory.submit_time.asc()).all()
+    
+    history_list = []
+    for h in history_records:
+        history_list.append({
+            "submit_time": h.submit_time.isoformat() if h.submit_time else None,
+            "total_score": h.total_score,
+            "is_passed": h.is_passed
+        })
+
     return {
         "record_id": record.id,
         "basic_info": {
@@ -661,7 +683,8 @@ def get_exam_record_detail(
             "duration": round(duration, 0) if duration else None,  # 秒數
             "attempts": record.attempts
         },
-        "question_details": question_details
+        "question_details": question_details,
+        "history": history_list
     }
 
 # --- 報到功能 API ---

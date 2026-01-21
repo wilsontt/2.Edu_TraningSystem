@@ -203,9 +203,8 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
     };
 
     // 生成題目詳情 HTML
-    const detailsHtml = detail.question_details.map((q, idx) => {
+    const detailsHtml = detail.question_details.map((q) => {
         const options = parseOptions(q.options);
-        const isWrong = !q.is_correct;
         const borderColor = q.is_correct ? 'border-green-500' : 'border-red-500';
         const bgColor = q.is_correct ? 'bg-green-50' : 'bg-red-50';
         
@@ -215,22 +214,6 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
         // 選項列表 HTML
         const optionsListHtml = Object.entries(options).map(([key, value]) => {
             const isSelected = userAnswers.includes(key);
-            // 標示：考生選了這個選項
-            let mark = '';
-            if (isSelected) {
-                mark = q.is_correct ? ICON_CHECK : ICON_X; // 答對顯示綠勾，答錯顯示紅叉 (針對該選項)
-                // 修正邏輯：如果整題答錯，但這個選項是考生選的，這裡顯示紅叉叉表示「選了這個」
-                // 但如果是多選題，可能部分對。
-                // 簡化邏輯：
-                // 1. 如果該選項是正確答案之一 -> 顯示綠勾
-                // 2. 如果該選項是考生選的 -> 判斷是否為正確答案 -> 若是(綠勾)，若非(紅叉)
-            }
-            
-            // 為了更清晰：
-            // 在每個選項旁邊，如果是考生選的，打上標記。
-            // 答對題目的選項標記為綠勾，答錯題目的選項標記為紅叉 (或者根據單個選項對錯? 這裡先依題意「答對就用綠色勾勾打✅，答錯就用紅色叉叉打❌」)
-            // 通常這指的是「題目的對錯」，所以：
-            // - 如果考生選了此項，顯示 ✅ 或 ❌ (取決於此項是否為正確答案)
             
             const isCorrectOption = (q.correct_answer || '').includes(key);
             let iconHtml = '';
@@ -301,6 +284,47 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
         `;
     }).join('');
 
+    // 生成考試歷程 HTML
+    let historyHtml = '';
+    if (detail.history && detail.history.length > 0) {
+        const historyRows = detail.history.map((h, idx) => `
+            <tr class="border-b border-gray-200">
+                <td class="py-2 px-4 text-center">${idx + 1}</td>
+                <td class="py-2 px-4 text-center">${h.submit_time ? new Date(h.submit_time).toLocaleString('zh-TW') : '-'}</td>
+                <td class="py-2 px-4 text-center font-bold ${h.is_passed ? 'text-green-600' : 'text-red-600'}">
+                    ${h.total_score}
+                </td>
+                <td class="py-2 px-4 text-center">
+                    ${h.is_passed ? 
+                        '<span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-bold">通過</span>' : 
+                        '<span class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold">未通過</span>'
+                    }
+                </td>
+            </tr>
+        `).join('');
+
+        historyHtml = `
+            <div class="mt-8 mb-4">
+                <h3 class="text-lg font-bold text-gray-800 mb-2 border-b-2 border-gray-800 pb-1">
+                    考試歷程 / Exam History
+                </h3>
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-100 border-b-2 border-gray-800">
+                            <th class="py-2 px-4 text-center w-16">次數</th>
+                            <th class="py-2 px-4 text-center">考試時間</th>
+                            <th class="py-2 px-4 text-center w-24">分數</th>
+                            <th class="py-2 px-4 text-center w-24">狀態</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${historyRows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
     // 4. 構建 HTML 內容
     const htmlContent = `
       <!DOCTYPE html>
@@ -353,6 +377,7 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
             <div class="cover-page">
                 <div class="cover-content">
                     ${contentElement.innerHTML}
+                    ${historyHtml}
                 </div>
                 
                 <!-- 簽名欄 (移至第一頁最下方) -->
