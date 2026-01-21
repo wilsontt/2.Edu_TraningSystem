@@ -66,7 +66,7 @@ export default function PersonalScoreOverview({ empId }: PersonalScoreOverviewPr
   }
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto">
+    <div className="space-y-6 p-6 max-w-7xl mx-auto print:hidden">
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-gray-900">個人成績總覽</h2>
         <p className="text-gray-500 mt-1">查看您的學習成果與統計資料</p>

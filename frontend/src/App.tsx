@@ -114,7 +114,8 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     { name: 'QRcode 管理', path: '/admin/qrcode', code: 'menu:admin' },
   ].filter(item => functions.includes(item.code));
 
-  const hasAdminAccess = functions.includes('menu:admin') || adminSubItems.length > 0;
+  // 只有擁有 menu:admin 權限的用戶才顯示系統管理選單
+  const hasAdminAccess = functions.includes('menu:admin');
 
 
   return (

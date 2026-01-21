@@ -34,7 +34,7 @@ def init_db():
         
         # 3. 建立基礎功能選單
         functions = [
-            {"name": "首頁", "code": "menu:home", "path": "/", "parent_id": 0},
+            {"name": "考試中心", "code": "menu:home", "path": "/", "parent_id": 0},
             {"name": "訓練計畫", "code": "menu:plan", "path": "/plans", "parent_id": 0},
             {"name": "考卷工坊", "code": "menu:exam", "path": "/exams", "parent_id": 0},
             {"name": "成績中心", "code": "menu:report", "path": "/reports", "parent_id": 0},
@@ -49,6 +49,12 @@ def init_db():
                 db.add(func)
                 db.commit()
                 db.refresh(func)
+            else:
+                # 更新現有功能的名稱（例如：將「首頁」改為「考試中心」）
+                if func.name != f["name"]:
+                    func.name = f["name"]
+                    db.commit()
+                    db.refresh(func)
             db_functions[f["code"]] = func
             
         # 子功能

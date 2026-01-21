@@ -80,14 +80,15 @@ class TXTParser:
                 current_question["content"] = line[2:].strip()
                 # 預設類型稍後依據選項決定
                 
-            elif line.startswith("A:"):
-                options["A"] = line[2:].strip()
-            elif line.startswith("B:"):
-                options["B"] = line[2:].strip()
-            elif line.startswith("C:"):
-                options["C"] = line[2:].strip()
-            elif line.startswith("D:"):
-                options["D"] = line[2:].strip()
+            elif re.match(r'^[A-Z](:|：)', line):
+                key = line[0]
+                # 處理半形與全形冒號
+                split_char = ':' if ':' in line[:2] else '：'
+                # 取得選項內容，並移除空白
+                parts = line.split(split_char, 1)
+                if len(parts) > 1:
+                    options[key] = parts[1].strip()
+
             # 支援數字選項 1. 2. 防呆
             elif line[0:2] in ["1.", "2.", "3.", "4."]:
                 key = chr(ord('A') + int(line[0]) - 1)

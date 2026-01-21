@@ -120,7 +120,34 @@ const ExamRunner = () => {
 
     /** 處理選項選擇 */
     const handleOptionSelect = (qId: number, value: string) => {
-        saveAnswer(qId, value);
+        const currentType = examData?.questions.find(q => q.id === qId)?.question_type;
+        
+        if (currentType === 'multiple') {
+            // 多選題邏輯
+            const currentAnswer = answers[qId] || '';
+            // 支援逗號分隔或連續字串 (雖然這裡我們統一用逗號儲存，但防呆)
+            let selectedOptions = currentAnswer.includes(',') 
+                ? currentAnswer.split(',') 
+                : currentAnswer.split('').filter(c => c.trim());
+            
+            // 移除可能的空字串
+            selectedOptions = selectedOptions.filter(opt => opt);
+
+            if (selectedOptions.includes(value)) {
+                // 已選 -> 移除
+                selectedOptions = selectedOptions.filter(opt => opt !== value);
+            } else {
+                // 未選 -> 加入
+                selectedOptions.push(value);
+            }
+            
+            // 排序並以逗號連接儲存 (例如 "A,B,C")
+            selectedOptions.sort();
+            saveAnswer(qId, selectedOptions.join(','));
+        } else {
+            // 單選/是非題邏輯
+            saveAnswer(qId, value);
+        }
     };
 
     /** 切換至下一題 */
@@ -328,9 +355,16 @@ const ExamRunner = () => {
                     >
                         <div className="mb-6">
                             <div className="flex items-center justify-between mb-4">
-                                <span className="inline-block px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-full">
-                                    第 {currentIndex + 1} 題
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className="inline-block px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-full">
+                                        第 {currentIndex + 1} 題
+                                    </span>
+                                    {currentQuestion.question_type === 'multiple' && (
+                                        <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded border border-purple-200">
+                                            多選題
+                                        </span>
+                                    )}
+                                </div>
                                 <span className="text-xs font-medium text-gray-400">
                                     共 {totalQuestions} 題
                                 </span>
@@ -386,7 +420,12 @@ const ExamRunner = () => {
 
                         <div className="space-y-3">
                             {Object.entries(optionsMap).map(([key, value]) => {
-                                const isSelected = answers[currentQuestion.id] === key;
+                                const currentAns = answers[currentQuestion.id] || '';
+                                const isMultiple = currentQuestion.question_type === 'multiple';
+                                const isSelected = isMultiple
+                                    ? (currentAns.includes(',') ? currentAns.split(',') : currentAns.split('')).includes(key)
+                                    : currentAns === key;
+
                                 return (
                                     <button
                                         type="button"

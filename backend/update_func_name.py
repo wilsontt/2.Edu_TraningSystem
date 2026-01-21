@@ -1,10 +1,10 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from app.models import SystemFunction
-from app.database import SQLALCHEMY_DATABASE_URL
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+from app.database import SessionLocal
+from app.models import SystemFunction
+
 db = SessionLocal()
 
 def fix_system_function_name():

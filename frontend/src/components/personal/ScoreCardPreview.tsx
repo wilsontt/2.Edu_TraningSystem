@@ -1,5 +1,4 @@
 import { X, Printer } from 'lucide-react';
-import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import type { ScoreDetail } from './ScoreDetailModal';
 
@@ -9,132 +8,124 @@ interface ScoreCardPreviewProps {
   onClose: () => void;
 }
 
-interface PersonalAnalysis {
-  emp_id: string;
-  progress: {
-    completed: number;
-    total: number;
-    progress_rate: number;
-  };
-  strong_areas: Array<{
-    category_id: number;
-    category_name: string;
-    avg_score: number;
-    count: number;
-  }>;
-  weak_areas: Array<{
-    category_id: number;
-    category_name: string;
-    avg_score: number;
-    count: number;
-  }>;
-  category_analysis: Array<{
-    category_id: number;
-    category_name: string;
-    avg_score: number;
-    count: number;
-  }>;
-  trend_data: Array<{
-    month: string;
-    year: number;
-    month_num: number;
-    avg_score: number;
-    count: number;
-  }>;
-}
+// SVG Icons for Print HTML
+const ICON_CHECK = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+const ICON_X = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-600"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+const ICON_CHECK_CIRCLE = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
+const ICON_X_CIRCLE = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-600"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
 
 // 成績單內容組件（可重用）
-function ScoreCardContent({ detail, includeHistory, analysis }: { 
+function ScoreCardContent({ detail }: { 
   detail: ScoreDetail; 
-  includeHistory?: boolean;
-  analysis?: PersonalAnalysis | null;
 }) {
   return (
     <>
       {/* 標題 */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">教育訓練測驗成績單</h1>
+      <div className="text-center mt-0 pt-0 mb-1">
+        <h1 className="text-3xl font-bold text-gray-900 mb-0">教育訓練測驗成績單</h1>
         <div className="text-sm text-gray-600">Training Examination Score Report</div>
       </div>
 
-      {/* 基本資訊 */}
-      <div className="mb-6 space-y-3">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <div className="text-sm text-gray-600 mb-1">考生姓名 / Name</div>
-            <div className="font-bold text-lg border-b-2 border-gray-800 pb-1">
-              {detail.basic_info.name}
+      {/* 基本資訊 + 成績資訊 */}
+      <div className="grid grid-cols-3 gap-6 mb-1">
+          {/* 基本資訊 (左側 2 欄) */}
+          <div className="col-span-2 border-2 border-gray-800 mb-2 p-2">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+              <div>
+                <div className="text-sm text-gray-600 mb-0">考生姓名 / Name</div>
+                <div className="font-bold text-lg border-b-2 border-gray-800 pb-1">
+                  {detail.basic_info.name}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-600 mb-0">員工編號 / Employee ID</div>
+                <div className="font-bold text-lg border-b-2 border-gray-800 pb-1">
+                  {detail.basic_info.emp_id}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-600 mb-0">部門 / Department</div>
+                <div className="font-bold text-lg border-b-2 border-gray-800 pb-1">
+                  {detail.basic_info.dept_name}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-600 mb-0">測驗日期 / Date</div>
+                <div className="font-bold text-lg border-b-2 border-gray-800 pb-1">
+                  {detail.basic_info.submit_time
+                    ? new Date(detail.basic_info.submit_time).toLocaleDateString('zh-TW')
+                    : '-'}
+                </div>
+              </div>
             </div>
           </div>
-          <div>
-            <div className="text-sm text-gray-600 mb-1">員工編號 / Employee ID</div>
-            <div className="font-bold text-lg border-b-2 border-gray-800 pb-1">
-              {detail.basic_info.emp_id}
+          
+          {/* 成績資訊 (右側 1 欄) - 僅顯示總分 */}
+          <div className="col-span-1 mb-2">
+            <div className="h-full flex flex-col">
+              <div className="flex-1 border-2 border-gray-800 p-4 flex flex-col justify-center items-center">
+                <div className="text-base text-gray-600 mb-2">總分 / Total Score</div>
+                <div className="text-7xl font-bold text-red-600 font-['Caveat'] transform -rotate-3" style={{ 
+                  textShadow: '2px 2px 0px rgba(0,0,0,0.1)',
+                }}>
+                  {detail.basic_info.total_score}
+                </div>
+              </div>
             </div>
           </div>
-          <div>
-            <div className="text-sm text-gray-600 mb-1">部門 / Department</div>
-            <div className="font-bold text-lg border-b-2 border-gray-800 pb-1">
-              {detail.basic_info.dept_name}
-            </div>
+      </div>
+
+      {/* 訓練計畫資訊 + Watermark Result */}
+      <div className="mb-5 relative">
+        <div className="flex items-end justify-between">
+          <div className="w-2/3">
+             <div className="text-sm text-gray-600 mb-1">訓練計畫 / Training Plan</div>
+             <div className="font-bold text-xl border-b-2 border-gray-800 pb-2">
+               {detail.basic_info.plan_title}
+             </div>
           </div>
-          <div>
-            <div className="text-sm text-gray-600 mb-1">測驗日期 / Date</div>
-            <div className="font-bold text-lg border-b-2 border-gray-800 pb-1">
-              {detail.basic_info.submit_time
-                ? new Date(detail.basic_info.submit_time).toLocaleDateString('zh-TW')
-                : '-'}
-            </div>
+          
+          {/* Watermark Result Stamped Area 考試結果以浮印置底方式呈現 -rotate-12 (預設值：逆時針 12 度旋轉) */}
+          <div className="absolute right-0 bottom-[-10px] transform rotate-12 pointer-events-none">
+             <div className={clsx(
+                "border-4 border-double px-8 py-2 rounded-lg flex flex-col items-center justify-center bg-white/10 backdrop-blur-sm",
+                detail.basic_info.is_passed 
+                    ? "border-green-600 text-green-600" 
+                    : "border-red-600 text-red-600"
+             )} style={{ minWidth: '180px' }}>
+                <div className="text-xs font-bold uppercase tracking-widest opacity-70 mb-0">Result</div>
+                <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold">{detail.basic_info.is_passed ? '通過' : '未通過'}</span>
+                    <span className="text-3xl font-black tracking-widest font-sans">{detail.basic_info.is_passed ? 'PASS' : 'FAIL'}</span>
+                </div>
+             </div>
           </div>
         </div>
       </div>
 
-      {/* 訓練計畫資訊 */}
-      <div className="mb-6">
-        <div className="text-sm text-gray-600 mb-1">訓練計畫 / Training Plan</div>
-        <div className="font-bold text-lg border-b-2 border-gray-800 pb-1">
-          {detail.basic_info.plan_title}
+      {/* 簽名欄 (預覽時隱藏，列印時移至第一頁底部) */}
+      <div className="mt-4 grid grid-cols-2 gap-8 print:hidden">
+        <div>
+          <div className="text-sm text-gray-600 mb-1">考生簽名 / Examinee Signature</div>
+          <div className="border-b-2 border-gray-800 h-16"></div>
+        </div>
+        <div>
+          <div className="text-sm text-gray-600 mb-1">日期 / Date</div>
+          <div className="border-b-2 border-gray-800 h-16"></div>
         </div>
       </div>
 
-      {/* 成績資訊 */}
-      <div className="mb-8">
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="text-center border-2 border-gray-800 p-4">
-            <div className="text-sm text-gray-600 mb-2">總分 / Total Score</div>
-            <div className="text-4xl font-bold text-red-600 font-['Caveat'] transform rotate-[-2deg]" style={{ 
-              textShadow: '1px 1px 2px rgba(220, 38, 38, 0.2)',
-              letterSpacing: '0.05em'
-            }}>
-              {detail.basic_info.total_score}
-            </div>
-          </div>
-          <div className="text-center border-2 border-gray-800 p-4">
-            <div className="text-sm text-gray-600 mb-2">及格分數 / Passing Score</div>
-            <div className="text-3xl font-bold text-gray-900">
-              {detail.basic_info.passing_score}
-            </div>
-          </div>
-          <div className="text-center border-2 border-gray-800 p-4">
-            <div className="text-sm text-gray-600 mb-2">結果 / Result</div>
-            <div className={detail.basic_info.is_passed ? "text-2xl font-bold text-green-600" : "text-2xl font-bold text-red-600"}>
-              {detail.basic_info.is_passed ? '通過 / PASS' : '未通過 / FAIL'}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 答題詳情表格 */}
-      <div className="mb-6">
+      {/* 答題詳情表格 (預覽時隱藏，列印時使用新版詳細列表) */}
+      <div className="mb-6 print:hidden">
         <div className="text-sm font-bold text-gray-700 mb-2">答題詳情 / Answer Details</div>
         <table className="w-full border-2 border-gray-800">
           <thead>
             <tr className="bg-gray-100">
-              <th className="border border-gray-800 px-2 py-2 text-sm font-bold">題號</th>
+              <th className="border border-gray-800 px-2 py-2 text-sm font-bold w-12">題號</th>
               <th className="border border-gray-800 px-2 py-2 text-sm font-bold">題目</th>
-              <th className="border border-gray-800 px-2 py-2 text-sm font-bold">您的答案</th>
-              <th className="border border-gray-800 px-2 py-2 text-sm font-bold">正確答案</th>
-              <th className="border border-gray-800 px-2 py-2 text-sm font-bold">得分</th>
+              <th className="border border-gray-800 px-2 py-2 text-sm font-bold w-20">考生答案</th>
+              <th className="border border-gray-800 px-2 py-2 text-sm font-bold w-20">正確答案</th>
+              <th className="border border-gray-800 px-2 py-2 text-sm font-bold w-18">得分</th>
             </tr>
           </thead>
           <tbody>
@@ -166,207 +157,260 @@ function ScoreCardContent({ detail, includeHistory, analysis }: {
           </tbody>
         </table>
       </div>
-
-      {/* 簽名欄 */}
-      <div className="mt-8 grid grid-cols-2 gap-8">
-        <div>
-          <div className="text-sm text-gray-600 mb-1">考生簽名 / Examinee Signature</div>
-          <div className="border-b-2 border-gray-800 h-16"></div>
-        </div>
-        <div>
-          <div className="text-sm text-gray-600 mb-1">日期 / Date</div>
-          <div className="border-b-2 border-gray-800 h-16"></div>
-        </div>
-      </div>
-
-      {/* 個人成績歷史（如果選擇要列印） */}
-      {includeHistory && analysis && (
-        <div className="mt-12 page-break-before">
-          <div className="border-t-2 border-gray-800 pt-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">個人成績歷史 / Personal Score History</h2>
-            
-            {/* 學習進度 */}
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3">學習進度 / Learning Progress</h3>
-              <div className="border-2 border-gray-800 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-600">完成進度 / Completion</span>
-                  <span className="text-lg font-bold text-gray-900">
-                    {analysis.progress.completed} / {analysis.progress.total}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-4 border border-gray-800">
-                  <div
-                    className="bg-blue-600 h-4 rounded-full"
-                    style={{ width: `${analysis.progress.progress_rate}%` }}
-                  />
-                </div>
-                <p className="text-sm text-gray-600 mt-2">
-                  完成率 / Progress Rate: {analysis.progress.progress_rate.toFixed(1)}%
-                </p>
-              </div>
-            </div>
-
-            {/* 擅長領域 */}
-            {analysis.strong_areas.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">擅長領域 / Strong Areas</h3>
-                <table className="w-full border-2 border-gray-800">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">分類 / Category</th>
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">平均分數 / Avg Score</th>
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">考試次數 / Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analysis.strong_areas.map((area) => (
-                      <tr key={area.category_id} className="bg-green-50">
-                        <td className="border border-gray-800 px-2 py-2 text-sm">{area.category_name}</td>
-                        <td className="border border-gray-800 px-2 py-2 text-sm text-center font-bold text-green-700">{area.avg_score}</td>
-                        <td className="border border-gray-800 px-2 py-2 text-sm text-center">{area.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* 需要加強的領域 */}
-            {analysis.weak_areas.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">需要加強的領域 / Weak Areas</h3>
-                <table className="w-full border-2 border-gray-800">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">分類 / Category</th>
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">平均分數 / Avg Score</th>
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">考試次數 / Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analysis.weak_areas.map((area) => (
-                      <tr key={area.category_id} className="bg-red-50">
-                        <td className="border border-gray-800 px-2 py-2 text-sm">{area.category_name}</td>
-                        <td className="border border-gray-800 px-2 py-2 text-sm text-center font-bold text-red-700">{area.avg_score}</td>
-                        <td className="border border-gray-800 px-2 py-2 text-sm text-center">{area.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* 各分類成績分析 */}
-            {analysis.category_analysis.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">各分類成績分析 / Category Analysis</h3>
-                <table className="w-full border-2 border-gray-800">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">分類 / Category</th>
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">平均分數 / Avg Score</th>
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">考試次數 / Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analysis.category_analysis.map((area) => (
-                      <tr key={area.category_id}>
-                        <td className="border border-gray-800 px-2 py-2 text-sm">{area.category_name}</td>
-                        <td className="border border-gray-800 px-2 py-2 text-sm text-center font-bold">{area.avg_score}</td>
-                        <td className="border border-gray-800 px-2 py-2 text-sm text-center">{area.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* 成績趨勢 */}
-            {analysis.trend_data.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">過去 6 個月成績趨勢 / Score Trend (Last 6 Months)</h3>
-                <table className="w-full border-2 border-gray-800">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">月份 / Month</th>
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">平均分數 / Avg Score</th>
-                      <th className="border border-gray-800 px-2 py-2 text-sm font-bold">考試次數 / Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analysis.trend_data.map((trend, idx) => (
-                      <tr key={idx}>
-                        <td className="border border-gray-800 px-2 py-2 text-sm">{trend.month}</td>
-                        <td className="border border-gray-800 px-2 py-2 text-sm text-center font-bold">{trend.avg_score}</td>
-                        <td className="border border-gray-800 px-2 py-2 text-sm text-center">{trend.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 頁碼（頁尾） */}
-      <div className="mt-8 text-center text-sm text-gray-600 print-page-number">
-        第 <span className="page-number"></span> 頁 / Page <span className="page-number"></span>
-      </div>
     </>
   );
 }
 
 export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardPreviewProps) {
-  const [includeHistory, setIncludeHistory] = useState(false);
-  const [analysis, setAnalysis] = useState<PersonalAnalysis | null>(null);
-  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
-
-  useEffect(() => {
-    if (includeHistory && !analysis && isOpen) {
-      fetchAnalysis();
-    }
-  }, [includeHistory, isOpen]);
-
-  const fetchAnalysis = async () => {
-    try {
-      setLoadingAnalysis(true);
-      const token = localStorage.getItem('token');
-      const baseURL = `http://${window.location.hostname}:8000/api`;
-      const url = `${baseURL}/exam/personal/analysis?emp_id=${detail.basic_info.emp_id}`;
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAnalysis(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch personal analysis', error);
-    } finally {
-      setLoadingAnalysis(false);
-    }
-  };
 
   if (!isOpen) return null;
 
   const handlePrint = () => {
-    // 在列印前更新頁碼
-    const updatePageNumbers = () => {
-      const pageNumbers = document.querySelectorAll('.print-page-number .page-number');
-      pageNumbers.forEach((el) => {
-        // 頁碼會在列印時由瀏覽器自動處理，這裡先設置為空
-        // 實際頁碼會由 CSS counter 處理
-      });
+    // 1. 獲取內容
+    const contentElement = document.querySelector('.score-card-preview-content');
+    if (!contentElement) {
+      console.error('無法找到成績單內容');
+      return;
+    }
+
+    // 2. 建立隱藏 iframe
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    // 必須顯示才能列印，但移出視窗外或透明
+    iframe.style.visibility = 'hidden'; 
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+        document.body.removeChild(iframe);
+        return;
+    }
+
+    // 3. 收集當前頁面的所有樣式 (Tailwind, Fonts 等)
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+        .map(style => style.outerHTML)
+        .join('');
+
+    // 解析選項 helper
+    const parseOptions = (optionsStr: string | null): Record<string, string> => {
+        if (!optionsStr) return {};
+        try { return JSON.parse(optionsStr); } catch { return {}; }
     };
-    
-    // 使用 setTimeout 確保 DOM 更新完成
-    setTimeout(() => {
-      updatePageNumbers();
-      window.print();
-    }, 100);
+
+    // 生成題目詳情 HTML
+    const detailsHtml = detail.question_details.map((q, idx) => {
+        const options = parseOptions(q.options);
+        const isWrong = !q.is_correct;
+        const borderColor = q.is_correct ? 'border-green-500' : 'border-red-500';
+        const bgColor = q.is_correct ? 'bg-green-50' : 'bg-red-50';
+        
+        // 考生的答案 (處理多選 A,B)
+        const userAnswers = (q.user_answer || '').split(',').map(s => s.trim()).filter(Boolean);
+
+        // 選項列表 HTML
+        const optionsListHtml = Object.entries(options).map(([key, value]) => {
+            const isSelected = userAnswers.includes(key);
+            // 標示：考生選了這個選項
+            let mark = '';
+            if (isSelected) {
+                mark = q.is_correct ? ICON_CHECK : ICON_X; // 答對顯示綠勾，答錯顯示紅叉 (針對該選項)
+                // 修正邏輯：如果整題答錯，但這個選項是考生選的，這裡顯示紅叉叉表示「選了這個」
+                // 但如果是多選題，可能部分對。
+                // 簡化邏輯：
+                // 1. 如果該選項是正確答案之一 -> 顯示綠勾
+                // 2. 如果該選項是考生選的 -> 判斷是否為正確答案 -> 若是(綠勾)，若非(紅叉)
+            }
+            
+            // 為了更清晰：
+            // 在每個選項旁邊，如果是考生選的，打上標記。
+            // 答對題目的選項標記為綠勾，答錯題目的選項標記為紅叉 (或者根據單個選項對錯? 這裡先依題意「答對就用綠色勾勾打✅，答錯就用紅色叉叉打❌」)
+            // 通常這指的是「題目的對錯」，所以：
+            // - 如果考生選了此項，顯示 ✅ 或 ❌ (取決於此項是否為正確答案)
+            
+            const isCorrectOption = (q.correct_answer || '').includes(key);
+            let iconHtml = '';
+            
+            if (isSelected) {
+                iconHtml = isCorrectOption ? ICON_CHECK : ICON_X;
+            }
+
+            return `
+                <div class="flex items-start gap-2 mb-1">
+                    <div class="w-6 flex justify-center pt-1">${iconHtml}</div>
+                    <div class="font-medium text-gray-700">${key}. ${value}</div>
+                </div>
+            `;
+        }).join('');
+
+        // 底部對照 HTML
+        // 考生的答案顯示
+        const userAnswerDisplay = userAnswers.map(ans => {
+            const text = options[ans] || '';
+            return `${ans} ${text ? `(${text})` : ''}`;
+        }).join(', ') || '未作答';
+
+        // 正確答案顯示
+        const correctAnswers = (q.correct_answer || '').split(',').map(s => s.trim());
+        const correctAnswerDisplay = correctAnswers.map(ans => {
+            const text = options[ans] || '';
+            return `${ans} ${text ? `(${text})` : ''}`;
+        }).join(', ');
+
+        return `
+            <div class="border-2 rounded-lg p-4 mb-4 break-inside-avoid ${borderColor} ${bgColor}">
+                <div class="flex justify-between items-start mb-2 border-b border-gray-200 pb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-gray-700">第 ${q.question_number} 題</span>
+                        <span class="text-xs px-2 py-1 rounded bg-white border border-gray-200 text-gray-600">
+                            ${q.question_type}
+                        </span>
+                        ${q.is_correct ? ICON_CHECK_CIRCLE : ICON_X_CIRCLE}
+                    </div>
+                    <div class="font-bold ${q.is_correct ? 'text-green-600' : 'text-red-600'}">
+                        ${q.earned_points} / ${q.points}
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <div class="font-bold text-gray-900 mb-2 text-lg">${q.content}</div>
+                    <div class="ml-2">
+                        ${optionsListHtml}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 pt-2 border-t border-gray-300/50 text-sm">
+                    <div>
+                        <div class="text-gray-500 mb-1">您的答案</div>
+                        <div class="font-medium ${q.is_correct ? 'text-green-700' : 'text-red-700'}">
+                            ${userAnswerDisplay}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-gray-500 mb-1">正確答案</div>
+                        <div class="font-medium text-green-700">
+                            ${correctAnswerDisplay}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // 4. 構建 HTML 內容
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>成績單 - ${detail.basic_info.plan_title}</title>
+          <meta charset="utf-8">
+          ${styles}
+          <style>
+            @media print {
+              @page { 
+                margin: 20mm; 
+                size: A4; 
+              }
+              body { 
+                margin: 0; 
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact;
+              }
+            }
+            body {
+              background-color: white;
+              font-family: "PingFang TC", "Heiti TC", "Microsoft JhengHei", "Microsoft YaHei", sans-serif;
+            }
+            /* 修正 iframe 內的 Tailwind transform */
+            .transform { transform: var(--tw-transform); }
+            .-rotate-3 { --tw-rotate: -3deg; transform: rotate(-3deg); }
+            .rotate-12 { --tw-rotate: 12deg; transform: rotate(12deg); }
+            .-rotate-12 { --tw-rotate: -12deg; transform: rotate(-12deg); }
+            
+            /* 強制分頁 */
+            .page-break { page-break-before: always; }
+            .break-inside-avoid { page-break-inside: avoid; }
+            
+            /* 封面頁佈局：讓簽名欄推到底部 */
+            .cover-page {
+                min-height: 250mm; /* 接近 A4 高度但留邊界 */
+                display: flex;
+                flex-direction: column;
+            }
+            .cover-content {
+                flex: 1;
+            }
+          </style>
+        </head>
+        <body>
+          <div id="print-root">
+            
+            <!-- 第一頁：封面 -->
+            <div class="cover-page">
+                <div class="cover-content">
+                    ${contentElement.innerHTML}
+                </div>
+                
+                <!-- 簽名欄 (移至第一頁最下方) -->
+                <div class="mt-8 border-t-2 border-gray-800 pt-4 break-inside-avoid">
+                    <div class="grid grid-cols-2 gap-8">
+                        <div>
+                            <div class="text-sm text-gray-600 mb-1">考生簽名 / Examinee Signature</div>
+                            <div class="border-b-2 border-gray-800 h-16"></div>
+                        </div>
+                        <div>
+                            <div class="text-sm text-gray-600 mb-1">日期 / Date</div>
+                            <div class="border-b-2 border-gray-800 h-16"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分頁 -->
+            <div class="page-break"></div>
+
+            <!-- 第二頁起：答題詳情 -->
+            <div class="pt-4">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6 border-b-2 border-gray-800 pb-2">
+                    答題詳情 / Answer Details
+                </h2>
+                <div class="space-y-4">
+                    ${detailsHtml}
+                </div>
+            </div>
+
+          </div>
+        </body>
+      </html>
+    `;
+
+    // 5. 寫入與列印
+    doc.open();
+    doc.write(htmlContent);
+    doc.close();
+
+    // 等待資源載入 (雖然是複製樣式，但 link 可能需要一點時間解析)
+    iframe.onload = () => {
+        setTimeout(() => {
+            try {
+                iframe.contentWindow?.focus();
+                iframe.contentWindow?.print();
+            } catch (e) {
+                console.error('Print failed:', e);
+            } finally {
+                // 給予足夠時間讓列印對話框出現後再移除 iframe
+                // 注意：在某些瀏覽器，print() 是阻塞的，這行會在列印對話框關閉後執行
+                // 在 Safari/Chrome 若非阻塞，設長一點的時間比較保險
+                setTimeout(() => {
+                    document.body.removeChild(iframe);
+                }, 2000);
+            }
+        }, 500);
+    };
   };
 
   return (
@@ -378,15 +422,6 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
             <h3 className="text-xl font-bold text-gray-900">成績單預覽</h3>
             <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeHistory}
-                  onChange={(e) => setIncludeHistory(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span>包含個人成績歷史</span>
-              </label>
               <button
                 onClick={handlePrint}
                 className="flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
@@ -404,13 +439,10 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
           </div>
 
           {/* 成績單內容（螢幕預覽用） */}
-          <div className="p-8">
-            <div className="border-2 border-gray-800 p-8">
-              <ScoreCardContent detail={detail} includeHistory={includeHistory} analysis={analysis} />
+          <div className="p-4">
+            <div className="border-2 border-gray-800 p-8 score-card-preview-content">
+              <ScoreCardContent detail={detail} />
             </div>
-            {includeHistory && loadingAnalysis && (
-              <div className="mt-4 text-center text-gray-500 text-sm">載入個人成績歷史中...</div>
-            )}
           </div>
 
           {/* Footer */}
@@ -421,15 +453,6 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
             >
               關閉
             </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 列印專用版本（只在列印時顯示，從頁面頂部開始） */}
-      <div className="hidden print:block print-content">
-        <div className="p-4">
-          <div className="border-2 border-gray-800 p-6">
-            <ScoreCardContent detail={detail} includeHistory={includeHistory} analysis={analysis} />
           </div>
         </div>
       </div>

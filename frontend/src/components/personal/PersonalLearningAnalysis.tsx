@@ -86,7 +86,7 @@ export default function PersonalLearningAnalysis({ empId }: PersonalLearningAnal
   }
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto">
+    <div className="space-y-6 p-6 max-w-7xl mx-auto print:hidden">
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-gray-900">個人學習分析</h2>
         <p className="text-gray-500 mt-1">深入了解您的學習狀況與進步軌跡</p>

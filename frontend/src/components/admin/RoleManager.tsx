@@ -252,13 +252,13 @@ const RoleManager = () => {
   };
 
   const handleRemoveMemberFromRole = async () => {
-    if (!removingMemberFromRole || !detailModal.roleId) return;
+    if (!removingMemberFromRole || !detailModal.roleId || !targetRoleId) return;
     
     try {
       setIsSubmittingMember(true);
       setError(null);
       await api.put(`/admin/users/${removingMemberFromRole.emp_id}`, {
-        role_id: targetRoleId || null
+        role_id: targetRoleId
       });
       // 重新載入角色列表以更新成員數
       const updatedRoles = await fetchRoles();
@@ -629,20 +629,21 @@ const RoleManager = () => {
             <div className="p-6 space-y-4">
               <div className="space-y-2 bg-red-50/50 p-4 rounded-xl border border-red-100">
                 <p className="text-sm font-bold text-gray-700">
-                  確定要移除 <span className="text-red-600 font-black">{removingMemberFromRole.name}</span> 的 <span className="text-red-600 font-black">{detailModal.roleName}</span> 角色嗎？
+                  確定要將 <span className="text-red-600 font-black">{removingMemberFromRole.name}</span> 從 <span className="text-red-600 font-black">{detailModal.roleName}</span> 角色移除嗎？
                 </p>
-                <p className="text-xs text-gray-500 font-medium">請選擇其他角色或移除角色（設為未分配）</p>
+                <p className="text-xs text-gray-500 font-medium">每個帳號都必須至少有一個角色，請選擇目標角色</p>
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">設為角色</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">移至角色 <span className="text-red-500">*</span></label>
                 <select
                   value={targetRoleId || ''}
                   onChange={(e) => setTargetRoleId(e.target.value ? Number(e.target.value) : null)}
                   className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-red-500 outline-none transition-all font-medium text-gray-800"
                   disabled={isSubmittingMember}
+                  required
                 >
-                  <option value="">未分配（移除角色）</option>
+                  <option value="">請選擇目標角色</option>
                   {roles
                     .filter(role => role.id !== detailModal.roleId)
                     .map(role => (
@@ -675,8 +676,8 @@ const RoleManager = () => {
               <button
                 type="button"
                 onClick={handleRemoveMemberFromRole}
-                disabled={isSubmittingMember}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-red-600 shadow-md shadow-red-200 hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+                disabled={isSubmittingMember || !targetRoleId}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-red-600 shadow-md shadow-red-200 hover:bg-red-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmittingMember ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
                 確認移除

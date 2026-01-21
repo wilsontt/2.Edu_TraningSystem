@@ -153,20 +153,38 @@ const TrainingPlanManager = () => {
       setIsEditing(true);
       setEditId(plan.id);
       
-      // 尋找主分類
+      // 尋找主分類 - 改進邏輯
       let mainCatId = '';
+      
+      // 方法1: 從 sub_categories 中查找
       for (const cat of categories) {
         if (cat.sub_categories.some(sub => sub.id === plan.sub_category_id)) {
           mainCatId = cat.id.toString();
           break;
         }
       }
+      
+      // 方法2: 如果還是找不到，嘗試直接查找子分類
+      if (!mainCatId && plan.sub_category_id) {
+        for (const cat of categories) {
+          const foundSub = cat.sub_categories.find(sub => sub.id === plan.sub_category_id);
+          if (foundSub) {
+            mainCatId = cat.id.toString();
+            break;
+          }
+        }
+      }
+      
+      // 如果還是找不到，記錄警告但不阻止編輯
+      if (!mainCatId && plan.sub_category_id) {
+        console.warn(`無法找到計劃 ${plan.id} (${plan.title}) 的主分類，sub_category_id: ${plan.sub_category_id}`);
+      }
 
       setFormData({
         title: plan.title,
         main_category_id: mainCatId,
-        sub_category_id: plan.sub_category_id.toString(),
-        dept_id: plan.dept_id.toString(),
+        sub_category_id: plan.sub_category_id ? plan.sub_category_id.toString() : '',
+        dept_id: plan.dept_id ? plan.dept_id.toString() : '',
         training_date: plan.training_date,
         end_date: plan.end_date || '',
         timer_enabled: plan.timer_enabled,
@@ -246,6 +264,20 @@ const TrainingPlanManager = () => {
 
   // 找尋部門或分類名稱的輔助函式
   const getDeptName = (id: number) => departments.find(d => d.id === id)?.name || '未知單位';
+  
+  // 如果編輯模式且 main_category_id 為空，但 sub_category_id 有值，嘗試找到對應的子分類並自動設定主分類
+  useEffect(() => {
+    if (isModalOpen && isEditing && !formData.main_category_id && formData.sub_category_id) {
+      // 嘗試從所有分類中找到對應的子分類
+      for (const cat of categories) {
+        const foundSub = cat.sub_categories.find(sub => sub.id === parseInt(formData.sub_category_id));
+        if (foundSub) {
+          setFormData(prev => ({ ...prev, main_category_id: cat.id.toString() }));
+          break;
+        }
+      }
+    }
+  }, [isModalOpen, isEditing, formData.main_category_id, formData.sub_category_id, categories]);
   
   // 根據主分類過濾子分類
   const activeSubCategories = categories.find(c => c.id === parseInt(formData.main_category_id))?.sub_categories || [];
@@ -480,7 +512,7 @@ const TrainingPlanManager = () => {
                   <label className="text-xs font-bold text-gray-500 uppercase">子類別</label>
                   <select
                     required
-                    disabled={!formData.main_category_id}
+                    disabled={!formData.main_category_id && !isEditing}
                     className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all bg-white disabled:bg-gray-50 disabled:text-gray-400"
                     value={formData.sub_category_id}
                     onChange={e => setFormData({...formData, sub_category_id: e.target.value})}
@@ -490,6 +522,11 @@ const TrainingPlanManager = () => {
                       <option key={sub.id} value={String(sub.id)}>{sub.name}</option>
                     ))}
                   </select>
+                  {isEditing && !formData.main_category_id && formData.sub_category_id && (
+                    <p className="text-xs text-orange-600 font-medium mt-1">
+                      提示：無法自動找到主分類，請手動選擇主分類以編輯子分類
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -638,22 +675,55 @@ const TrainingPlanManager = () => {
               <div className="space-y-2">
                  <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-gray-500 uppercase">受課對象 (可複選)</label>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            // 同開課單位
-                            if (formData.dept_id) {
-                                setFormData(prev => {
-                                    const newIds = new Set(prev.target_dept_ids);
-                                    newIds.add(prev.dept_id);
-                                    return {...prev, target_dept_ids: Array.from(newIds)};
-                                });
-                            }
-                        }}
-                        className="text-xs text-blue-600 font-bold hover:underline"
-                    >
-                        + 同開課單位
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                // 檢查是否已經全選
+                                const allDeptIds = departments.map(d => d.id.toString());
+                                const isAllSelected = allDeptIds.length > 0 && 
+                                    allDeptIds.every(id => formData.target_dept_ids.includes(id));
+                                
+                                if (isAllSelected) {
+                                    // 如果已經全選，則全部取消
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        target_dept_ids: []
+                                    }));
+                                } else {
+                                    // 如果沒有全選，則全選
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        target_dept_ids: allDeptIds
+                                    }));
+                                }
+                            }}
+                            className="text-xs text-blue-600 font-bold hover:underline"
+                        >
+                            {(() => {
+                                const allDeptIds = departments.map(d => d.id.toString());
+                                const isAllSelected = allDeptIds.length > 0 && 
+                                    allDeptIds.every(id => formData.target_dept_ids.includes(id));
+                                return isAllSelected ? '取消全選' : '全選';
+                            })()}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                // 同開課單位
+                                if (formData.dept_id) {
+                                    setFormData(prev => {
+                                        const newIds = new Set(prev.target_dept_ids);
+                                        newIds.add(prev.dept_id);
+                                        return {...prev, target_dept_ids: Array.from(newIds)};
+                                    });
+                                }
+                            }}
+                            className="text-xs text-blue-600 font-bold hover:underline"
+                        >
+                            + 同開課單位
+                        </button>
+                    </div>
                  </div>
                  <div className="border-2 border-gray-200 rounded-xl p-3 max-h-40 overflow-y-auto bg-gray-50/50">
                     <div className="grid grid-cols-2 gap-2">
