@@ -149,6 +149,27 @@ def start_exam(
         if not (record and not record.is_passed):
             raise HTTPException(status_code=400, detail="Exam has expired.")
 
+    # 建立或更新 ExamRecord 的 start_time（記錄開始作答時間）
+    # 這樣在 submit_exam 時可以正確計算作答時間
+    now = datetime.now()
+    if record:
+        # 如果是重考，更新 start_time 為本次開始時間
+        # 只有在已經提交過（有 submit_time）或沒有 start_time 時才更新
+        if record.submit_time or not record.start_time:
+            # 已經提交過，表示這是重考，更新 start_time 為本次開始時間
+            record.start_time = now
+            db.commit()
+    else:
+        # 首次參加，建立新記錄並設定 start_time
+        new_record = models.ExamRecord(
+            emp_id=current_user.emp_id,
+            plan_id=plan.id,
+            start_time=now,
+            attempts=0  # 尚未提交，attempts 為 0
+        )
+        db.add(new_record)
+        db.commit()
+
     # Fetch questions
     # Note: We do NOT include 'answer' field here for security.
     questions = db.query(models.Question).filter(
@@ -190,6 +211,31 @@ class ExamResultResponse(BaseModel):
     is_passed: bool
     details: List[ExamResultDetail]
 
+def normalize_answer(answer: str, question_type: str) -> str:
+    """
+    正規化答案字串，用於比對。
+    處理：
+    1. 移除所有空格
+    2. 統一轉為大寫
+    3. 對於多選題：移除逗號、排序字母
+    4. 對於單選題/是非題：直接正規化
+    """
+    if not answer:
+        return ""
+    
+    # 移除空格並轉大寫
+    normalized = answer.replace(" ", "").replace("，", ",").upper()
+    
+    # 如果是多選題（包含逗號或長度 > 1 的字母組合）
+    if question_type == "multiple" or ("," in normalized or (len(normalized) > 1 and normalized.isalpha())):
+        # 移除逗號，分割成字母，排序後重新組合
+        letters = [c for c in normalized if c.isalpha()]
+        letters.sort()
+        return "".join(letters)
+    
+    # 單選題或是非題：直接返回正規化後的字串
+    return normalized
+
 @router.post("/submit/{plan_id}", response_model=ExamResultResponse)
 def submit_exam(
     plan_id: int,
@@ -213,8 +259,12 @@ def submit_exam(
         total_score += q.points
         user_ans = submit_data.answers.get(str(q.id)) or submit_data.answers.get(q.id, "")
         
-        # Grading Logic (Strict Match)
-        is_correct = (user_ans == q.answer)
+        # 正規化答案後再比對
+        normalized_user_ans = normalize_answer(str(user_ans), q.question_type)
+        normalized_correct_ans = normalize_answer(q.answer, q.question_type)
+        
+        # Grading Logic (Normalized Match)
+        is_correct = (normalized_user_ans == normalized_correct_ans)
         
         if is_correct:
             earned_score += q.points
@@ -242,11 +292,18 @@ def submit_exam(
         models.ExamRecord.emp_id == current_user.emp_id
     ).first()
     
+    now = datetime.now()
+    
     if existing_record:
         # Update existing record (Re-take)
+        # 注意：start_time 應該在 start_exam 時已設定，這裡只更新 submit_time
+        # 如果 start_time 為空（舊資料），則使用 submit_time 作為 fallback（但這不準確）
+        if not existing_record.start_time:
+            existing_record.start_time = now  # Fallback：如果沒有 start_time，使用 submit_time
+        
         existing_record.total_score = earned_score
         existing_record.is_passed = is_passed
-        existing_record.submit_time = datetime.now()
+        existing_record.submit_time = now
         existing_record.attempts = (existing_record.attempts or 1) + 1
         
         # Clear old details
@@ -255,13 +312,15 @@ def submit_exam(
         record_id = existing_record.id
     else:
         # Create new record
+        # 注意：start_time 應該在 start_exam 時已設定，這裡只設定 submit_time
+        # 如果沒有 start_time（舊流程），則使用 submit_time 作為 fallback
         new_record = models.ExamRecord(
             emp_id=current_user.emp_id,
             plan_id=plan.id,
             total_score=earned_score,
             is_passed=is_passed,
-            start_time=datetime.now(),
-            submit_time=datetime.now(),
+            start_time=now,  # Fallback：如果 start_exam 沒有設定，這裡設定
+            submit_time=now,
             attempts=1
         )
         db.add(new_record)
@@ -369,11 +428,14 @@ def get_personal_overview(
     worst_score = min(scores) if scores else 0
     
     # 計算總學習時數（累積作答時間）
+    # 只計算有 start_time 和 submit_time 的記錄，且時間差必須 > 0
     total_study_time = 0
     for r in records:
         if r.start_time and r.submit_time:
             duration = (r.submit_time - r.start_time).total_seconds()
-            total_study_time += duration
+            # 只計算合理的時間差（> 0 且 < 24 小時，避免異常資料）
+            if duration > 0 and duration < 86400:  # 24 小時 = 86400 秒
+                total_study_time += duration
     
     return {
         "emp_id": target_emp_id,
@@ -469,7 +531,8 @@ def get_personal_history(
 def get_personal_analysis(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
-    emp_id: Optional[str] = Query(None, description="員工編號（僅 Admin 可使用）")
+    emp_id: Optional[str] = Query(None, description="員工編號（僅 Admin 可使用）"),
+    trend_period: int = Query(6, description="成績趨勢時間範圍（月數）：3、6、12")
 ):
     """
     T3.3: 獲取個人學習分析
@@ -477,7 +540,14 @@ def get_personal_analysis(
     - 需要加強的領域（哪些分類的成績較差）
     - 學習進度（已完成 / 總計畫數）
     - 成績趨勢資料（用於折線圖）
+    
+    參數：
+    - trend_period: 成績趨勢的時間範圍（月數），預設為 6，可選 3、6、12
     """
+    # 驗證 trend_period 參數
+    if trend_period not in [3, 6, 12]:
+        raise HTTPException(status_code=400, detail="trend_period 參數必須為 3、6 或 12")
+    
     # 權限控制
     target_emp_id = emp_id if emp_id and current_user.role and current_user.role.name == "Admin" else current_user.emp_id
     
@@ -548,10 +618,12 @@ def get_personal_analysis(
     # 需要加強的領域（平均分數 < 60）
     weak_areas = [c for c in category_analysis if c["avg_score"] < 60]
     
-    # 成績趨勢資料（過去 6 個月，按月統計）
+    # 成績趨勢資料（依 trend_period 參數決定時間範圍，按月統計）
     now = datetime.now()
     trend_data = []
-    for i in range(5, -1, -1):  # 過去 6 個月
+    # 計算要往前推幾個月（含當月）
+    months_to_go_back = trend_period - 1  # 例如 6 個月：0, 1, 2, 3, 4, 5（共 6 個月）
+    for i in range(months_to_go_back, -1, -1):  # 從最舊的月份到當月
         target_date = now - timedelta(days=30 * i)
         month_start = date(target_date.year, target_date.month, 1)
         if target_date.month == 12:

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TrendingUp, TrendingDown, Target, BookOpen } from 'lucide-react';
 import {
   BarChart,
@@ -49,19 +49,26 @@ interface PersonalLearningAnalysisProps {
 export default function PersonalLearningAnalysis({ empId }: PersonalLearningAnalysisProps) {
   const [analysis, setAnalysis] = useState<PersonalAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
+  const [trendPeriod, setTrendPeriod] = useState<number>(6); // 預設 6 個月
+  const trendChartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchAnalysis();
-  }, [empId]);
+  }, [empId, trendPeriod]);
 
   const fetchAnalysis = async () => {
     try {
+      // 保存當前滾動位置（相對於趨勢圖表的位置）
+      const scrollPosition = trendChartRef.current 
+        ? trendChartRef.current.getBoundingClientRect().top + window.scrollY
+        : null;
+      
       setLoading(true);
       const token = localStorage.getItem('token');
       const baseURL = `http://${window.location.hostname}:8000/api`;
       const url = empId
-        ? `${baseURL}/exam/personal/analysis?emp_id=${empId}`
-        : `${baseURL}/exam/personal/analysis`;
+        ? `${baseURL}/exam/personal/analysis?emp_id=${empId}&trend_period=${trendPeriod}`
+        : `${baseURL}/exam/personal/analysis?trend_period=${trendPeriod}`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -69,6 +76,16 @@ export default function PersonalLearningAnalysis({ empId }: PersonalLearningAnal
       if (response.ok) {
         const data = await response.json();
         setAnalysis(data);
+        
+        // 恢復滾動位置
+        if (scrollPosition !== null) {
+          setTimeout(() => {
+            window.scrollTo({
+              top: scrollPosition - 100, // 稍微向上偏移，避免被頁籤遮住
+              behavior: 'instant' // 不使用 smooth，避免動畫
+            });
+          }, 0);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch personal analysis', error);
@@ -187,8 +204,43 @@ export default function PersonalLearningAnalysis({ empId }: PersonalLearningAnal
 
       {/* 成績趨勢圖 */}
       {analysis.trend_data.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">過去 6 個月成績趨勢</h3>
+        <div ref={trendChartRef} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900">成績趨勢</h3>
+            {/* 頁籤切換 */}
+            <div className="flex gap-2 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setTrendPeriod(3)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  trendPeriod === 3
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                3 個月
+              </button>
+              <button
+                onClick={() => setTrendPeriod(6)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  trendPeriod === 6
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                6 個月
+              </button>
+              <button
+                onClick={() => setTrendPeriod(12)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  trendPeriod === 12
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                1 年
+              </button>
+            </div>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={analysis.trend_data}>
               <CartesianGrid strokeDasharray="3 3" />
