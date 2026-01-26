@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react';
 import { AxiosError } from 'axios';
 import api from '../../api';
 import QuestionEditorModal from './QuestionEditorModal';
 import QuestionBankManager from './QuestionBankManager';
 import BankImportModal from './BankImportModal';
+import Pagination from '../common/Pagination';
 
 interface TrainingPlan {
   id: number;
@@ -56,6 +57,10 @@ const ExamStudio = () => {
     const [mode, setMode] = useState<'plan' | 'bank'>('plan');
     const [showImportModal, setShowImportModal] = useState(false);
     const [expandedHints, setExpandedHints] = useState<Record<number, boolean>>({});
+    
+    // 題目清單分頁狀態
+    const [questionPage, setQuestionPage] = useState(1);
+    const [questionPageSize, setQuestionPageSize] = useState(10);
 
     useEffect(() => {
         fetchPlans();
@@ -238,10 +243,22 @@ const ExamStudio = () => {
     };
 
     // Filter plans and Render
-    const filteredPlans = plans.filter((p: TrainingPlan) => 
-        p.title.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredPlans = useMemo(() => {
+        return plans.filter((p: TrainingPlan) => 
+            p.title.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [plans, searchTerm]);
     const selectedPlan = plans.find((p: TrainingPlan) => p.id === selectedPlanId);
+
+    // 題目分頁計算
+    const questionTotalPages = Math.ceil(questions.length / questionPageSize);
+    const questionStartIndex = (questionPage - 1) * questionPageSize;
+    const paginatedQuestions = questions.slice(questionStartIndex, questionStartIndex + questionPageSize);
+
+    // 當選擇不同計畫時，重置題目分頁
+    useEffect(() => {
+        setQuestionPage(1);
+    }, [selectedPlanId, questionPageSize]);
 
     if (mode === 'bank') {
         return (
@@ -527,7 +544,9 @@ const ExamStudio = () => {
                                         </div>
                                     ) : (
                                         <div className="divide-y divide-gray-50 border border-indigo-100 rounded-2xl overflow-hidden">
-                                            {questions.map((q: Question, idx: number) => (
+                                            {paginatedQuestions.map((q: Question, idx: number) => {
+                                                const displayIndex = questionStartIndex + idx + 1;
+                                                return (
                                                 <div key={q.id} className="p-4 transition-all duration-200 group even:bg-gray-50/50 hover:bg-indigo-50/30 cursor-pointer">
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div className="flex gap-2">
@@ -560,7 +579,7 @@ const ExamStudio = () => {
                                                         </div>
                                                     </div>
                                                     <div className="font-bold text-gray-800 mb-2">
-                                                        <span className="text-gray-400 mr-2">{idx + 1}.</span>
+                                                        <span className="text-gray-400 mr-2">{displayIndex}.</span>
                                                         {q.content}
                                                     </div>
                                                     <div className="pl-6 space-y-1">
@@ -612,8 +631,25 @@ const ExamStudio = () => {
                                                         )}
                                                     </div>
                                                 </div>
-                                            ))}
+                                            );
+                                            })}
                                         </div>
+                                        
+                                        {/* 題目分頁控制 */}
+                                        {questions.length > 0 && (
+                                            <Pagination
+                                                currentPage={questionPage}
+                                                totalPages={questionTotalPages}
+                                                pageSize={questionPageSize}
+                                                totalItems={questions.length}
+                                                onPageChange={setQuestionPage}
+                                                onPageSizeChange={(size) => {
+                                                    setQuestionPageSize(size);
+                                                    setQuestionPage(1);
+                                                }}
+                                                className="mt-4 rounded-xl border border-indigo-100"
+                                            />
+                                        )}
                                     )}
                                 </div>
                             </div>

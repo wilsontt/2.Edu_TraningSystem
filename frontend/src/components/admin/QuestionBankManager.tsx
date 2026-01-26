@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Trash2, Loader2, ChevronLeft, ChevronRight, Lightbulb, ChevronUp, ChevronDown, Edit } from 'lucide-react';
+import { Search, Trash2, Loader2, Lightbulb, ChevronUp, ChevronDown, Edit } from 'lucide-react';
 import api from '../../api';
 import QuestionEditorModal from './QuestionEditorModal';
+import Pagination from '../common/Pagination';
 
 interface QuestionBankItem {
     id: number;
@@ -20,7 +21,7 @@ const QuestionBankManager = () => {
     
     // 分頁
     const [page, setPage] = useState(1);
-    const [pageSize] = useState(20);
+    const [pageSize, setPageSize] = useState(20);
     const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
 
@@ -71,7 +72,7 @@ const QuestionBankManager = () => {
         try {
             await api.delete(`/admin/question-bank/${id}`);
             fetchQuestions();
-        } catch (err) {
+        } catch {
             alert("刪除失敗");
         }
     };
@@ -229,25 +230,18 @@ const QuestionBankManager = () => {
             </div>
 
             {/* Footer Pagination */}
-            <div className="p-4 border-t border-gray-100 bg-gradient-to-r from-white to-indigo-50/30 flex items-center justify-between">
-                <button 
-                    disabled={page <= 1}
-                    onClick={() => setPage(p => p - 1)}
-                    className="flex items-center gap-1 px-4 py-2 rounded-lg border border-indigo-200 bg-white text-sm font-bold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
-                >
-                    <ChevronLeft className="w-4 h-4" /> 上一頁
-                </button>
-                <div className="text-sm font-bold text-indigo-600">
-                    第 {page} / {Math.max(1, totalPages)} 頁
-                </div>
-                <button 
-                    disabled={page >= totalPages}
-                    onClick={() => setPage(p => p + 1)}
-                    className="flex items-center gap-1 px-4 py-2 rounded-lg border border-indigo-200 bg-white text-sm font-bold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
-                >
-                    下一頁 <ChevronRight className="w-4 h-4" />
-                </button>
-            </div>
+            <Pagination
+                currentPage={page}
+                totalPages={Math.max(1, totalPages)}
+                pageSize={pageSize}
+                totalItems={total}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setPage(1);
+                }}
+                showTotalItems={false}
+            />
 
             {/* 編輯題目 Modal */}
             {editingQuestion && (

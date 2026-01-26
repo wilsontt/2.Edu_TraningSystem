@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Download, Users, FileText, CheckCircle, TrendingUp, AlertCircle, RefreshCw, Calendar, Timer, Target, Repeat, X, ChevronDown, ChevronRight, Filter, TrendingDown, Eye, BarChart3, Search } from "lucide-react";
+import Pagination from '../common/Pagination';
 import clsx from 'clsx';
 import { format } from "date-fns";
 import { Link } from 'react-router-dom';
@@ -187,6 +188,10 @@ export default function ReportDashboard() {
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false); // 表格區域局部載入狀態
   const [activeTab, setActiveTab] = useState<'department' | 'plan'>('department');
+  
+  // 部門/計畫績效表分頁狀態
+  const [statsPage, setStatsPage] = useState(1);
+  const [statsPageSize, setStatsPageSize] = useState(10);
   const [trendMonths, setTrendMonths] = useState(6);
   const [timeFilter, setTimeFilter] = useState<{ type: 'all' | 'year' | 'quarter' | 'month'; year?: number; quarter?: number; month?: number }>({ type: 'all' });
   const [includeAdvanced, setIncludeAdvanced] = useState(true);
@@ -382,6 +387,19 @@ export default function ReportDashboard() {
     };
     return details[kpiType] || { description: "無詳細資訊", value: "-", unit: "" };
   };
+
+  // 部門/計畫績效表分頁計算
+  const currentStats = activeTab === 'department' ? deptStats : planStats;
+  const statsTotalPages = Math.ceil(currentStats.length / statsPageSize);
+  const statsStartIndex = (statsPage - 1) * statsPageSize;
+  const paginatedStats = useMemo(() => {
+    return currentStats.slice(statsStartIndex, statsStartIndex + statsPageSize);
+  }, [currentStats, statsStartIndex, statsPageSize]);
+
+  // 當切換 Tab 或篩選條件改變時，重置分頁
+  useEffect(() => {
+    setStatsPage(1);
+  }, [activeTab, statsPageSize]);
 
   if (loading) {
     return <div className="p-8 flex justify-center text-indigo-600"><RefreshCw className="w-8 h-8 animate-spin" /></div>;
@@ -893,11 +911,12 @@ export default function ReportDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-indigo-50">
-                {(activeTab === 'department' ? deptStats : planStats).map((item: DepartmentStat | PlanStat, idx) => {
+                {paginatedStats.map((item: DepartmentStat | PlanStat, idx) => {
                   const itemId = activeTab === 'department' ? (item as DepartmentStat).dept_id : (item as PlanStat).plan_id;
                   const isExpanded = activeTab === 'department' 
                     ? expandedDept === itemId 
                     : expandedPlan === itemId;
+                  const displayIndex = statsStartIndex + idx + 1;
                   
                   return (
                     <>
@@ -1213,6 +1232,21 @@ export default function ReportDashboard() {
               </tbody>
             </table>
           </div>
+          
+          {/* 分頁控制 */}
+          {currentStats.length > 0 && (
+            <Pagination
+              currentPage={statsPage}
+              totalPages={statsTotalPages}
+              pageSize={statsPageSize}
+              totalItems={currentStats.length}
+              onPageChange={setStatsPage}
+              onPageSizeChange={(size) => {
+                setStatsPageSize(size);
+                setStatsPage(1);
+              }}
+            />
+          )}
         </div>
       </div>
 

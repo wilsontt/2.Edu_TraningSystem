@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AxiosError } from 'axios';
 import { Plus, Edit2, Trash2, Check, X, Building2, Search, Loader2, AlertCircle, Users } from 'lucide-react';
 import api from '../../api';
+import Pagination from '../common/Pagination';
 
 interface Department {
   id: number;
@@ -27,6 +28,10 @@ const DepartmentManager = () => {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 分頁狀態
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   
   // 新增/編輯狀態
   const [isEditing, setIsEditing] = useState<number | null>(null);
@@ -224,10 +229,22 @@ const DepartmentManager = () => {
   };
 
   // 按單位名稱排序，然後過濾
-  const sortedDepts = [...departments].sort((a, b) => a.name.localeCompare(b.name));
-  const filteredDepts = sortedDepts.filter(d => 
-    d.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredDepts = useMemo(() => {
+    const sorted = [...departments].sort((a, b) => a.name.localeCompare(b.name));
+    return sorted.filter(d => 
+      d.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [departments, searchTerm]);
+
+  // 分頁計算
+  const totalPages = Math.ceil(filteredDepts.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedDepts = filteredDepts.slice(startIndex, startIndex + pageSize);
+
+  // 當搜尋條件改變時，重置到第一頁
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, pageSize]);
 
   if (loading) {
     return (
@@ -742,7 +759,7 @@ const DepartmentManager = () => {
                 </tr>
               )}
               
-              {filteredDepts.length === 0 && !isAdding ? (
+              {paginatedDepts.length === 0 && !isAdding ? (
                 <tr>
                   <td colSpan={3} className="px-6 py-16 text-center text-gray-400 font-bold italic">
                     <div className="flex flex-col items-center gap-2">
@@ -752,7 +769,7 @@ const DepartmentManager = () => {
                   </td>
                 </tr>
               ) : (
-                filteredDepts.map((dept, index) => (
+                paginatedDepts.map((dept, index) => (
                   <tr 
                     key={dept.id} 
                     className={`transition-all duration-200 group cursor-pointer ${
@@ -765,7 +782,7 @@ const DepartmentManager = () => {
                       setEditName(dept.name);
                     }}
                   >
-                    <td className="px-6 py-4 text-center text-sm font-mono text-gray-400 font-medium">{index + 1}</td>
+                    <td className="px-6 py-4 text-center text-sm font-mono text-gray-400 font-medium">{startIndex + index + 1}</td>
                     <td className="px-6 py-4">
                       {isEditing === dept.id ? (
                         <input
@@ -845,6 +862,21 @@ const DepartmentManager = () => {
             </tbody>
           </table>
         </div>
+        
+        {/* 分頁控制 */}
+        {!loading && filteredDepts.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={filteredDepts.length}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
+          />
+        )}
       </div>
       
       <div className="mt-6 flex items-center gap-2 text-[11px] text-indigo-400 font-bold px-2 uppercase tracking-tighter">

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AxiosError } from 'axios';
 import { Plus, Calendar, Clock, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check } from 'lucide-react';
 import api from '../../api';
+import Pagination from '../common/Pagination';
 
 interface SubCategory {
   id: number;
@@ -57,6 +58,10 @@ const TrainingPlanManager = () => {
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 分頁狀態
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   
   // 模態視窗狀態
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -255,10 +260,22 @@ const TrainingPlanManager = () => {
     }
   };
 
-  const filteredPlans = plans.filter(plan => 
-    plan.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    plan.year.includes(searchTerm)
-  );
+  const filteredPlans = useMemo(() => {
+    return plans.filter(plan => 
+      plan.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      plan.year.includes(searchTerm)
+    );
+  }, [plans, searchTerm]);
+
+  // 分頁計算
+  const totalPages = Math.ceil(filteredPlans.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedPlans = filteredPlans.slice(startIndex, startIndex + pageSize);
+
+  // 當搜尋條件改變時，重置到第一頁
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, pageSize]);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -356,7 +373,7 @@ const TrainingPlanManager = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredPlans.length === 0 ? (
+              {paginatedPlans.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-16 text-center text-gray-400 font-bold italic">
                     <div className="flex flex-col items-center gap-2">
@@ -366,11 +383,12 @@ const TrainingPlanManager = () => {
                   </td>
                 </tr>
               ) : (
-                filteredPlans.map((plan, index) => {
+                paginatedPlans.map((plan, index) => {
                   const isExpired = plan.end_date && plan.end_date < today;
+                  const displayIndex = startIndex + index + 1;
                   return (
                   <tr key={plan.id} className={`group border-b border-gray-50 transition-all duration-200 even:bg-gray-50/50 hover:bg-indigo-50/30 cursor-pointer ${isExpired ? 'border-l-4 border-l-orange-400 bg-orange-50/10' : ''}`}>
-                    <td className="px-6 py-4 text-sm font-black text-gray-300">{index + 1}</td>
+                    <td className="px-6 py-4 text-sm font-black text-gray-300">{displayIndex}</td>
                     <td className="px-6 py-4 text-sm font-black text-indigo-600">{plan.year}</td>
                     <td className="px-6 py-4">
                       <div className="font-bold text-gray-800">{plan.title}</div>
@@ -458,6 +476,21 @@ const TrainingPlanManager = () => {
             </tbody>
           </table>
         </div>
+        
+        {/* 分頁控制 */}
+        {!loading && filteredPlans.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={filteredPlans.length}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
+          />
+        )}
       </div>
 
       {/* Add/Edit Modal */}

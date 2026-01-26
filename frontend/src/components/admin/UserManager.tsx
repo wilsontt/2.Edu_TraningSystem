@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { AxiosError } from 'axios';
-import { Search, Edit2, Check, X, User as UserIcon, Shield, Building2, Loader2, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Edit2, Check, X, User as UserIcon, Shield, Building2, Loader2, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import api from '../../api';
+import Pagination from '../common/Pagination';
 
 interface User {
   emp_id: string;
@@ -59,7 +60,6 @@ const UserManager = () => {
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [pageInput, setPageInput] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -232,32 +232,7 @@ const UserManager = () => {
   // 當搜尋或每頁筆數改變時，重置到第一頁
   useEffect(() => {
     setCurrentPage(1);
-    setPageInput('');
   }, [searchTerm, pageSize]);
-
-  // 分頁處理函數
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-      setPageInput('');
-    }
-  };
-
-  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setPageInput(value);
-  };
-
-  const handlePageInputSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const pageNum = parseInt(pageInput);
-    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
-      setCurrentPage(pageNum);
-      setPageInput('');
-    } else {
-      setPageInput('');
-    }
-  };
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -462,67 +437,17 @@ const UserManager = () => {
         
         {/* 分頁控制 */}
         {!isLoading && processedUsers.length > 0 && (
-          <div className="border-t border-indigo-100 bg-indigo-50/30 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            {/* 左側：每頁筆數選擇 */}
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-600 font-medium">每頁顯示：</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="px-3 py-1.5 border border-indigo-200 rounded-lg bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer transition-all duration-200"
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-              <span className="text-sm text-indigo-600 font-medium">
-                共 {processedUsers.length} 筆
-              </span>
-            </div>
-
-            {/* 右側：分頁導航 */}
-            <div className="flex items-center gap-2">
-              {/* 上一頁 */}
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="p-2 rounded-lg border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
-                title="上一頁"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-
-              {/* 頁碼輸入 */}
-              <form onSubmit={handlePageInputSubmit} className="flex items-center gap-1">
-                <span className="text-sm text-gray-600 font-medium">第</span>
-                <input
-                  type="text"
-                  value={pageInput !== '' ? pageInput : currentPage}
-                  onChange={handlePageInputChange}
-                  onBlur={handlePageInputSubmit}
-                  onFocus={(e) => {
-                    setPageInput(currentPage.toString());
-                    e.target.select();
-                  }}
-                  className="w-12 px-2 py-1 text-center border border-indigo-200 rounded-lg bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                />
-                <span className="text-sm text-gray-600 font-medium">頁 / 共 {totalPages} 頁</span>
-              </form>
-
-              {/* 下一頁 */}
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="p-2 rounded-lg border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
-                title="下一頁"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={processedUsers.length}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
+          />
         )}
       </div>
 
