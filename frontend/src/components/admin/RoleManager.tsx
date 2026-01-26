@@ -285,14 +285,14 @@ const RoleManager = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-            <Shield className="w-8 h-8 text-purple-600" />
+            <Shield className="w-8 h-8 text-indigo-600" />
             角色管理
           </h1>
           <p className="text-gray-500 mt-2 font-medium">管理系統角色與權限群組</p>
         </div>
         <button
           onClick={() => setIsAdding(true)}
-          className="bg-gray-900 text-white px-5 py-3 rounded-xl font-bold hover:bg-black transition-all shadow-lg hover:shadow-xl active:scale-95 flex items-center gap-2"
+          className="bg-green-500 text-white px-5 py-3 rounded-xl font-bold hover:bg-green-600 hover:shadow-green-300 transition-all duration-200 shadow-lg shadow-green-200 hover:shadow-xl hover:scale-105 hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 cursor-pointer"
         >
           <Plus className="w-5 h-5" />
           新增角色
@@ -300,10 +300,10 @@ const RoleManager = () => {
       </div>
 
       {/* Role List */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-indigo-100/50 overflow-hidden">
         {isLoading ? (
           <div className="p-12 flex flex-col items-center justify-center text-gray-400">
-            <Loader2 className="w-10 h-10 animate-spin mb-4 text-purple-500" />
+            <Loader2 className="w-10 h-10 animate-spin mb-4 text-indigo-600" />
             <p className="font-bold">載入角色資料中...</p>
           </div>
         ) : (
@@ -311,7 +311,7 @@ const RoleManager = () => {
             {roles.map((role, index) => (
               <div 
                 key={role.id} 
-                className="p-6 bg-white border-2 border-gray-100 rounded-2xl hover:border-purple-200 hover:shadow-md transition-all group cursor-pointer"
+                className="p-6 bg-white border-2 border-gray-100 rounded-2xl hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-100/50 transition-all duration-200 group cursor-pointer"
                 onDoubleClick={() => {
                   if (role.name !== 'Admin') {
                     openEditModal(role);
@@ -319,11 +319,11 @@ const RoleManager = () => {
                 }}
               >
                 <div className="flex items-center justify-between mb-4">
-                  <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white">
                     <Shield className="w-5 h-5" />
                   </div>
                   {/* <span className="text-xs font-black text-gray-300 uppercase">ID: {role.id}</span> */}
-                  <span className="text-xs font-black text-gray-300 uppercase tracking-widest">NO. {index + 1}</span>
+                  <span className="text-xs font-black text-indigo-300 uppercase tracking-widest">NO. {index + 1}</span>
                 </div>
                 <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center justify-between group/title">
                     {role.name}
@@ -331,14 +331,14 @@ const RoleManager = () => {
                         <div className="flex gap-1">
                             <button 
                                 onClick={() => openEditModal(role)}
-                                className="text-gray-400 hover:text-blue-500 transition-all p-1"
+                                className="text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all duration-200 p-1.5 rounded-lg cursor-pointer"
                                 title="編輯角色名稱"
                             >
                                 <PenTool className="w-4 h-4" />
                             </button>
                             <button 
                                 onClick={() => handleDeleteClick(role)}
-                                className="text-gray-400 hover:text-red-500 transition-all p-1"
+                                className="text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200 p-1.5 rounded-lg cursor-pointer"
                                 title="刪除角色"
                             >
                                 <Trash2 className="w-4 h-4" />
@@ -350,24 +350,24 @@ const RoleManager = () => {
                 <div className="flex gap-2">
                     <button 
                         onClick={() => handleShowDetail(role, 'user')}
-                        className="flex-1 bg-gray-50 hover:bg-purple-50 p-2 rounded-xl text-center transition-colors group/btn"
+                        className="flex-1 bg-gray-50 hover:bg-indigo-50 p-2.5 rounded-xl text-center transition-all duration-200 group/btn cursor-pointer"
                     >
-                        <div className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1 group-hover/btn:text-purple-600">成員</div>
-                        <div className="text-xl font-black text-gray-800 group-hover/btn:text-purple-700">{role.user_count} <span className="text-xs text-gray-400 font-medium">人</span></div>
+                        <div className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1 group-hover/btn:text-indigo-600">成員</div>
+                        <div className="text-xl font-black text-gray-800 group-hover/btn:text-indigo-700">{role.user_count} <span className="text-xs text-gray-400 font-medium">人</span></div>
                     </button>
                     <button 
                         onClick={() => handleShowDetail(role, 'function')}
-                        className="flex-1 bg-gray-50 hover:bg-purple-50 p-2 rounded-xl text-center transition-colors group/btn"
+                        className="flex-1 bg-gray-50 hover:bg-indigo-50 p-2.5 rounded-xl text-center transition-all duration-200 group/btn cursor-pointer"
                     >
-                        <div className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1 group-hover/btn:text-purple-600">權限</div>
-                        <div className="text-xl font-black text-gray-800 group-hover/btn:text-purple-700">{role.function_count} <span className="text-xs text-gray-400 font-medium">個</span></div>
+                        <div className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1 group-hover/btn:text-indigo-600">權限</div>
+                        <div className="text-xl font-black text-gray-800 group-hover/btn:text-indigo-700">{role.function_count} <span className="text-xs text-gray-400 font-medium">個</span></div>
                     </button>
                 </div>
               </div>
             ))}
             
             {roles.length === 0 && (
-              <div className="col-span-full p-12 text-center text-gray-400 border-2 border-dashed border-gray-200 rounded-2xl">
+              <div className="col-span-full p-12 text-center text-gray-400 border-2 border-dashed border-indigo-200 rounded-2xl">
                 <Shield className="w-12 h-12 mx-auto mb-3 opacity-20" />
                 <p>尚無角色設定</p>
               </div>
@@ -380,7 +380,7 @@ const RoleManager = () => {
       {detailModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50">
+            <div className="p-6 border-b border-indigo-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
               <h3 className="text-lg font-black text-gray-900">
                 {detailModal.title}
               </h3>
@@ -393,7 +393,7 @@ const RoleManager = () => {
                         api.get('/admin/users').then(res => setAllUsers(res.data));
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all text-sm"
+                    className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 hover:shadow-md transition-all duration-200 text-sm cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     新增成員
@@ -405,7 +405,7 @@ const RoleManager = () => {
                     setIsAddingMemberToRole(false);
                     setRemovingMemberFromRole(null);
                   }}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -414,15 +414,15 @@ const RoleManager = () => {
             <div className="p-6 overflow-y-auto flex-1">
                 {loadingDetail ? (
                     <div className="flex flex-col items-center justify-center py-12 gap-4">
-                      <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                      <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
                       <p className="text-gray-500 font-bold">載入中...</p>
                     </div>
                 ) : detailModal.type === 'user' ? (
                     <div className="space-y-3">
                         {roleUsers.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-12 gap-4">
-                            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
-                              <Shield className="w-8 h-8 text-gray-400" />
+                            <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center">
+                              <Shield className="w-8 h-8 text-indigo-400" />
                             </div>
                             <p className="text-gray-500 font-bold">目前無成員</p>
                           </div>
@@ -430,10 +430,10 @@ const RoleManager = () => {
                           roleUsers.map((user: {emp_id: string; name: string; role_id: number}) => (
                             <div
                               key={user.emp_id}
-                              className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all group"
+                              className="flex items-center justify-between p-4 bg-gray-50 hover:bg-indigo-50/50 rounded-xl transition-all duration-200 group cursor-pointer"
                             >
                               <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-black text-sm">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-sm">
                                   {user.name.charAt(0)}
                                 </div>
                                 <div>
@@ -445,7 +445,7 @@ const RoleManager = () => {
                                 <button
                                   type="button"
                                   onClick={() => setRemovingMemberFromRole({emp_id: user.emp_id, name: user.name})}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100 cursor-pointer"
                                   title="移除成員"
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -458,7 +458,7 @@ const RoleManager = () => {
                 ) : (
                     <div className="divide-y divide-gray-50">
                         {detailModal.items.map((item, idx) => (
-                            <div key={idx} className="p-4 text-sm font-bold text-gray-700 hover:bg-gray-50">
+                            <div key={idx} className="p-4 text-sm font-bold text-gray-700 hover:bg-indigo-50/50 transition-colors duration-200">
                                 {item}
                             </div>
                         ))}
@@ -473,7 +473,7 @@ const RoleManager = () => {
                   setIsAddingMemberToRole(false);
                   setRemovingMemberFromRole(null);
                 }}
-                className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
+                className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
                 關閉
               </button>
@@ -486,15 +486,15 @@ const RoleManager = () => {
       {isAddingMemberToRole && detailModal.roleId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50">
+            <div className="p-6 border-b border-green-100 flex items-center justify-between bg-gradient-to-r from-green-50 to-emerald-50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                <Plus className="w-5 h-5 text-purple-600" />
+                <Plus className="w-5 h-5 text-green-600" />
                 新增成員到 {detailModal.roleName}
               </h3>
               <button
                 type="button"
                 onClick={() => setIsAddingMemberToRole(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 disabled={isSubmittingMember}
               >
                 <X className="w-5 h-5" />
@@ -508,7 +508,7 @@ const RoleManager = () => {
                   <input
                     type="text"
                     placeholder="搜尋用戶姓名或員工編號..."
-                    className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-100 focus:border-purple-400 transition-all font-bold"
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-2 border-indigo-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200 font-bold"
                     value={userSearchTerm}
                     onChange={(e) => setUserSearchTerm(e.target.value)}
                   />
@@ -517,7 +517,7 @@ const RoleManager = () => {
               
               {loadingAllUsers ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-4">
-                  <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
+                  <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
                   <p className="text-gray-500 font-bold">載入用戶列表中...</p>
                 </div>
               ) : (
@@ -541,10 +541,10 @@ const RoleManager = () => {
                         type="button"
                         onClick={() => handleAddMemberToRole(user.emp_id)}
                         disabled={isSubmittingMember}
-                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-purple-50 rounded-xl transition-all text-left group disabled:opacity-50"
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-green-50 rounded-xl transition-all duration-200 text-left group disabled:opacity-50 cursor-pointer"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-black text-sm">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-sm">
                             {user.name.charAt(0)}
                           </div>
                           <div>
@@ -556,9 +556,9 @@ const RoleManager = () => {
                           </div>
                         </div>
                         {isSubmittingMember ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                          <Loader2 className="w-4 h-4 animate-spin text-green-600" />
                         ) : (
-                          <Plus className="w-5 h-5 text-purple-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <Plus className="w-5 h-5 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                         )}
                       </button>
                     ))}
@@ -594,7 +594,7 @@ const RoleManager = () => {
                   setError(null);
                   setUserSearchTerm('');
                 }}
-                className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
+                className="w-full py-2.5 bg-gray-600 text-white rounded-xl font-bold hover:bg-gray-700 transition-all duration-200 active:scale-95 cursor-pointer"
                 disabled={isSubmittingMember}
               >
                 取消
@@ -690,14 +690,14 @@ const RoleManager = () => {
       {isAdding && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50">
+            <div className="p-6 border-b border-green-100 flex items-center justify-between bg-gradient-to-r from-green-50 to-emerald-50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                <Plus className="w-5 h-5 text-purple-600" />
+                <Plus className="w-5 h-5 text-green-600" />
                 新增角色
               </h3>
               <button 
                 onClick={() => setIsAdding(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 disabled={isSubmitting}
               >
                 <X className="w-5 h-5" />
@@ -713,7 +713,7 @@ const RoleManager = () => {
                   placeholder="例如：IT 管理員"
                   value={newRoleName}
                   onChange={(e) => setNewRoleName(e.target.value)}
-                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-purple-500 outline-none transition-all font-bold text-gray-800 placeholder:font-normal"
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none transition-all duration-200 font-bold text-gray-800 placeholder:font-normal"
                 />
               </div>
 
@@ -728,7 +728,7 @@ const RoleManager = () => {
             <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
               <button
                 onClick={() => setIsAdding(false)}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                 disabled={isSubmitting}
               >
                 取消
@@ -736,7 +736,7 @@ const RoleManager = () => {
               <button
                 onClick={handleAddRole}
                 disabled={isSubmitting}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-purple-600 shadow-md shadow-purple-200 hover:bg-purple-700 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-green-500 shadow-md shadow-green-200 hover:bg-green-600 hover:shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
               >
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
                 確認新增
@@ -750,14 +750,14 @@ const RoleManager = () => {
       {isEditing && editingRole && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50">
+            <div className="p-6 border-b border-indigo-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                <PenTool className="w-5 h-5 text-purple-600" />
+                <PenTool className="w-5 h-5 text-indigo-600" />
                 編輯角色
               </h3>
               <button 
                 onClick={() => setIsEditing(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 disabled={isSubmitting}
               >
                 <X className="w-5 h-5" />
@@ -772,7 +772,7 @@ const RoleManager = () => {
                   type="text"
                   value={newRoleName}
                   onChange={(e) => setNewRoleName(e.target.value)}
-                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-purple-500 outline-none transition-all font-bold text-gray-800 placeholder:font-normal"
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 font-bold text-gray-800 placeholder:font-normal"
                 />
               </div>
 
@@ -787,7 +787,7 @@ const RoleManager = () => {
             <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
               <button
                 onClick={() => setIsEditing(false)}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all"
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all duration-200 cursor-pointer"
                 disabled={isSubmitting}
               >
                 取消
@@ -795,7 +795,7 @@ const RoleManager = () => {
               <button
                 onClick={handleEditRole}
                 disabled={isSubmitting}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-purple-600 shadow-md shadow-purple-200 hover:bg-purple-700 transition-all flex items-center justify-center gap-2"
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-indigo-600 shadow-md shadow-indigo-200 hover:bg-indigo-700 hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
               >
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
                 儲存變更

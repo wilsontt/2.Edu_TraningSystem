@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* UI UX Pro Max Design System - 企業教育訓練系統 */
-@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+/* Google Fonts 已移至 index.html 以避免 @import 順序問題 */
 
 @theme {
   /* Brand Colors - Original */

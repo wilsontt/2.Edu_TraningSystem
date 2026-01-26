@@ -264,7 +264,7 @@ const UserManager = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-            <UserIcon className="w-8 h-8 text-blue-600" />
+            <UserIcon className="w-8 h-8 text-indigo-600" />
             人員管理
           </h1>
           <p className="text-gray-500 mt-2 font-medium">檢視與管理系統使用者、角色及單位分配</p>
@@ -272,7 +272,7 @@ const UserManager = () => {
       </div>
 
       {/* Search Bar */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-indigo-100/50">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
@@ -280,110 +280,110 @@ const UserManager = () => {
             placeholder="搜尋姓名或員工編號..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-transparent focus:bg-white focus:border-blue-500 rounded-xl transition-all outline-none font-bold text-gray-700 placeholder:text-gray-400"
+            className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl transition-all duration-200 outline-none font-bold text-gray-700 placeholder:text-gray-400"
           />
         </div>
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-indigo-100/50 overflow-hidden">
         {isLoading ? (
           <div className="p-12 flex flex-col items-center justify-center text-gray-400">
-            <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-500" />
+            <Loader2 className="w-10 h-10 animate-spin mb-4 text-indigo-600" />
             <p className="font-bold">載入使用者資料中...</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-gradient-to-r from-indigo-50/50 to-purple-50/30 border-b border-indigo-100">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider w-16">項次</th>
+                  <th className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider w-16">項次</th>
                   <th 
                     onClick={() => handleSort('emp_id')}
-                    className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group"
+                    className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-all duration-200 group"
                   >
                     <div className="flex items-center gap-2">
                       <span>員工編號</span>
                       {sortConfig.field === 'emp_id' ? (
                         sortConfig.direction === 'asc' ? (
-                          <ArrowUp className="w-4 h-4 text-blue-600" />
+                          <ArrowUp className="w-4 h-4 text-indigo-600" />
                         ) : (
-                          <ArrowDown className="w-4 h-4 text-blue-600" />
+                          <ArrowDown className="w-4 h-4 text-indigo-600" />
                         )
                       ) : (
-                        <ArrowUpDown className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <ArrowUpDown className="w-4 h-4 text-indigo-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                       )}
                     </div>
                   </th>
                   <th 
                     onClick={() => handleSort('name')}
-                    className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group"
+                    className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-all duration-200 group"
                   >
                     <div className="flex items-center gap-2">
                       <span>姓名</span>
                       {sortConfig.field === 'name' ? (
                         sortConfig.direction === 'asc' ? (
-                          <ArrowUp className="w-4 h-4 text-blue-600" />
+                          <ArrowUp className="w-4 h-4 text-indigo-600" />
                         ) : (
-                          <ArrowDown className="w-4 h-4 text-blue-600" />
+                          <ArrowDown className="w-4 h-4 text-indigo-600" />
                         )
                       ) : (
-                        <ArrowUpDown className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <ArrowUpDown className="w-4 h-4 text-indigo-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                       )}
                     </div>
                   </th>
                   <th 
                     onClick={() => handleSort('dept_id')}
-                    className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group"
+                    className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-all duration-200 group"
                   >
                     <div className="flex items-center gap-2">
                       <span>部門</span>
                       {sortConfig.field === 'dept_id' ? (
                         sortConfig.direction === 'asc' ? (
-                          <ArrowUp className="w-4 h-4 text-blue-600" />
+                          <ArrowUp className="w-4 h-4 text-indigo-600" />
                         ) : (
-                          <ArrowDown className="w-4 h-4 text-blue-600" />
+                          <ArrowDown className="w-4 h-4 text-indigo-600" />
                         )
                       ) : (
-                        <ArrowUpDown className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <ArrowUpDown className="w-4 h-4 text-indigo-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                       )}
                     </div>
                   </th>
                   <th 
                     onClick={() => handleSort('role_id')}
-                    className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group"
+                    className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-all duration-200 group"
                   >
                     <div className="flex items-center gap-2">
                       <span>角色</span>
                       {sortConfig.field === 'role_id' ? (
                         sortConfig.direction === 'asc' ? (
-                          <ArrowUp className="w-4 h-4 text-blue-600" />
+                          <ArrowUp className="w-4 h-4 text-indigo-600" />
                         ) : (
-                          <ArrowDown className="w-4 h-4 text-blue-600" />
+                          <ArrowDown className="w-4 h-4 text-indigo-600" />
                         )
                       ) : (
-                        <ArrowUpDown className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <ArrowUpDown className="w-4 h-4 text-indigo-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                       )}
                     </div>
                   </th>
                   <th 
                     onClick={() => handleSort('status')}
-                    className="px-6 py-4 text-left text-sm font-black text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors group"
+                    className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-all duration-200 group"
                   >
                     <div className="flex items-center gap-2">
                       <span>狀態</span>
                       {sortConfig.field === 'status' ? (
                         sortConfig.direction === 'asc' ? (
-                          <ArrowUp className="w-4 h-4 text-blue-600" />
+                          <ArrowUp className="w-4 h-4 text-indigo-600" />
                         ) : (
-                          <ArrowDown className="w-4 h-4 text-blue-600" />
+                          <ArrowDown className="w-4 h-4 text-indigo-600" />
                         )
                       ) : (
-                        <ArrowUpDown className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <ArrowUpDown className="w-4 h-4 text-indigo-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                       )}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-right text-sm font-black text-gray-400 uppercase tracking-wider">操作</th>
+                  <th className="px-6 py-4 text-right text-sm font-black text-indigo-500 uppercase tracking-wider">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -393,19 +393,23 @@ const UserManager = () => {
                     return (
                   <tr 
                     key={user.emp_id} 
-                    className={`table-row-zebra table-row-hover transition-colors group ${isSelected ? 'table-row-active' : ''}`}
+                    className={`transition-all duration-200 group cursor-pointer ${
+                      isSelected 
+                        ? 'bg-indigo-50 border-l-4 border-l-indigo-500' 
+                        : 'hover:bg-indigo-50/30 even:bg-gray-50/50'
+                    }`}
                     onClick={() => handleRowClick(user.emp_id)}
                     onDoubleClick={() => handleEdit(user)}
                   >
-                    <td className="px-6 py-4 whitespace-nowrap border-l-4 border-transparent text-sm font-black text-gray-300">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-300">
                       {displayIndex}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap border-l-4 border-transparent">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-bold text-gray-900 font-mono">{user.emp_id}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">
                           {user.name[0]}
                         </div>
                         <div className="text-sm font-bold text-gray-900">{user.name}</div>
@@ -413,7 +417,7 @@ const UserManager = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-1.5 text-sm font-medium text-gray-600">
-                        <Building2 className="w-4 h-4 text-gray-400" />
+                        <Building2 className="w-4 h-4 text-indigo-400" />
                         {user.department?.name || '無部門'}
                       </div>
                     </td>
@@ -422,7 +426,7 @@ const UserManager = () => {
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
                           user.role.name === 'Admin' 
                             ? 'bg-purple-100 text-purple-700' 
-                            : 'bg-blue-100 text-blue-700'
+                            : 'bg-indigo-100 text-indigo-700'
                         }`}>
                           <Shield className="w-3 h-3 mr-1" />
                           {user.role.name}
@@ -443,7 +447,7 @@ const UserManager = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleEdit(user); }}
-                        className="text-gray-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-lg"
+                        className="text-gray-400 hover:text-indigo-600 transition-all duration-200 p-2 hover:bg-indigo-50 rounded-lg cursor-pointer"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
@@ -458,7 +462,7 @@ const UserManager = () => {
         
         {/* 分頁控制 */}
         {!isLoading && processedUsers.length > 0 && (
-          <div className="border-t border-gray-100 bg-gray-50 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="border-t border-indigo-100 bg-indigo-50/30 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
             {/* 左側：每頁筆數選擇 */}
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-600 font-medium">每頁顯示：</span>
@@ -468,13 +472,13 @@ const UserManager = () => {
                   setPageSize(Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="px-3 py-1.5 border border-indigo-200 rounded-lg bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer transition-all duration-200"
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>
                 <option value={50}>50</option>
               </select>
-              <span className="text-sm text-gray-600 font-medium">
+              <span className="text-sm text-indigo-600 font-medium">
                 共 {processedUsers.length} 筆
               </span>
             </div>
@@ -485,7 +489,7 @@ const UserManager = () => {
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="p-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-2 rounded-lg border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
                 title="上一頁"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -503,7 +507,7 @@ const UserManager = () => {
                     setPageInput(currentPage.toString());
                     e.target.select();
                   }}
-                  className="w-12 px-2 py-1 text-center border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-12 px-2 py-1 text-center border border-indigo-200 rounded-lg bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                 />
                 <span className="text-sm text-gray-600 font-medium">頁 / 共 {totalPages} 頁</span>
               </form>
@@ -512,7 +516,7 @@ const UserManager = () => {
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
-                className="p-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-2 rounded-lg border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
                 title="下一頁"
               >
                 <ChevronRight className="w-5 h-5" />
@@ -526,14 +530,14 @@ const UserManager = () => {
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+            <div className="p-6 border-b border-indigo-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                <Edit2 className="w-5 h-5 text-blue-600" />
+                <Edit2 className="w-5 h-5 text-indigo-600" />
                 編輯使用者
               </h3>
               <button 
                 onClick={() => setEditingUser(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 disabled={isSubmitting}
               >
                 <X className="w-5 h-5" />
@@ -541,7 +545,7 @@ const UserManager = () => {
             </div>
             
             <div className="p-6 space-y-4">
-              <div className="space-y-4 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+              <div className="space-y-4 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
                  <div className="flex justify-between">
                     <span className="text-sm text-gray-500 font-bold">員工編號</span>
                     <span className="text-sm font-mono font-black text-gray-800">{editingUser.emp_id}</span>
@@ -558,7 +562,7 @@ const UserManager = () => {
                   value={editForm.dept_id}
                   disabled={editingUser.emp_id.toLowerCase() === 'admin'}
                   onChange={(e) => setEditForm({ ...editForm, dept_id: Number(e.target.value) })}
-                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-blue-500 outline-none transition-all font-medium text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 font-medium text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {departments.map(dept => (
                     <option key={dept.id} value={dept.id}>{dept.name}</option>
@@ -572,7 +576,7 @@ const UserManager = () => {
                   value={editForm.role_id || 0}
                   disabled={editingUser.emp_id.toLowerCase() === 'admin'}
                   onChange={(e) => setEditForm({ ...editForm, role_id: Number(e.target.value) })}
-                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-blue-500 outline-none transition-all font-medium text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 font-medium text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   <option value={0}>未分配</option>
                   {roles.map(role => (
@@ -587,7 +591,7 @@ const UserManager = () => {
                   value={editForm.status}
                   disabled={editingUser.emp_id.toLowerCase() === 'admin'}
                   onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-blue-500 outline-none transition-all font-medium text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 font-medium text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   <option value="active">啟用 (Active)</option>
                   <option value="inactive">停用 (Inactive)</option>
@@ -608,7 +612,7 @@ const UserManager = () => {
             <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
               <button
                 onClick={() => setEditingUser(null)}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                 disabled={isSubmitting}
               >
                 取消
@@ -616,7 +620,7 @@ const UserManager = () => {
               <button
                 onClick={handleSave}
                 disabled={isSubmitting}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-blue-600 shadow-md shadow-blue-200 hover:bg-blue-700 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-indigo-600 shadow-md shadow-indigo-200 hover:bg-indigo-700 hover:shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
               >
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
                 儲存變更

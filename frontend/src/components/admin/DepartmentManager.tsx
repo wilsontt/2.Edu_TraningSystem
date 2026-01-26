@@ -232,7 +232,7 @@ const DepartmentManager = () => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+        <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
         <p className="text-gray-500 font-bold animate-pulse">正在載入單位資料...</p>
       </div>
     );
@@ -270,14 +270,14 @@ const DepartmentManager = () => {
       {viewingDeptUsers && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-linear-to-r from-blue-50 to-indigo-50">
+            <div className="p-6 border-b border-indigo-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
                   <Users className="w-6 h-6" />
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-gray-900">{viewingDeptUsers.department_name}</h3>
-                  <p className="text-sm font-bold text-gray-500">共 {viewingDeptUsers.user_count} 位使用者</p>
+                  <p className="text-sm font-bold text-indigo-600/70">共 {viewingDeptUsers.user_count} 位使用者</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -287,7 +287,7 @@ const DepartmentManager = () => {
                     setIsAddingMember(true);
                     fetchAllUsers();
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all text-sm"
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 hover:shadow-md transition-all duration-200 text-sm cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   新增成員
@@ -300,9 +300,9 @@ const DepartmentManager = () => {
                     setEditingMember(null);
                     setRemovingMember(null);
                   }}
-                  className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-all"
+                  className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-xl transition-all duration-200 cursor-pointer"
                 >
-                  <X className="w-5 h-5 text-blue-600" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
@@ -310,13 +310,13 @@ const DepartmentManager = () => {
             <div className="p-6 overflow-y-auto flex-1">
               {loadingUsers ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-4">
-                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                  <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
                   <p className="text-gray-500 font-bold">載入中...</p>
                 </div>
               ) : viewingDeptUsers.users.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-4">
-                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
-                    <Users className="w-8 h-8 text-gray-400" />
+                  <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center">
+                    <Users className="w-8 h-8 text-indigo-300" />
                   </div>
                   <p className="text-gray-500 font-bold">目前無使用者</p>
                 </div>
@@ -325,10 +325,10 @@ const DepartmentManager = () => {
                   {viewingDeptUsers.users.map((user) => (
                     <div
                       key={user.emp_id}
-                      className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all group"
+                      className="flex items-center justify-between p-4 bg-gray-50 hover:bg-indigo-50/50 rounded-xl transition-all duration-200 group cursor-pointer"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-sm">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-sm">
                           {user.name.charAt(0)}
                         </div>
                         <div>
@@ -340,7 +340,7 @@ const DepartmentManager = () => {
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                           user.role === 'Admin' 
                             ? 'bg-purple-100 text-purple-700' 
-                            : 'bg-blue-100 text-blue-700'
+                            : 'bg-indigo-100 text-indigo-700'
                         }`}>
                           {user.role}
                         </span>
@@ -352,11 +352,11 @@ const DepartmentManager = () => {
                           {user.status === 'active' ? '啟用' : '停用'}
                         </span>
                         {user.emp_id.toLowerCase() !== 'admin' && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                             <button
                               type="button"
                               onClick={() => setEditingMember(user)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                              className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all duration-200 cursor-pointer"
                               title="編輯成員"
                             >
                               <Edit2 className="w-4 h-4" />
@@ -364,7 +364,7 @@ const DepartmentManager = () => {
                             <button
                               type="button"
                               onClick={() => setRemovingMember(user)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 cursor-pointer"
                               title="移除成員"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -387,7 +387,7 @@ const DepartmentManager = () => {
                   setEditingMember(null);
                   setRemovingMember(null);
                 }}
-                className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
+                className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
                 關閉
               </button>
@@ -400,15 +400,15 @@ const DepartmentManager = () => {
       {isAddingMember && viewingDeptUsers && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-blue-50">
+            <div className="p-6 border-b border-green-100 flex items-center justify-between bg-gradient-to-r from-green-50 to-emerald-50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                <Plus className="w-5 h-5 text-blue-600" />
+                <Plus className="w-5 h-5 text-green-600" />
                 新增成員到 {viewingDeptUsers.department_name}
               </h3>
               <button
                 type="button"
                 onClick={() => setIsAddingMember(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 disabled={isSubmittingMember}
               >
                 <X className="w-5 h-5" />
@@ -422,7 +422,7 @@ const DepartmentManager = () => {
                   <input
                     type="text"
                     placeholder="搜尋用戶姓名或員工編號..."
-                    className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all font-bold"
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200 font-bold"
                     value={userSearchTerm}
                     onChange={(e) => setUserSearchTerm(e.target.value)}
                   />
@@ -431,7 +431,7 @@ const DepartmentManager = () => {
               
               {loadingAllUsers ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-4">
-                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                  <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
                   <p className="text-gray-500 font-bold">載入用戶列表中...</p>
                 </div>
               ) : (
@@ -456,10 +456,10 @@ const DepartmentManager = () => {
                         type="button"
                         onClick={() => handleAddMember(user.emp_id)}
                         disabled={isSubmittingMember}
-                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-blue-50 rounded-xl transition-all text-left group disabled:opacity-50"
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-green-50 rounded-xl transition-all duration-200 text-left group disabled:opacity-50 cursor-pointer"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-black text-sm">
+                          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">
                             {user.name.charAt(0)}
                           </div>
                           <div>
@@ -471,9 +471,9 @@ const DepartmentManager = () => {
                           </div>
                         </div>
                         {isSubmittingMember ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                          <Loader2 className="w-4 h-4 animate-spin text-green-600" />
                         ) : (
-                          <Plus className="w-5 h-5 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <Plus className="w-5 h-5 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                         )}
                       </button>
                     ))}
@@ -499,7 +499,7 @@ const DepartmentManager = () => {
               <button
                 type="button"
                 onClick={() => setIsAddingMember(false)}
-                className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
+                className="w-full py-2.5 bg-gray-600 text-white rounded-xl font-bold hover:bg-gray-700 transition-all duration-200 active:scale-95 cursor-pointer"
                 disabled={isSubmittingMember}
               >
                 取消
@@ -513,15 +513,15 @@ const DepartmentManager = () => {
       {editingMember && viewingDeptUsers && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-blue-50">
+            <div className="p-6 border-b border-indigo-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                <Edit2 className="w-5 h-5 text-blue-600" />
+                <Edit2 className="w-5 h-5 text-indigo-600" />
                 編輯成員部門
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingMember(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 disabled={isSubmittingMember}
               >
                 <X className="w-5 h-5" />
@@ -529,7 +529,7 @@ const DepartmentManager = () => {
             </div>
             
             <div className="p-6 space-y-4">
-              <div className="space-y-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+              <div className="space-y-2 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500 font-bold">員工編號</span>
                   <span className="text-sm font-mono font-black text-gray-800">{editingMember.emp_id}</span>
@@ -549,7 +549,7 @@ const DepartmentManager = () => {
                 <select
                   value={targetDeptId || ''}
                   onChange={(e) => setTargetDeptId(Number(e.target.value))}
-                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-blue-500 outline-none transition-all font-medium text-gray-800"
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 font-medium text-gray-800 cursor-pointer"
                   disabled={isSubmittingMember}
                 >
                   <option value="">請選擇部門</option>
@@ -573,7 +573,7 @@ const DepartmentManager = () => {
               <button
                 type="button"
                 onClick={() => setEditingMember(null)}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all"
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all duration-200 cursor-pointer"
                 disabled={isSubmittingMember}
               >
                 取消
@@ -582,7 +582,7 @@ const DepartmentManager = () => {
                 type="button"
                 onClick={() => targetDeptId && handleEditMember(targetDeptId)}
                 disabled={!targetDeptId || isSubmittingMember}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-blue-600 shadow-md shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-indigo-600 shadow-md shadow-indigo-200 hover:bg-indigo-700 hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {isSubmittingMember ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
                 確認變更
@@ -676,7 +676,7 @@ const DepartmentManager = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-black text-gray-800 flex items-center gap-2">
-            <Building2 className="w-8 h-8 text-blue-600" />
+            <Building2 className="w-8 h-8 text-indigo-600" />
             單位管理
           </h1>
           <p className="text-sm text-gray-500 font-bold mt-1">管理系統內的組織部門與課別清單</p>
@@ -684,21 +684,21 @@ const DepartmentManager = () => {
         <button
           type="button"
           onClick={() => setIsAdding(true)}
-          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-100 hover:scale-105 active:scale-95 transition-all text-sm"
+          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-green-500 text-white rounded-xl font-bold shadow-lg shadow-green-200 hover:bg-green-600 hover:shadow-green-300 hover:scale-105 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 text-sm cursor-pointer"
         >
           <Plus className="w-5 h-5" />
           <span>新增單位</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+      <div className="bg-white rounded-3xl shadow-xl shadow-indigo-100/50 border border-indigo-100/50 overflow-hidden">
+        <div className="p-4 border-b border-indigo-100/50 bg-indigo-50/30">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="搜尋單位名稱..."
-              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all font-bold"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-indigo-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200 font-bold"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -708,21 +708,21 @@ const DepartmentManager = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-gray-50/30">
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider w-24 text-center">項次</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">單位名稱</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider text-right">操作</th>
+              <tr className="bg-gradient-to-r from-indigo-50/50 to-purple-50/30">
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider w-24 text-center">項次</th>
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">單位名稱</th>
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider text-right">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {isAdding && (
-                <tr className="bg-blue-50/20 animate-in fade-in slide-in-from-top-1 duration-200">
-                  <td className="px-6 py-4 text-center text-sm font-bold text-blue-400 italic">NEW</td>
+                <tr className="bg-gradient-to-r from-green-50/50 to-emerald-50/30 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <td className="px-6 py-4 text-center text-sm font-bold text-green-500 italic">NEW</td>
                   <td className="px-6 py-4">
                     <input
                       autoFocus
                       type="text"
-                      className="w-full sm:w-80 px-4 py-2 border-2 border-blue-400 rounded-xl text-sm font-bold focus:outline-none shadow-sm shadow-blue-50 transition-all"
+                      className="w-full sm:w-80 px-4 py-2.5 border-2 border-green-400 rounded-xl text-sm font-bold focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 shadow-sm shadow-green-50 transition-all duration-200"
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
@@ -731,10 +731,10 @@ const DepartmentManager = () => {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
-                      <button type="button" onClick={handleAdd} className="p-2.5 text-green-600 hover:bg-green-100 rounded-xl transition-all shadow-sm bg-white hover:scale-110">
+                      <button type="button" onClick={handleAdd} className="p-2.5 text-green-600 hover:bg-green-100 rounded-xl transition-all duration-200 shadow-sm bg-white hover:scale-110 hover:shadow-md cursor-pointer">
                         <Check className="w-5 h-5" />
                       </button>
-                      <button type="button" onClick={() => setIsAdding(false)} className="p-2.5 text-red-600 hover:bg-red-100 rounded-xl transition-all shadow-sm bg-white hover:scale-110">
+                      <button type="button" onClick={() => setIsAdding(false)} className="p-2.5 text-red-600 hover:bg-red-100 rounded-xl transition-all duration-200 shadow-sm bg-white hover:scale-110 hover:shadow-md cursor-pointer">
                         <X className="w-5 h-5" />
                       </button>
                     </div>
@@ -755,7 +755,11 @@ const DepartmentManager = () => {
                 filteredDepts.map((dept, index) => (
                   <tr 
                     key={dept.id} 
-                    className="table-row-zebra table-row-hover transition-colors group"
+                    className={`transition-all duration-200 group cursor-pointer ${
+                      isEditing === dept.id 
+                        ? 'bg-indigo-50/50 border-l-4 border-l-indigo-500' 
+                        : 'hover:bg-indigo-50/30 even:bg-gray-50/50'
+                    }`}
                     onDoubleClick={() => {
                       setIsEditing(dept.id);
                       setEditName(dept.name);
@@ -767,7 +771,7 @@ const DepartmentManager = () => {
                         <input
                           autoFocus
                           type="text"
-                          className="w-full sm:w-80 px-4 py-2 border-2 border-blue-400 rounded-xl text-sm font-bold focus:outline-none shadow-sm shadow-blue-50 transition-all"
+                          className="w-full sm:w-80 px-4 py-2.5 border-2 border-indigo-400 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 shadow-sm shadow-indigo-50 transition-all duration-200"
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleUpdate(dept.id)}
@@ -776,10 +780,10 @@ const DepartmentManager = () => {
                         <button
                           type="button"
                           onClick={() => handleViewUsers(dept.id)}
-                          className="font-bold text-gray-700 hover:text-blue-600 hover:underline transition-colors text-left flex items-center gap-2 group/name"
+                          className="font-bold text-gray-700 hover:text-indigo-600 transition-colors duration-200 text-left flex items-center gap-2 group/name cursor-pointer"
                         >
                           <span>{dept.name}</span>
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full group-hover/name:bg-blue-100 group-hover/name:text-blue-600 transition-colors">
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full group-hover/name:bg-indigo-100 group-hover/name:text-indigo-600 transition-colors duration-200">
                             {dept.user_count} 人
                           </span>
                         </button>
@@ -791,15 +795,15 @@ const DepartmentManager = () => {
                           <button 
                             type="button"
                             onClick={() => handleViewUsers(dept.id)}
-                            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all text-sm"
+                            className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 hover:shadow-md transition-all duration-200 text-sm cursor-pointer"
                           >
                             <Users className="w-4 h-4" />
                             查看成員
                           </button>
-                          <button type="button" onClick={(e) => handleUpdate(dept.id, e)} className="p-2.5 text-green-600 hover:bg-green-100 rounded-xl transition-all shadow-sm bg-white">
+                          <button type="button" onClick={(e) => handleUpdate(dept.id, e)} className="p-2.5 text-green-600 hover:bg-green-100 rounded-xl transition-all duration-200 shadow-sm bg-white hover:scale-110 hover:shadow-md cursor-pointer">
                             <Check className="w-5 h-5" />
                           </button>
-                          <button type="button" onClick={() => setIsEditing(null)} className="p-2.5 text-red-600 hover:bg-red-100 rounded-xl transition-all shadow-sm bg-white">
+                          <button type="button" onClick={() => setIsEditing(null)} className="p-2.5 text-red-600 hover:bg-red-100 rounded-xl transition-all duration-200 shadow-sm bg-white hover:scale-110 hover:shadow-md cursor-pointer">
                             <X className="w-5 h-5" />
                           </button>
                         </div>
@@ -808,7 +812,7 @@ const DepartmentManager = () => {
                           <button
                             type="button"
                             onClick={() => handleViewUsers(dept.id)}
-                            className="p-4 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-xl transition-all"
+                            className="p-2.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl transition-all duration-200 cursor-pointer"
                             title="查看成員"
                           >
                             <Users className="w-4 h-4" />
@@ -819,7 +823,7 @@ const DepartmentManager = () => {
                               setIsEditing(dept.id);
                               setEditName(dept.name);
                             }}
-                            className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                            className="p-2.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200 opacity-0 group-hover:opacity-100 cursor-pointer"
                             title="編輯單位名稱"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -827,7 +831,7 @@ const DepartmentManager = () => {
                           <button
                             type="button"
                             onClick={(e) => handleDelete(dept.id, e)}
-                            className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                            className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 opacity-0 group-hover:opacity-100 cursor-pointer"
                             title="刪除單位"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -843,7 +847,7 @@ const DepartmentManager = () => {
         </div>
       </div>
       
-      <div className="mt-6 flex items-center gap-2 text-[11px] text-gray-400 font-bold px-2 uppercase tracking-tighter">
+      <div className="mt-6 flex items-center gap-2 text-[11px] text-indigo-400 font-bold px-2 uppercase tracking-tighter">
         <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
           全系統單位同步中 • 資料受 RBAC 保護
       </div>

@@ -183,7 +183,7 @@ const CategoryManager = () => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+        <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
         <p className="text-gray-500 font-bold animate-pulse">正在載入分類資料...</p>
       </div>
     );
@@ -194,7 +194,7 @@ const CategoryManager = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-black text-gray-800 flex items-center gap-2">
-            <FolderTree className="w-8 h-8 text-blue-600" />
+            <FolderTree className="w-8 h-8 text-indigo-600" />
             分類管理
           </h1>
           <p className="text-sm text-gray-500 font-bold mt-1">管理訓練課程的大項目與細項目分類</p>
@@ -202,7 +202,7 @@ const CategoryManager = () => {
         <button
           type="button"
           onClick={() => setIsAddingMain(true)}
-          className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-100 hover:scale-105"
+          className="px-5 py-2.5 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 hover:shadow-green-300 transition-all duration-200 flex items-center gap-2 shadow-lg shadow-green-200 hover:scale-105 hover:-translate-y-0.5 cursor-pointer"
         >
           <Plus className="w-5 h-5" />
           新增大項目
@@ -215,7 +215,7 @@ const CategoryManager = () => {
         <input
           type="text"
           placeholder="搜尋分類名稱..."
-          className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-400 focus:outline-none font-bold text-sm transition-all"
+          className="w-full pl-12 pr-4 py-3 border-2 border-indigo-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 focus:outline-none font-bold text-sm transition-all duration-200"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -223,13 +223,13 @@ const CategoryManager = () => {
 
       {/* Add Main Category Form */}
       {isAddingMain && (
-        <div className="mb-6 p-6 bg-linear-to-r from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200 animate-in slide-in-from-top duration-200">
+        <div className="mb-6 p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl border-2 border-green-200 animate-in slide-in-from-top duration-200">
           <h3 className="text-sm font-black text-gray-700 mb-3">新增大項目</h3>
           <div className="flex gap-3">
             <input
               autoFocus
               type="text"
-              className="flex-1 px-4 py-2.5 border-2 border-blue-400 rounded-xl text-sm font-bold focus:outline-none shadow-sm"
+              className="flex-1 px-4 py-2.5 border-2 border-green-400 rounded-xl text-sm font-bold focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 shadow-sm transition-all duration-200"
               placeholder="輸入大項目名稱..."
               value={newMainName}
               onChange={(e) => setNewMainName(e.target.value)}
@@ -240,10 +240,10 @@ const CategoryManager = () => {
                 }
               }}
             />
-            <button type="button" onClick={handleAddMain} className="px-4 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-all">
+            <button type="button" onClick={handleAddMain} className="px-4 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 hover:shadow-md transition-all duration-200 cursor-pointer">
               <Check className="w-5 h-5" />
             </button>
-            <button type="button" onClick={() => setIsAddingMain(false)} className="px-4 py-2.5 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all">
+            <button type="button" onClick={() => setIsAddingMain(false)} className="px-4 py-2.5 bg-gray-500 text-white rounded-xl font-bold hover:bg-gray-600 hover:shadow-md transition-all duration-200 cursor-pointer">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -259,27 +259,27 @@ const CategoryManager = () => {
           </div>
         ) : (
           filteredCategories.map((mainCat) => (
-            <div key={mainCat.id} className="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-100 transition-all hover:shadow-lg">
+            <div key={mainCat.id} className="bg-white rounded-2xl shadow-md overflow-hidden border border-indigo-100/50 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-100/50">
               {/* Main Category Header */}
-              <div className="p-4 bg-linear-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+              <div className="p-4 bg-gradient-to-r from-indigo-50/50 to-purple-50/30 border-b border-indigo-100">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1">
                     <button
                       type="button"
                       onClick={() => toggleCategory(mainCat.id)}
-                      className="p-1 hover:bg-white/50 rounded-lg transition-all"
+                      className="p-1 hover:bg-white/70 rounded-lg transition-all duration-200 cursor-pointer"
                     >
                       {expandedCategories.has(mainCat.id) ? (
-                        <ChevronDown className="w-5 h-5 text-gray-600" />
+                        <ChevronDown className="w-5 h-5 text-indigo-600" />
                       ) : (
-                        <ChevronRight className="w-5 h-5 text-gray-600" />
+                        <ChevronRight className="w-5 h-5 text-indigo-600" />
                       )}
                     </button>
                     {editingMainId === mainCat.id ? (
                       <input
                         autoFocus
                         type="text"
-                        className="flex-1 px-3 py-1.5 border-2 border-blue-400 rounded-lg text-sm font-bold focus:outline-none"
+                        className="flex-1 px-3 py-1.5 border-2 border-indigo-400 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
                         value={editMainName}
                         onChange={(e) => setEditMainName(e.target.value)}
                         onKeyDown={(e) => {
@@ -292,17 +292,17 @@ const CategoryManager = () => {
                     ) : (
                       <h3 className="text-lg font-black text-gray-800">{mainCat.name}</h3>
                     )}
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
+                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">
                       {mainCat.sub_categories.length} 項
                     </span>
                   </div>
                   <div className="flex gap-2">
                     {editingMainId === mainCat.id ? (
                       <>
-                        <button type="button" onClick={(e) => handleUpdateMain(mainCat.id, e)} className="p-2 text-green-600 hover:bg-green-100 rounded-xl transition-all">
+                        <button type="button" onClick={(e) => handleUpdateMain(mainCat.id, e)} className="p-2 text-green-600 hover:bg-green-100 rounded-xl transition-all duration-200 cursor-pointer">
                           <Check className="w-4 h-4" />
                         </button>
-                        <button type="button" onClick={() => setEditingMainId(null)} className="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-all">
+                        <button type="button" onClick={() => setEditingMainId(null)} className="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-all duration-200 cursor-pointer">
                           <X className="w-4 h-4" />
                         </button>
                       </>
@@ -314,14 +314,14 @@ const CategoryManager = () => {
                             setEditingMainId(mainCat.id);
                             setEditMainName(mainCat.name);
                           }}
-                          className="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-all"
+                          className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-xl transition-all duration-200 cursor-pointer"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           type="button"
                           onClick={(e) => handleDeleteMain(mainCat.id, e)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-xl transition-all"
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-xl transition-all duration-200 cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -339,7 +339,7 @@ const CategoryManager = () => {
                     <button
                       type="button"
                       onClick={() => setAddingSubToMainId(mainCat.id)}
-                      className="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all font-bold text-sm flex items-center justify-center gap-2"
+                      className="w-full py-2.5 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-400 hover:border-green-400 hover:text-green-600 hover:bg-green-50 transition-all duration-200 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       新增細項目
@@ -348,11 +348,11 @@ const CategoryManager = () => {
 
                   {/* Add Sub Form */}
                   {addingSubToMainId === mainCat.id && (
-                    <div className="p-3 bg-blue-50 rounded-xl border-2 border-blue-200 flex gap-2">
+                    <div className="p-3 bg-green-50 rounded-xl border-2 border-green-200 flex gap-2">
                       <input
                         autoFocus
                         type="text"
-                        className="flex-1 px-3 py-2 border-2 border-blue-400 rounded-lg text-sm font-bold focus:outline-none"
+                        className="flex-1 px-3 py-2 border-2 border-green-400 rounded-lg text-sm font-bold focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all duration-200"
                         placeholder="輸入細項目名稱..."
                         value={newSubName}
                         onChange={(e) => setNewSubName(e.target.value)}
@@ -363,10 +363,10 @@ const CategoryManager = () => {
                           }
                         }}
                       />
-                      <button type="button" onClick={(e) => handleAddSub(mainCat.id, e)} className="px-3 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-all">
+                      <button type="button" onClick={(e) => handleAddSub(mainCat.id, e)} className="px-3 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 hover:shadow-md transition-all duration-200 cursor-pointer">
                         <Check className="w-4 h-4" />
                       </button>
-                      <button type="button" onClick={() => setAddingSubToMainId(null)} className="px-3 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-all">
+                      <button type="button" onClick={() => setAddingSubToMainId(null)} className="px-3 py-2 bg-gray-500 text-white rounded-lg font-bold hover:bg-gray-600 hover:shadow-md transition-all duration-200 cursor-pointer">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -376,12 +376,12 @@ const CategoryManager = () => {
                   {mainCat.sub_categories
                     .filter(sub => !searchTerm || sub.name.toLowerCase().includes(searchTerm.toLowerCase()) || mainCat.name.toLowerCase().includes(searchTerm.toLowerCase()))
                     .map((subCat) => (
-                    <div key={subCat.id} className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all group">
+                    <div key={subCat.id} className="flex items-center justify-between p-3 bg-gray-50 hover:bg-indigo-50/50 rounded-xl transition-all duration-200 group cursor-pointer">
                       {editingSubId === subCat.id ? (
                         <input
                           autoFocus
                           type="text"
-                          className="flex-1 px-3 py-1.5 border-2 border-blue-400 rounded-lg text-sm font-bold focus:outline-none"
+                          className="flex-1 px-3 py-1.5 border-2 border-indigo-400 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
                           value={editSubName}
                           onChange={(e) => setEditSubName(e.target.value)}
                           onKeyDown={(e) => {
@@ -394,13 +394,13 @@ const CategoryManager = () => {
                       ) : (
                         <span className="font-bold text-gray-700 text-sm">• {subCat.name}</span>
                       )}
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         {editingSubId === subCat.id ? (
                           <>
-                            <button type="button" onClick={(e) => handleUpdateSub(subCat.id, mainCat.id, e)} className="p-1.5 text-green-600 hover:bg-green-100 rounded-lg transition-all">
+                            <button type="button" onClick={(e) => handleUpdateSub(subCat.id, mainCat.id, e)} className="p-1.5 text-green-600 hover:bg-green-100 rounded-lg transition-all duration-200 cursor-pointer">
                               <Check className="w-4 h-4" />
                             </button>
-                            <button type="button" onClick={() => setEditingSubId(null)} className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-all">
+                            <button type="button" onClick={() => setEditingSubId(null)} className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-all duration-200 cursor-pointer">
                               <X className="w-4 h-4" />
                             </button>
                           </>
@@ -412,14 +412,14 @@ const CategoryManager = () => {
                                 setEditingSubId(subCat.id);
                                 setEditSubName(subCat.name);
                               }}
-                              className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all duration-200 cursor-pointer"
                             >
                               <Edit2 className="w-3 h-3" />
                             </button>
                             <button
                               type="button"
                               onClick={(e) => handleDeleteSub(subCat.id, e)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all"
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all duration-200 cursor-pointer"
                             >
                               <Trash2 className="w-3 h-3" />
                             </button>

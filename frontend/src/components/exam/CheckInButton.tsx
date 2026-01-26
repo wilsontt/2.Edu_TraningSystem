@@ -69,7 +69,7 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
     if (loading) {
         return (
             <div className="flex items-center gap-2 text-gray-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
                 <span className="text-sm">載入中...</span>
             </div>
         );
@@ -88,10 +88,10 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
         
         return (
             <div className="flex items-center gap-2 text-green-600">
-                <CheckCircle className="w-4 h-4" />
-                <span className="text-sm font-medium">已報到</span>
+                <CheckCircle className="w-5 h-5" />
+                <span className="text-sm font-bold">已報到</span>
                 {checkinTime && (
-                    <span className="text-xs text-gray-500">({checkinTime})</span>
+                    <span className="text-xs text-gray-500 font-mono">({checkinTime})</span>
                 )}
             </div>
         );
@@ -108,7 +108,7 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
             <button
                 onClick={handleCheckIn}
                 disabled={checkingIn}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-all duration-200 shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-200 disabled:bg-indigo-300 disabled:cursor-not-allowed cursor-pointer"
             >
                 {checkingIn ? (
                     <>

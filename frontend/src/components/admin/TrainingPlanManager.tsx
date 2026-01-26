@@ -285,7 +285,7 @@ const TrainingPlanManager = () => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+        <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
         <p className="text-gray-500 font-bold animate-pulse">正在載入訓練計畫...</p>
       </div>
     );
@@ -308,7 +308,7 @@ const TrainingPlanManager = () => {
         {/* ... (keep header) ... */}
         <div>
           <h1 className="text-2xl font-black text-gray-800 flex items-center gap-2">
-            <BookOpen className="w-8 h-8 text-blue-600" />
+            <BookOpen className="w-8 h-8 text-indigo-600" />
             訓練計畫管理
           </h1>
           <p className="text-sm text-gray-500 font-bold mt-1">管理年度訓練課程計畫與開課資訊</p>
@@ -316,7 +316,7 @@ const TrainingPlanManager = () => {
         <button
           type="button"
           onClick={() => openModal()}
-          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-100 hover:scale-105 active:scale-95 transition-all text-sm"
+          className="flex items-center justify-center gap-2 px-6 py-3 bg-green-500 text-white rounded-xl font-bold shadow-lg shadow-green-200 hover:bg-green-600 hover:shadow-green-300 hover:scale-105 hover:-translate-y-0.5 active:scale-95 transition-all duration-200 text-sm cursor-pointer"
         >
           <Plus className="w-5 h-5" />
           <span>新增計畫</span>
@@ -325,15 +325,15 @@ const TrainingPlanManager = () => {
 
       {/* 列表區塊 (省略) ... */}
       {/* List */}
-      <div className="bg-white rounded-3xl shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-xl shadow-indigo-100/30 border border-indigo-100/50 overflow-hidden">
         {/* ... (table content) ... */}
-        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+        <div className="p-4 border-b border-indigo-100 bg-indigo-50/30">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="搜尋計畫名稱或年份..."
-              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all font-bold"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200 font-bold"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -343,16 +343,16 @@ const TrainingPlanManager = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-gray-50/30">
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider w-16">項次</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider w-24">年份</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">計畫名稱</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">開課單位</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">開始日期</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">結束日期</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">計時</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">報到統計</th>
-                <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-wider">操作</th>
+              <tr className="bg-gradient-to-r from-indigo-50/50 to-purple-50/30">
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider w-16">項次</th>
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider w-24">年份</th>
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">計畫名稱</th>
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">開課單位</th>
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">開始日期</th>
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">結束日期</th>
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">計時</th>
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">報到統計</th>
+                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -369,21 +369,21 @@ const TrainingPlanManager = () => {
                 filteredPlans.map((plan, index) => {
                   const isExpired = plan.end_date && plan.end_date < today;
                   return (
-                  <tr key={plan.id} className={`group border-b border-gray-50 transition-colors even:bg-gray-100/60 hover:bg-blue-50/80 ${isExpired ? 'border-l-4 border-l-orange-400 bg-orange-50/10' : ''}`}>
+                  <tr key={plan.id} className={`group border-b border-gray-50 transition-all duration-200 even:bg-gray-50/50 hover:bg-indigo-50/30 cursor-pointer ${isExpired ? 'border-l-4 border-l-orange-400 bg-orange-50/10' : ''}`}>
                     <td className="px-6 py-4 text-sm font-black text-gray-300">{index + 1}</td>
-                    <td className="px-6 py-4 text-sm font-black text-blue-600">{plan.year}</td>
+                    <td className="px-6 py-4 text-sm font-black text-indigo-600">{plan.year}</td>
                     <td className="px-6 py-4">
                       <div className="font-bold text-gray-800">{plan.title}</div>
                     </td>
                     <td className="px-6 py-4 text-sm font-bold text-gray-600">
                       <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-gray-400" />
+                        <Building2 className="w-4 h-4 text-indigo-400" />
                         {getDeptName(plan.dept_id)}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm font-bold text-gray-600">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-400" />
+                        <Calendar className="w-4 h-4 text-indigo-400" />
                         <span>{plan.training_date}</span>
                       </div>
                     </td>
@@ -417,7 +417,7 @@ const TrainingPlanManager = () => {
                               setSelectedPlanId(plan.id);
                               setIsAttendanceModalOpen(true);
                             }}
-                            className="flex items-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-xs font-bold transition-colors"
+                            className="flex items-center gap-1 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-xs font-bold transition-all duration-200 cursor-pointer"
                           >
                             <Users className="w-3 h-3" />
                             <span>{attendanceStats[plan.id].actual_count}/{attendanceStats[plan.id].expected_count}</span>
@@ -432,7 +432,7 @@ const TrainingPlanManager = () => {
                       <div className="flex items-center gap-2">
                         <button 
                           onClick={() => openModal(plan)}
-                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                          className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
                           title="編輯計畫"
                         >
                           <PenTool className="w-4 h-4" />
@@ -443,7 +443,7 @@ const TrainingPlanManager = () => {
                               setSelectedPlanId(plan.id);
                               setIsAttendanceModalOpen(true);
                             }}
-                            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
                             title="查看報到統計"
                           >
                             <BarChart3 className="w-4 h-4" />
@@ -464,12 +464,12 @@ const TrainingPlanManager = () => {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-linear-to-r from-blue-50 to-indigo-50">
+            <div className={`p-6 border-b flex items-center justify-between ${isEditing ? 'border-indigo-100 bg-gradient-to-r from-indigo-50 to-purple-50' : 'border-green-100 bg-gradient-to-r from-green-50 to-emerald-50'}`}>
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                {isEditing ? <PenTool className="w-5 h-5 text-blue-600" /> : <Plus className="w-5 h-5 text-blue-600" />}
+                {isEditing ? <PenTool className="w-5 h-5 text-indigo-600" /> : <Plus className="w-5 h-5 text-green-600" />}
                 {isEditing ? '編輯訓練計畫' : '新增訓練計畫'}
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/50 rounded-xl transition-all">
+              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/50 rounded-xl transition-all duration-200 cursor-pointer">
                 <X className="w-5 h-5 text-gray-400" />
               </button>
             </div>
@@ -482,7 +482,7 @@ const TrainingPlanManager = () => {
                   autoFocus
                   required
                   type="text"
-                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all"
+                  className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
                   placeholder="例如：新人入職教育訓練"
                   value={formData.title}
                   onChange={e => setFormData({...formData, title: e.target.value})}
@@ -495,7 +495,7 @@ const TrainingPlanManager = () => {
                   <label className="text-xs font-bold text-gray-500 uppercase">訓練大類</label>
                   <select
                     required
-                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all bg-white"
+                    className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white cursor-pointer"
                     value={formData.main_category_id}
                     onChange={e => {
                         const val = e.target.value;
@@ -513,7 +513,7 @@ const TrainingPlanManager = () => {
                   <select
                     required
                     disabled={!formData.main_category_id && !isEditing}
-                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white disabled:bg-gray-50 disabled:text-gray-400 cursor-pointer"
                     value={formData.sub_category_id}
                     onChange={e => setFormData({...formData, sub_category_id: e.target.value})}
                   >
@@ -535,7 +535,7 @@ const TrainingPlanManager = () => {
                 <label className="text-xs font-bold text-gray-500 uppercase">開課單位</label>
                 <select
                   required
-                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all bg-white"
+                  className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white cursor-pointer"
                   value={formData.dept_id}
                   onChange={e => setFormData({...formData, dept_id: e.target.value})}
                 >
@@ -553,7 +553,7 @@ const TrainingPlanManager = () => {
                     <input
                       required
                       type="date"
-                      className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all"
+                      className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 cursor-pointer"
                       value={formData.training_date}
                       onChange={handleStartDateChange}
                     />
@@ -562,7 +562,7 @@ const TrainingPlanManager = () => {
                     <label className="text-xs font-bold text-gray-500 uppercase">結束日期 (選填)</label>
                     <input
                       type="date"
-                      className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all"
+                      className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 cursor-pointer"
                       value={formData.end_date}
                       min={formData.training_date}
                       onChange={e => setFormData({...formData, end_date: e.target.value})}
@@ -577,7 +577,7 @@ const TrainingPlanManager = () => {
                   <button
                     type="button"
                     onClick={() => setFormData({...formData, timer_enabled: !formData.timer_enabled})}
-                    className={`relative w-12 h-6 rounded-full transition-colors duration-200 ease-in-out ${formData.timer_enabled ? 'bg-blue-600' : 'bg-gray-200'}`}
+                    className={`relative w-12 h-6 rounded-full transition-colors duration-200 ease-in-out cursor-pointer ${formData.timer_enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
                   >
                     <span className={`block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ease-in-out mt-0.5 ml-0.5 ${formData.timer_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
                   </button>
@@ -588,7 +588,7 @@ const TrainingPlanManager = () => {
                     <label className="text-xs font-bold text-gray-500 uppercase">考試時限</label>
                     <div className="flex gap-2">
                         <select
-                           className="flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all bg-white"
+                           className="flex-1 px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white cursor-pointer"
                            value={[10, 15, 20, 30, 60].includes(formData.time_limit) ? formData.time_limit : 'custom'}
                            onChange={e => {
                                const val = e.target.value;
@@ -612,7 +612,7 @@ const TrainingPlanManager = () => {
                                 type="number"
                                 min="1"
                                 placeholder="分鐘"
-                                className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all"
+                                className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
                                 value={formData.time_limit || ''}
                                 onChange={e => setFormData({...formData, time_limit: parseInt(e.target.value) || 0})}
                                 />
@@ -630,7 +630,7 @@ const TrainingPlanManager = () => {
                   type="number"
                   min="0"
                   required
-                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all"
+                  className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
                   value={formData.passing_score}
                   onChange={e => setFormData({...formData, passing_score: parseInt(e.target.value) || 0})}
                 />
@@ -654,7 +654,7 @@ const TrainingPlanManager = () => {
                         console.error('計算應到人數失敗', err);
                       }
                     }}
-                    className="text-xs text-blue-600 font-bold hover:underline"
+                    className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
                     disabled={!editId}
                   >
                     自動計算
@@ -663,7 +663,7 @@ const TrainingPlanManager = () => {
                 <input
                   type="number"
                   min="0"
-                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all"
+                  className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
                   value={formData.expected_attendance || ''}
                   onChange={e => setFormData({...formData, expected_attendance: e.target.value})}
                   placeholder="留空將根據受課對象部門自動計算"
@@ -698,7 +698,7 @@ const TrainingPlanManager = () => {
                                     }));
                                 }
                             }}
-                            className="text-xs text-blue-600 font-bold hover:underline"
+                            className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
                         >
                             {(() => {
                                 const allDeptIds = departments.map(d => d.id.toString());
@@ -719,19 +719,19 @@ const TrainingPlanManager = () => {
                                     });
                                 }
                             }}
-                            className="text-xs text-blue-600 font-bold hover:underline"
+                            className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
                         >
                             + 同開課單位
                         </button>
                     </div>
                  </div>
-                 <div className="border-2 border-gray-200 rounded-xl p-3 max-h-40 overflow-y-auto bg-gray-50/50">
+                 <div className="border-2 border-indigo-200 rounded-xl p-3 max-h-40 overflow-y-auto bg-indigo-50/30">
                     <div className="grid grid-cols-2 gap-2">
                         {departments.map(dept => (
-                            <label key={dept.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white transition-colors cursor-pointer">
+                            <label key={dept.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white transition-colors duration-200 cursor-pointer">
                                 <input
                                     type="checkbox"
-                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
                                     checked={formData.target_dept_ids.includes(dept.id.toString())}
                                     onChange={e => {
                                         const id = dept.id.toString();
@@ -760,14 +760,14 @@ const TrainingPlanManager = () => {
               <div className="pt-4 flex gap-3">
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
+                  className={`flex-1 py-3 text-white rounded-xl font-bold transition-all duration-200 shadow-lg active:scale-95 cursor-pointer ${isEditing ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300' : 'bg-green-500 hover:bg-green-600 shadow-green-200 hover:shadow-green-300'}`}
                 >
                   {isEditing ? '儲存變更' : '確認新增'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-6 py-2.5 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-all"
+                  className="px-6 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200 cursor-pointer"
                 >
                   取消
                 </button>
@@ -794,7 +794,7 @@ const TrainingPlanManager = () => {
               <button
                 type="button"
                 onClick={() => setErrorMessage(null)}
-                className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
+                className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
                 關閉
               </button>
@@ -807,9 +807,9 @@ const TrainingPlanManager = () => {
       {isAttendanceModalOpen && selectedPlanId && attendanceStats[selectedPlanId] && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div className="p-6 border-b border-indigo-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-blue-600" />
+                <BarChart3 className="w-5 h-5 text-indigo-600" />
                 報到統計
               </h3>
               <button 
@@ -817,7 +817,7 @@ const TrainingPlanManager = () => {
                   setIsAttendanceModalOpen(false);
                   setSelectedPlanId(null);
                 }} 
-                className="p-2 hover:bg-white/50 rounded-xl transition-all"
+                className="p-2 hover:bg-white/50 rounded-xl transition-all duration-200 cursor-pointer"
               >
                 <X className="w-5 h-5 text-gray-400" />
               </button>
@@ -832,9 +832,9 @@ const TrainingPlanManager = () => {
                   <>
                     {/* 統計卡片 */}
                     <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-                        <div className="text-sm font-bold text-blue-600 mb-1">應到人數</div>
-                        <div className="text-2xl font-black text-blue-800">{stats.expected_count}</div>
+                      <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200">
+                        <div className="text-sm font-bold text-indigo-600 mb-1">應到人數</div>
+                        <div className="text-2xl font-black text-indigo-800">{stats.expected_count}</div>
                       </div>
                       <div className="bg-green-50 p-4 rounded-xl border border-green-200">
                         <div className="text-sm font-bold text-green-600 mb-1">實到人數</div>
@@ -847,9 +847,9 @@ const TrainingPlanManager = () => {
                     </div>
 
                     {/* 報到 QRcode 生成 */}
-                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200">
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-bold text-blue-700 flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-indigo-700 flex items-center gap-2">
                           <QrCode className="w-4 h-4" />
                           報到 QRcode
                         </h4>
@@ -866,7 +866,7 @@ const TrainingPlanManager = () => {
                             }
                           }}
                           disabled={generatingQRCode}
-                          className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded font-bold transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed flex items-center gap-1"
+                          className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-bold transition-all duration-200 disabled:bg-indigo-300 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
                         >
                           {generatingQRCode ? (
                             <>
@@ -882,7 +882,7 @@ const TrainingPlanManager = () => {
                         </button>
                       </div>
                       {checkinQRCode && checkinQRCode.plan_id === selectedPlanId && (
-                        <div className="mt-3 flex flex-col items-center gap-3 p-4 bg-white rounded-lg border border-blue-300">
+                        <div className="mt-3 flex flex-col items-center gap-3 p-4 bg-white rounded-lg border border-indigo-300">
                           <img 
                             src={checkinQRCode.qrcode_url} 
                             alt="Check-in QRcode" 
@@ -899,7 +899,7 @@ const TrainingPlanManager = () => {
                                   setTimeout(() => setCopiedCheckinUrl(false), 2000);
                                 });
                               }}
-                              className="p-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors"
+                              className="p-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors duration-200 cursor-pointer"
                               title="複製連結"
                             >
                               {copiedCheckinUrl ? (
@@ -941,7 +941,7 @@ const TrainingPlanManager = () => {
                               alert(err.response?.data?.detail || '更新失敗');
                             }
                           }}
-                          className="text-xs text-blue-600 font-bold hover:underline"
+                          className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
                         >
                           自動計算
                         </button>
@@ -950,7 +950,7 @@ const TrainingPlanManager = () => {
                         <input
                           type="number"
                           min="0"
-                          className="w-32 px-3 py-2 border-2 border-gray-200 rounded-lg text-sm font-bold focus:outline-none focus:border-blue-500"
+                          className="w-32 px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
                           value={stats.expected_count}
                           onChange={async (e) => {
                             const newValue = parseInt(e.target.value) || 0;
@@ -1057,7 +1057,7 @@ const TrainingPlanManager = () => {
                   setIsAttendanceModalOpen(false);
                   setSelectedPlanId(null);
                 }}
-                className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
+                className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
                 關閉
               </button>

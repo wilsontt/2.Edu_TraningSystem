@@ -248,7 +248,7 @@ const ExamStudio = () => {
             <div className="max-w-7xl mx-auto p-6 space-y-6 h-[calc(100vh-100px)]">
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
-                        <Archive className="w-8 h-8 text-blue-600" />
+                        <Archive className="w-8 h-8 text-indigo-600" />
                         <div>
                             <h1 className="text-3xl font-black text-gray-900 tracking-tight">題庫維護</h1>
                             <p className="text-gray-500 font-medium">管理與維護所有歷史題庫</p>
@@ -256,7 +256,7 @@ const ExamStudio = () => {
                     </div>
                     <button 
                         onClick={() => setMode('plan')}
-                        className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-200 rounded-xl font-bold hover:bg-gray-50 transition-colors shadow-sm"
+                        className="flex items-center gap-2 px-4 py-2.5 bg-white text-indigo-600 border border-indigo-200 rounded-xl font-bold hover:bg-indigo-50 transition-all duration-200 shadow-sm cursor-pointer"
                     >
                         <BookOpen className="w-4 h-4" />
                         返回考卷工坊
@@ -271,7 +271,7 @@ const ExamStudio = () => {
         <div className="max-w-7xl mx-auto p-6 space-y-6 h-[calc(100vh-100px)]">
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                    <BookOpen className="w-8 h-8 text-blue-600" />
+                    <BookOpen className="w-8 h-8 text-indigo-600" />
                     <div>
                         <h1 className="text-3xl font-black text-gray-900 tracking-tight">考卷工坊</h1>
                         <p className="text-gray-500 font-medium">上傳 TXT 考卷題目，系統將自動解析並匯入題庫</p>
@@ -279,7 +279,7 @@ const ExamStudio = () => {
                 </div>
                 <button 
                     onClick={() => setMode('bank')}
-                    className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-xl font-bold hover:bg-blue-50 transition-colors shadow-sm"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 hover:shadow-green-300 transition-all duration-200 shadow-lg shadow-green-200 cursor-pointer"
                 >
                     <Archive className="w-4 h-4" />
                     歷史題庫維護
@@ -288,8 +288,8 @@ const ExamStudio = () => {
 
             <div className="grid grid-cols-12 gap-6 h-full">
                 {/* Left Panel: Plan Selection */}
-                <div className="col-span-4 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[80vh]">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50">
+                <div className="col-span-4 bg-white rounded-2xl shadow-sm border border-indigo-100/50 overflow-hidden flex flex-col h-[80vh]">
+                    <div className="p-4 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/50 to-purple-50/30">
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                             <input
@@ -297,14 +297,14 @@ const ExamStudio = () => {
                                 placeholder="搜尋訓練計畫..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold focus:border-blue-500 outline-none"
+                                className="w-full pl-9 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200"
                             />
                         </div>
                     </div>
                     
                     <div className="flex-1 overflow-y-auto">
                         {isLoadingPlans ? (
-                            <div className="p-8 text-center text-gray-400"><Loader2 className="w-6 h-6 animate-spin mx-auto"/></div>
+                            <div className="p-8 text-center text-gray-400"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600"/></div>
                         ) : filteredPlans.length === 0 ? (
                             <div className="p-8 text-center text-gray-400 font-medium">無相關計畫</div>
                         ) : (
@@ -313,22 +313,22 @@ const ExamStudio = () => {
                                     <button
                                         key={plan.id}
                                         onClick={() => setSelectedPlanId(plan.id)}
-                                        className={`w-full text-left p-4 transition-colors flex items-center justify-between group border-b border-gray-50 last:border-b-0 hover:bg-blue-50/80 ${
+                                        className={`w-full text-left p-4 transition-all duration-200 flex items-center justify-between group border-b border-gray-50 last:border-b-0 hover:bg-indigo-50/50 cursor-pointer ${
                                             selectedPlanId === plan.id 
-                                                ? 'bg-blue-50 border-l-4 border-l-blue-500' 
-                                                : 'border-l-4 border-l-transparent even:bg-gray-100/60'
+                                                ? 'bg-indigo-50 border-l-4 border-l-indigo-500' 
+                                                : 'border-l-4 border-l-transparent even:bg-gray-50/50'
                                         }`}
                                     >
                                         <div className="min-w-0">
                                             <div className="font-bold text-gray-800 truncate mb-1">{plan.title}</div>
                                             <div className="text-xs text-gray-500 font-mono">{plan.training_date}</div>
                                             {plan.sub_category && (
-                                                <div className="text-xs text-blue-600 mt-1 inline-block px-1.5 py-0.5 bg-blue-100 rounded">
+                                                <div className="text-xs text-indigo-600 mt-1 inline-block px-1.5 py-0.5 bg-indigo-100 rounded">
                                                     {plan.sub_category.name}
                                                 </div>
                                             )}
                                         </div>
-                                        {selectedPlanId === plan.id && <ChevronRight className="w-4 h-4 text-blue-500" />}
+                                        {selectedPlanId === plan.id && <ChevronRight className="w-4 h-4 text-indigo-500" />}
                                     </button>
                                 ))}
                             </div>
@@ -337,10 +337,10 @@ const ExamStudio = () => {
                 </div>
 
                 {/* Right Panel: Workspace */}
-                <div className="col-span-8 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col h-[80vh]">
+                <div className="col-span-8 bg-white rounded-2xl shadow-sm border border-indigo-100/50 flex flex-col h-[80vh]">
                     {selectedPlan ? (
                         <>
-                            <div className="p-6 border-b border-gray-100 flex justify-between items-start">
+                            <div className="p-6 border-b border-indigo-100 flex justify-between items-start bg-gradient-to-r from-indigo-50/30 to-purple-50/20">
                                 <div>
                                     <h2 className="text-2xl font-black text-gray-800 mb-2">{selectedPlan.title}</h2>
                                     <div className="flex gap-4 text-sm text-gray-500">
@@ -353,10 +353,10 @@ const ExamStudio = () => {
                             <div className="p-6 flex-1 overflow-y-auto space-y-8">
                                 {/* Upload Section (Drag & Drop) */}
                                 <div 
-                                    className={`rounded-xl p-8 border-2 border-dashed transition-all text-center ${
+                                    className={`rounded-xl p-8 border-2 border-dashed transition-all duration-200 text-center ${
                                         isDragOver 
-                                            ? 'border-blue-500 bg-blue-50 scale-[1.02]' 
-                                            : 'border-gray-200 bg-gray-50 hover:border-blue-300'
+                                            ? 'border-indigo-500 bg-indigo-50 scale-[1.02]' 
+                                            : 'border-indigo-200 bg-indigo-50/30 hover:border-indigo-400 hover:bg-indigo-50/50'
                                     }`}
                                     onDrop={onDrop}
                                     onDragOver={onDragOver}
@@ -371,14 +371,14 @@ const ExamStudio = () => {
                                         disabled={isUploading}
                                     />
                                     <label htmlFor="file-upload" className={`cursor-pointer flex flex-col items-center gap-3 ${isUploading ? 'opacity-50' : ''}`}>
-                                        <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mb-2">
+                                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white mb-2">
                                             {isUploading ? <Loader2 className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
                                         </div>
                                         <div>
                                             <p className="font-bold text-xl text-gray-700">點擊或拖放上傳考卷 (TXT)</p>
                                             <p className="text-sm text-gray-400 mt-2">系統將自動解析題目並存入資料庫</p>
                                         </div>
-                                        <div className="mt-4 px-4 py-2 bg-white text-gray-600 border border-gray-200 rounded-lg text-sm font-medium shadow-sm">
+                                        <div className="mt-4 px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-colors duration-200">
                                             選擇檔案
                                         </div>
                                     </label>
@@ -398,9 +398,9 @@ const ExamStudio = () => {
                                 </div>
 
                                 {/* Format Help Section */}
-                                <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+                                <div className="bg-indigo-50/30 rounded-xl p-6 border border-indigo-100">
                                     <h3 className="text-sm font-black text-gray-700 mb-4 flex items-center gap-2">
-                                        <AlertCircle className="w-4 h-4 text-blue-500" />
+                                        <AlertCircle className="w-4 h-4 text-indigo-500" />
                                         題目格式範例 (TXT)
                                     </h3>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -438,8 +438,8 @@ const ExamStudio = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                                        <div className="text-xs text-blue-700 leading-relaxed">
+                                    <div className="mt-4 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                                        <div className="text-xs text-indigo-700 leading-relaxed">
                                             <span className="font-bold">提示欄位說明：</span>
                                             <span className="ml-1">HINT 為選填欄位，可提供給考生考試時的提示內容。格式為 <code className="bg-white px-1 py-0.5 rounded">HINT: 提示內容</code></span>
                                         </div>
@@ -449,13 +449,13 @@ const ExamStudio = () => {
                                 {/* Materials List with Preview */}
                                 <div>
                                     <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                        <FileText className="w-5 h-5 text-gray-500" />
+                                        <FileText className="w-5 h-5 text-indigo-500" />
                                         已匯入考卷檔
                                     </h3>
                                     {isLoadingMaterials ? (
-                                        <div className="text-center py-8 text-gray-400"><Loader2 className="w-5 h-5 animate-spin mx-auto"/></div>
+                                        <div className="text-center py-8 text-gray-400"><Loader2 className="w-5 h-5 animate-spin mx-auto text-indigo-600"/></div>
                                     ) : materials.length === 0 ? (
-                                        <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl border border-gray-100 italic">
+                                        <div className="text-center py-8 text-gray-400 bg-indigo-50/30 rounded-xl border border-indigo-100 italic">
                                             尚未上傳任何考卷
                                         </div>
                                     ) : (
@@ -463,17 +463,17 @@ const ExamStudio = () => {
                                             {materials.map((file: Material, idx: number) => (
                                                 <div 
                                                     key={idx} 
-                                                    className="w-full flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:shadow-md transition-all group"
+                                                    className="w-full flex items-center justify-between p-4 bg-white border border-indigo-100 rounded-xl hover:shadow-md hover:shadow-indigo-100/50 transition-all duration-200 group cursor-pointer"
                                                 >
                                                     <button 
                                                         onClick={() => handlePreview(file.filename)}
-                                                        className="flex-1 flex items-center gap-3 text-left"
+                                                        className="flex-1 flex items-center gap-3 text-left cursor-pointer"
                                                     >
-                                                        <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-xs uppercase group-hover:bg-orange-100 transition-colors">
+                                                        <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-xs uppercase group-hover:bg-orange-100 transition-colors duration-200">
                                                             TXT
                                                         </div>
                                                         <div>
-                                                            <div className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">{file.filename}</div>
+                                                            <div className="font-bold text-gray-800 group-hover:text-indigo-600 transition-colors duration-200">{file.filename}</div>
                                                             <div className="text-xs text-gray-400 flex items-center gap-2">
                                                                 <span>{Math.round(file.size / 1024)} KB</span>
                                                                 {file.upload_time && (
@@ -493,7 +493,7 @@ const ExamStudio = () => {
                                                             e.stopPropagation();
                                                             handleDeleteFile(file.filename);
                                                         }}
-                                                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors ml-2"
+                                                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 ml-2 cursor-pointer"
                                                         title="刪除檔案"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
@@ -508,33 +508,33 @@ const ExamStudio = () => {
                                 <div>
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                            <Check className="w-5 h-5 text-gray-500" />
+                                            <Check className="w-5 h-5 text-green-500" />
                                             已匯入題庫 ({questions.length})
                                         </h3>
                                         <button 
                                             onClick={() => setShowImportModal(true)}
-                                            className="text-sm font-bold text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 border border-blue-200"
+                                            className="text-sm font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-all duration-200 flex items-center gap-1 border border-indigo-200 cursor-pointer"
                                         >
                                             <Download className="w-4 h-4" />
                                             從題庫匯入
                                         </button>
                                     </div>
                                     {isLoadingQuestions ? (
-                                        <div className="text-center py-8 text-gray-400"><Loader2 className="w-5 h-5 animate-spin mx-auto"/></div>
+                                        <div className="text-center py-8 text-gray-400"><Loader2 className="w-5 h-5 animate-spin mx-auto text-indigo-600"/></div>
                                     ) : questions.length === 0 ? (
-                                        <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl border border-gray-100 italic">
+                                        <div className="text-center py-8 text-gray-400 bg-indigo-50/30 rounded-xl border border-indigo-100 italic">
                                             目前無題目
                                         </div>
                                     ) : (
-                                        <div className="divide-y divide-gray-50 border border-gray-100 rounded-2xl overflow-hidden">
+                                        <div className="divide-y divide-gray-50 border border-indigo-100 rounded-2xl overflow-hidden">
                                             {questions.map((q: Question, idx: number) => (
-                                                <div key={q.id} className="p-4 transition-colors group even:bg-gray-100/60 hover:bg-blue-50/80">
+                                                <div key={q.id} className="p-4 transition-all duration-200 group even:bg-gray-50/50 hover:bg-indigo-50/30 cursor-pointer">
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div className="flex gap-2">
                                                             <span className="inline-block px-2 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded">
                                                                 {q.question_type === 'true_false' ? '是非題' : q.question_type === 'multiple' ? '多選題' : '單選題'}
                                                             </span>
-                                                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">Score: {q.points}</span>
+                                                            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">Score: {q.points}</span>
                                                             {q.hint && (
                                                                 <span className="inline-flex items-center gap-1 text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-1 rounded">
                                                                     <Lightbulb className="w-3 h-3" />
@@ -542,17 +542,17 @@ const ExamStudio = () => {
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                                                             <button 
                                                                 onClick={() => setEditingQuestion(q)}
-                                                                className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg"
+                                                                className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all duration-200 cursor-pointer"
                                                                 title="編輯"
                                                             >
                                                                 <Edit className="w-4 h-4" />
                                                             </button>
                                                             <button 
                                                                 onClick={() => handleDeleteQuestion(q.id)}
-                                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 cursor-pointer"
                                                                 title="刪除"
                                                             >
                                                                 <Trash2 className="w-4 h-4" />
@@ -620,7 +620,7 @@ const ExamStudio = () => {
                         </>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center text-gray-300">
-                            <BookOpen className="w-16 h-16 mb-4 opacity-20" />
+                            <BookOpen className="w-16 h-16 mb-4 opacity-20 text-indigo-300" />
                             <p className="font-bold text-lg">請先從左側選擇一個訓練計畫</p>
                         </div>
                     )}
@@ -631,11 +631,11 @@ const ExamStudio = () => {
             {previewContent && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-                        <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+                        <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-purple-50">
                             <h3 className="font-bold text-lg text-gray-800">{previewFileName}</h3>
                             <button 
                                 onClick={() => { setPreviewContent(null); setPreviewFileName(null); }}
-                                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                                className="p-2 hover:bg-white/50 rounded-full transition-all duration-200 cursor-pointer"
                             >
                                 <span className="text-xl">×</span>
                             </button>

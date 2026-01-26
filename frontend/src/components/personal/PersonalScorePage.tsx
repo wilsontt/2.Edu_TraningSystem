@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { User, Search } from 'lucide-react';
+import { User, Search, Award } from 'lucide-react';
 import api from '../../api';
 import PersonalScoreOverview from './PersonalScoreOverview';
 import PersonalScoreHistory from './PersonalScoreHistory';
@@ -83,12 +83,23 @@ export default function PersonalScorePage() {
 
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
+      {/* 頁面標題 */}
+      <header className="flex items-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+          <Award className="w-7 h-7 text-white" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight mb-1">成績中心</h1>
+          <p className="text-gray-500 font-medium">查看個人學習成績與分析報表</p>
+        </div>
+      </header>
+
       {/* Admin 員工選擇器 */}
       {isAdmin && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-          <div className="flex items-center justify-between mb-3">
+        <div className="bg-white rounded-xl shadow-sm border border-indigo-100/50 p-5">
+          <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-gray-900 flex items-center">
-              <User className="h-5 w-5 mr-2 text-blue-500" />
+              <User className="h-5 w-5 mr-2 text-indigo-500" />
               查看成績
             </h3>
             {selectedEmpId && (
@@ -99,7 +110,7 @@ export default function PersonalScorePage() {
                   setUserSearchTerm('');
                   setSearchParams({});
                 }}
-                className="text-sm text-gray-500 hover:text-gray-700"
+                className="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-200 cursor-pointer"
               >
                 查看自己的成績
               </button>
@@ -119,13 +130,13 @@ export default function PersonalScorePage() {
                     setShowUserSelector(true);
                   }}
                   onFocus={() => setShowUserSelector(true)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-10 pr-4 py-2.5 border-2 border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200"
                 />
               </div>
             </div>
             
             {showUserSelector && filteredUsers.length > 0 && (
-              <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+              <div className="absolute z-10 w-full mt-2 bg-white border border-indigo-100 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                 {filteredUsers.map((user) => (
                   <button
                     key={user.emp_id}
@@ -136,7 +147,7 @@ export default function PersonalScorePage() {
                       // 更新 URL 參數
                       setSearchParams({ emp_id: user.emp_id });
                     }}
-                    className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0"
+                    className="w-full px-4 py-3 text-left hover:bg-indigo-50/50 transition-all duration-200 border-b border-gray-100 last:border-b-0 cursor-pointer"
                   >
                     <div className="font-medium text-gray-900">{user.name}</div>
                     <div className="text-sm text-gray-500">
@@ -149,9 +160,9 @@ export default function PersonalScorePage() {
           </div>
           
           {selectedEmpId && (
-            <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-              <div className="text-sm text-gray-600">目前查看：</div>
-              <div className="font-medium text-gray-900">
+            <div className="mt-4 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+              <div className="text-sm text-indigo-600 font-medium">目前查看：</div>
+              <div className="font-bold text-gray-900 mt-1">
                 {users.find(u => u.emp_id === selectedEmpId)?.name} ({selectedEmpId})
               </div>
             </div>
@@ -160,14 +171,14 @@ export default function PersonalScorePage() {
       )}
 
       {/* Tab 切換 */}
-      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="flex space-x-1 bg-indigo-50/50 p-1.5 rounded-xl w-fit border border-indigo-100/50">
         <button
           onClick={() => setActiveTab('overview')}
           className={clsx(
-            "px-4 py-2 text-sm font-medium rounded-md transition-all",
+            "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
             activeTab === 'overview'
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-900"
+              ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
+              : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
           )}
         >
           總覽
@@ -175,10 +186,10 @@ export default function PersonalScorePage() {
         <button
           onClick={() => setActiveTab('history')}
           className={clsx(
-            "px-4 py-2 text-sm font-medium rounded-md transition-all",
+            "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
             activeTab === 'history'
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-900"
+              ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
+              : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
           )}
         >
           歷史記錄
@@ -186,10 +197,10 @@ export default function PersonalScorePage() {
         <button
           onClick={() => setActiveTab('analysis')}
           className={clsx(
-            "px-4 py-2 text-sm font-medium rounded-md transition-all",
+            "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
             activeTab === 'analysis'
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-900"
+              ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
+              : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
           )}
         >
           學習分析

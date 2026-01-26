@@ -143,17 +143,17 @@ const PermissionManager = () => {
 
     return (
       <div key={func.id} className="mb-2">
-        <label className={`flex items-center gap-3 p-3 rounded-xl transition-all border-2 ${
-          isDisabled ? 'cursor-not-allowed opacity-70 bg-gray-50' : 'cursor-pointer hover:bg-gray-50'
+        <label className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-200 border-2 ${
+          isDisabled ? 'cursor-not-allowed opacity-70 bg-gray-50' : 'cursor-pointer hover:bg-indigo-50/50'
         } ${
           isChecked 
-            ? 'bg-blue-50 border-blue-200 shadow-sm' 
+            ? 'bg-indigo-50 border-indigo-200 shadow-sm' 
             : 'bg-white border-transparent'
         }`}
         style={{ marginLeft: `${level * 1.5}rem` }}
         >
-          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-            isChecked ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white'
+          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors duration-200 ${
+            isChecked ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 bg-white'
           }`}>
             {isChecked && <Check className="w-3.5 h-3.5 text-white stroke-3" />}
           </div>
@@ -166,12 +166,12 @@ const PermissionManager = () => {
           />
           <div className="flex-1">
             <div className="font-bold text-gray-800">{func.name}</div>
-            <div className="text-xs text-gray-400 font-mono">{func.code}</div>
+            <div className="text-xs text-indigo-400 font-mono">{func.code}</div>
           </div>
         </label>
         
         {func.children && func.children.length > 0 && (
-          <div className="mt-1 pl-4 border-l-2 border-gray-100 ml-5">
+          <div className="mt-1 pl-4 border-l-2 border-indigo-100 ml-5">
             {func.children.map(child => renderFunction(child, level + 1))}
           </div>
         )}
@@ -200,28 +200,28 @@ const PermissionManager = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
         {/* Roles List (Left) */}
-        <div className="md:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b border-gray-100 font-black text-gray-500 uppercase tracking-wider text-xs">
+        <div className="md:col-span-4 bg-white rounded-2xl shadow-sm border border-indigo-100/50 overflow-hidden">
+          <div className="p-4 bg-gradient-to-r from-indigo-50/50 to-purple-50/30 border-b border-indigo-100 font-black text-indigo-500 uppercase tracking-wider text-xs">
             選擇角色
           </div>
           {isLoading ? (
-             <div className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400"/></div>
+             <div className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600"/></div>
           ) : (
              <div className="divide-y divide-gray-100">
                {roles.map((role, index) => (
                  <button
                    key={role.id}
                    onClick={() => handleRoleSelect(role.id)}
-                   className={`w-full text-left p-4 flex items-center justify-between transition-colors ${
+                   className={`w-full text-left p-4 flex items-center justify-between transition-all duration-200 cursor-pointer ${
                      selectedRoleId === role.id 
                        ? 'bg-indigo-50 text-indigo-700 font-bold border-l-4 border-indigo-600' 
-                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium border-l-4 border-transparent'
+                       : 'text-gray-600 hover:bg-indigo-50/30 hover:text-gray-900 font-medium border-l-4 border-transparent'
                    }`}
                  >
                    <div className="flex items-center gap-3">
-                     <span className="text-xs font-black text-gray-300 w-6">{(index + 1).toString().padStart(2, '0')}</span>
+                     <span className="text-xs font-black text-indigo-300 w-6">{(index + 1).toString().padStart(2, '0')}</span>
                      <div className="flex items-center gap-2">
-                        <Shield className={`w-4 h-4 ${selectedRoleId === role.id ? 'fill-current' : 'text-gray-400'}`} />
+                        <Shield className={`w-4 h-4 ${selectedRoleId === role.id ? 'fill-current' : 'text-indigo-400'}`} />
                         {role.name}
                      </div>
                    </div>
@@ -233,15 +233,15 @@ const PermissionManager = () => {
         </div>
 
         {/* Permissions Matrix (Right) */}
-        <div className="md:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
-          <div className="p-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between sticky top-0 z-10">
-            <div className="font-black text-gray-500 uppercase tracking-wider text-xs">
+        <div className="md:col-span-8 bg-white rounded-2xl shadow-sm border border-indigo-100/50 overflow-hidden flex flex-col">
+          <div className="p-4 bg-gradient-to-r from-indigo-50/50 to-purple-50/30 border-b border-indigo-100 flex items-center justify-between sticky top-0 z-10">
+            <div className="font-black text-indigo-500 uppercase tracking-wider text-xs">
               功能存取權限
             </div>
             <button
               onClick={handleSave}
               disabled={isSaving || !selectedRoleId || roles.find(r => r.id === selectedRoleId)?.name === 'Admin' || !isDirty}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-md shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-green-500 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-green-200 hover:bg-green-600 hover:shadow-lg active:scale-95 transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               儲存設定
