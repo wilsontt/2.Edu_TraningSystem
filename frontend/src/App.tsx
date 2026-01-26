@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } f
 import { LayoutDashboard, BookOpen, PenTool, BarChart3, Settings, LogOut, ChevronDown, Menu, X } from 'lucide-react';
 import api from './api';
 import LoginPage from './components/LoginPage';
+import LandingPage from './components/LandingPage';
 import DepartmentManager from './components/admin/DepartmentManager';
 import CategoryManager from './components/admin/CategoryManager';
 import TrainingPlanManager from './components/admin/TrainingPlanManager';
@@ -319,9 +320,16 @@ const App = () => {
       <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
         <Routes>
           <Route path="/auth/login/qrcode/:token" element={<QRCodeLoginPage onLoginSuccess={(u: User) => setUser(u)} />} />
-          <Route path="*" element={
+          <Route path="/login" element={
             !user ? (
               <LoginPage onLoginSuccess={(u: User) => setUser(u)} />
+            ) : (
+              <Navigate to="/" />
+            )
+          } />
+          <Route path="*" element={
+            !user ? (
+              <LandingPage />
             ) : (
               <>
                 <Navbar user={user} onLogout={handleLogout} />

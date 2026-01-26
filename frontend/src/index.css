@@ -1,17 +1,49 @@
 @import "tailwindcss";
 
+/* UI UX Pro Max Design System - 企業教育訓練系統 */
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+
 @theme {
+  /* Brand Colors - Original */
   --color-brand-blue: #3b82f6;
   --color-brand-cream: #fffbeb;
   --font-handwriting: "Caveat", cursive;
+  
+  /* Design System Colors */
+  --color-primary: #4F46E5;
+  --color-secondary: #818CF8;
+  --color-cta: #22C55E;
+  --color-background: #EEF2FF;
+  --color-text: #312E81;
+  --color-text-muted: #6366F1;
+  
+  /* Spacing Variables */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+  
+  /* Shadow Depths */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+  --shadow-xl: 0 20px 25px rgba(0,0,0,0.15);
 }
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Open Sans', Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Poppins for headings */
+h1, h2, h3, h4, h5, h6, .font-heading {
+  font-family: 'Poppins', system-ui, sans-serif;
 }
 
 body {
