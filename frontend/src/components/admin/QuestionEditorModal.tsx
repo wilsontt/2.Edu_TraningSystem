@@ -124,18 +124,18 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                    <h3 className="font-bold text-xl text-gray-800">編輯題目</h3>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                        <X className="w-5 h-5 text-gray-500" />
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="p-6 bg-gradient-to-r from-indigo-600 to-indigo-500 flex justify-between items-center">
+                    <h3 className="font-bold text-xl text-white">編輯題目</h3>
+                    <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-all cursor-pointer">
+                        <X className="w-5 h-5 text-white" />
                     </button>
                 </div>
                 
                 <div className="p-6 overflow-y-auto space-y-6 flex-1">
                     {error && (
-                        <div className="p-4 bg-red-50 text-red-600 rounded-lg flex items-center gap-2 text-sm font-bold">
-                            <AlertCircle className="w-4 h-4" />
+                        <div className="p-4 bg-red-50 text-red-600 rounded-xl flex items-center gap-2 text-sm font-bold border border-red-100">
+                            <AlertCircle className="w-5 h-5 shrink-0" />
                             {error}
                         </div>
                     )}
@@ -147,7 +147,7 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
                             <select 
                                 value={formData.question_type}
                                 onChange={(e) => setFormData({...formData, question_type: e.target.value})}
-                                className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                                className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none font-medium cursor-pointer transition-all"
                             >
                                 <option value="single">單選題 (Single Choice)</option>
                                 <option value="multiple">多選題 (Multiple Choice)</option>
@@ -160,7 +160,7 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
                                 type="number" 
                                 value={formData.points}
                                 onChange={(e) => setFormData({...formData, points: parseInt(e.target.value) || 0})}
-                                className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                                className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none font-medium transition-all"
                             />
                         </div>
                     </div>
@@ -171,7 +171,7 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
                         <textarea 
                             value={formData.content}
                             onChange={(e) => setFormData({...formData, content: e.target.value})}
-                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium min-h-[100px]"
+                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none font-medium min-h-[100px] transition-all"
                             placeholder="請輸入題目內容..."
                         />
                     </div>
@@ -184,7 +184,7 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
                         <textarea 
                             value={formData.hint}
                             onChange={(e) => setFormData({...formData, hint: e.target.value})}
-                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium min-h-[80px]"
+                            className="w-full p-3 border border-amber-200 bg-amber-50/30 rounded-lg focus:ring-2 focus:ring-amber-200 focus:border-amber-400 outline-none font-medium min-h-[80px] transition-all"
                             placeholder="輸入提示內容，幫助考生思考..."
                         />
                     </div>
@@ -197,25 +197,25 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
                                 <button 
                                     onClick={addOption}
                                     type="button"
-                                    className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-bold flex items-center gap-1"
+                                    className="text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg hover:bg-green-600 hover:shadow-md hover:shadow-green-200 font-bold flex items-center gap-1 transition-all cursor-pointer"
                                 >
                                     <Plus className="w-3 h-3" /> 新增選項
                                 </button>
                             </label>
                             <div className="space-y-3">
                                 {Object.entries(formData.options).map(([key, val]) => (
-                                    <div key={key} className="flex gap-2 items-center">
-                                        <span className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded font-bold text-gray-600 text-sm shrink-0">{key}</span>
+                                    <div key={key} className="flex gap-2 items-center group">
+                                        <span className="w-8 h-8 flex items-center justify-center bg-indigo-100 rounded-lg font-bold text-indigo-600 text-sm shrink-0">{key}</span>
                                         <input 
                                             type="text" 
                                             value={val} 
                                             onChange={(e) => handleOptionChange(key, e.target.value)}
-                                            className="flex-1 p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                            className="flex-1 p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none text-sm transition-all"
                                             placeholder={`選項 ${key} 內容`}
                                         />
                                         <button 
                                             onClick={() => removeOption(key)}
-                                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer opacity-50 group-hover:opacity-100"
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
@@ -230,7 +230,7 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
                         <label className="block text-sm font-bold text-gray-700 mb-2">正確答案</label>
                         {formData.question_type === 'true_false' ? (
                             <div className="flex gap-4">
-                                <label className={`flex-1 p-3 border rounded-lg cursor-pointer text-center font-bold transition-all ${formData.answer === 'Y' ? 'bg-green-50 border-green-500 text-green-700' : 'border-gray-200 hover:border-gray-300'}`}>
+                                <label className={`flex-1 p-3 border-2 rounded-xl cursor-pointer text-center font-bold transition-all ${formData.answer === 'Y' ? 'bg-green-50 border-green-500 text-green-700 shadow-md shadow-green-100' : 'border-gray-200 hover:border-green-300 hover:bg-green-50/50'}`}>
                                     <input 
                                         type="radio" 
                                         name="tf_answer" 
@@ -241,7 +241,7 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
                                     />
                                     是 (Yes)
                                 </label>
-                                <label className={`flex-1 p-3 border rounded-lg cursor-pointer text-center font-bold transition-all ${formData.answer === 'N' ? 'bg-red-50 border-red-500 text-red-700' : 'border-gray-200 hover:border-gray-300'}`}>
+                                <label className={`flex-1 p-3 border-2 rounded-xl cursor-pointer text-center font-bold transition-all ${formData.answer === 'N' ? 'bg-red-50 border-red-500 text-red-700 shadow-md shadow-red-100' : 'border-gray-200 hover:border-red-300 hover:bg-red-50/50'}`}>
                                     <input 
                                         type="radio" 
                                         name="tf_answer" 
@@ -258,27 +258,27 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
                                 type="text" 
                                 value={formData.answer} 
                                 onChange={(e) => setFormData({...formData, answer: e.target.value})}
-                                className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                                className="w-full p-2.5 border-2 border-green-200 bg-green-50/30 rounded-lg focus:ring-2 focus:ring-green-200 focus:border-green-500 outline-none font-medium transition-all"
                                 placeholder={formData.question_type === 'multiple' ? "例如: A,C (多可用逗號分隔)" : "例如: A"}
                             />
                         )}
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="text-xs text-gray-400 mt-2">
                             {formData.question_type === 'multiple' ? '多選題答案請以逗號分隔或直接連寫 (如 A,C 或 AC)' : '請輸入正確選項代號'}
                         </p>
                     </div>
                 </div>
 
-                <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 rounded-b-2xl">
+                <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gradient-to-r from-gray-50 to-indigo-50/30">
                     <button 
                         onClick={onClose}
-                        className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg transition-colors"
+                        className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-200 rounded-xl transition-all cursor-pointer"
                         disabled={isSaving}
                     >
                         取消
                     </button>
                     <button 
                         onClick={handleSubmit}
-                        className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-5 py-2.5 bg-green-500 text-white font-bold rounded-xl hover:bg-green-600 hover:shadow-lg hover:shadow-green-200 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                         disabled={isSaving}
                     >
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
