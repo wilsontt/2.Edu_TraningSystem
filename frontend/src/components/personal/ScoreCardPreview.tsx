@@ -66,7 +66,7 @@ function ScoreCardContent({ detail }: {
               <div className="flex-1 border-2 border-gray-800 p-4 flex flex-col justify-center items-center">
                 <div className="text-base text-gray-600 mb-2">總分 / Total Score</div>
                 <div 
-                  className="text-7xl font-bold text-red-600 transform -rotate-3" 
+                  className="text-7xl font-bold text-red-600 transform -rotate-3 score-handwriting" 
                   style={{ 
                     textShadow: '2px 2px 0px rgba(0,0,0,0.1)',
                     fontFamily: "Caveat, 'Comic Sans MS', 'Patrick Hand', cursive"
@@ -90,7 +90,7 @@ function ScoreCardContent({ detail }: {
           </div>
           
           {/* Watermark Result Stamped Area 考試結果以浮印置底方式呈現 -rotate-12 (預設值：逆時針 12 度旋轉) */}
-          <div className="absolute right-0 bottom-[-10px] transform rotate-12 pointer-events-none">
+          <div className="absolute right-8 bottom-[-10px] transform rotate-12 pointer-events-none">
              <div className={clsx(
                 "border-4 border-double px-8 py-2 rounded-lg flex flex-col items-center justify-center bg-white/10 backdrop-blur-sm",
                 detail.basic_info.is_passed 
@@ -206,19 +206,21 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
         try { return JSON.parse(optionsStr); } catch { return {}; }
     };
 
-    // 生成題目詳情 HTML
+    // 中文字體堆疊（確保跨平台相容）
+    const CHINESE_FONT_STACK = '"Noto Sans TC", "PingFang TC", "Heiti TC", "Microsoft JhengHei", "微軟正黑體", "Microsoft YaHei", sans-serif';
+
+    // 生成題目詳情 HTML（使用 inline style 確保跨平台相容）
     const detailsHtml = detail.question_details.map((q) => {
         const options = parseOptions(q.options);
-        const borderColor = q.is_correct ? 'border-green-500' : 'border-red-500';
-        const bgColor = q.is_correct ? 'bg-green-50' : 'bg-red-50';
+        const borderColor = q.is_correct ? '#22c55e' : '#ef4444';
+        const bgColor = q.is_correct ? '#f0fdf4' : '#fef2f2';
         
         // 考生的答案 (處理多選 A,B)
         const userAnswers = (q.user_answer || '').split(',').map(s => s.trim()).filter(Boolean);
 
-        // 選項列表 HTML
+        // 選項列表 HTML（縮小字體、減少間距）
         const optionsListHtml = Object.entries(options).map(([key, value]) => {
             const isSelected = userAnswers.includes(key);
-            
             const isCorrectOption = (q.correct_answer || '').includes(key);
             let iconHtml = '';
             
@@ -227,59 +229,60 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
             }
 
             return `
-                <div class="flex items-start gap-2 mb-1">
-                    <div class="w-6 flex justify-center pt-1">${iconHtml}</div>
-                    <div class="font-medium text-gray-700">${key}. ${value}</div>
+                <div style="display:flex; align-items:flex-start; gap:6px; margin-bottom:2px; font-family:${CHINESE_FONT_STACK};">
+                    <div style="width:20px; display:flex; justify-content:center; padding-top:2px;">${iconHtml}</div>
+                    <div style="font-weight:500; color:#374151; font-size:13px;">${key}. ${value}</div>
                 </div>
             `;
         }).join('');
 
-        // 底部對照 HTML
         // 考生的答案顯示
         const userAnswerDisplay = userAnswers.map(ans => {
             const text = options[ans] || '';
-            return `${ans} ${text ? `(${text})` : ''}`;
+            return `${ans}${text ? ` (${text})` : ''}`;
         }).join(', ') || '未作答';
 
         // 正確答案顯示
         const correctAnswers = (q.correct_answer || '').split(',').map(s => s.trim());
         const correctAnswerDisplay = correctAnswers.map(ans => {
             const text = options[ans] || '';
-            return `${ans} ${text ? `(${text})` : ''}`;
+            return `${ans}${text ? ` (${text})` : ''}`;
         }).join(', ');
 
+        const userAnswerColor = q.is_correct ? '#15803d' : '#b91c1c';
+
         return `
-            <div class="border-2 rounded-lg p-4 mb-4 break-inside-avoid ${borderColor} ${bgColor}">
-                <div class="flex justify-between items-start mb-2 border-b border-gray-200 pb-2">
-                    <div class="flex items-center gap-2">
-                        <span class="font-bold text-gray-700">第 ${q.question_number} 題</span>
-                        <span class="text-xs px-2 py-1 rounded bg-white border border-gray-200 text-gray-600">
+            <div style="border:2px solid ${borderColor}; border-radius:8px; padding:12px; margin-bottom:12px; page-break-inside:avoid; background:${bgColor}; font-family:${CHINESE_FONT_STACK};">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; border-bottom:1px solid #e5e7eb; padding-bottom:8px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-weight:bold; color:#374151; font-size:14px;">第 ${q.question_number} 題</span>
+                        <span style="font-size:11px; padding:2px 6px; border-radius:4px; background:white; border:1px solid #e5e7eb; color:#6b7280;">
                             ${q.question_type}
                         </span>
                         ${q.is_correct ? ICON_CHECK_CIRCLE : ICON_X_CIRCLE}
                     </div>
-                    <div class="font-bold ${q.is_correct ? 'text-green-600' : 'text-red-600'}">
+                    <div style="font-weight:bold; color:${q.is_correct ? '#16a34a' : '#dc2626'}; font-size:14px;">
                         ${q.earned_points} / ${q.points}
                     </div>
                 </div>
                 
-                <div class="mb-4">
-                    <div class="font-bold text-gray-900 mb-2 text-lg">${q.content}</div>
-                    <div class="ml-2">
+                <div style="margin-bottom:12px;">
+                    <div style="font-weight:bold; color:#111827; margin-bottom:6px; font-size:15px;">${q.content}</div>
+                    <div style="margin-left:8px;">
                         ${optionsListHtml}
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4 pt-2 border-t border-gray-300/50 text-sm">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; padding-top:8px; border-top:1px solid rgba(209,213,219,0.5); font-size:12px;">
                     <div>
-                        <div class="text-gray-500 mb-1">您的答案</div>
-                        <div class="font-medium ${q.is_correct ? 'text-green-700' : 'text-red-700'}">
+                        <div style="color:#6b7280; margin-bottom:2px;">您的答案</div>
+                        <div style="font-weight:500; color:${userAnswerColor}; font-size:12px;">
                             ${userAnswerDisplay}
                         </div>
                     </div>
                     <div>
-                        <div class="text-gray-500 mb-1">正確答案</div>
-                        <div class="font-medium text-green-700">
+                        <div style="color:#6b7280; margin-bottom:2px;">正確答案</div>
+                        <div style="font-weight:500; color:#15803d; font-size:12px;">
                             ${correctAnswerDisplay}
                         </div>
                     </div>
@@ -288,37 +291,55 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
         `;
     }).join('');
 
-    // 生成考試歷程 HTML
+    // 生成考試歷程 HTML（標示當前選中的記錄，全部使用 inline style）
+    // 使用 submit_time 比對，因為 record_id 和 history[].id 可能不一致
+    const currentSubmitTime = detail.basic_info.submit_time;
     let historyHtml = '';
     if (detail.history && detail.history.length > 0) {
-        const historyRows = detail.history.map((h, idx) => `
-            <tr class="border-b border-gray-200">
-                <td class="py-2 px-4 text-center">${idx + 1}</td>
-                <td class="py-2 px-4 text-center">${h.submit_time ? new Date(h.submit_time).toLocaleString('zh-TW') : '-'}</td>
-                <td class="py-2 px-4 text-center font-bold ${h.is_passed ? 'text-green-600' : 'text-red-600'}">
-                    ${h.total_score}
-                </td>
-                <td class="py-2 px-4 text-center">
-                    ${h.is_passed ? 
-                        '<span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-bold">通過</span>' : 
-                        '<span class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold">未通過</span>'
-                    }
-                </td>
-            </tr>
-        `).join('');
+        const historyRows = detail.history.map((h, idx) => {
+            // 判斷是否為當前選中的考試記錄（使用 submit_time 比對）
+            const isCurrentRecord = h.submit_time === currentSubmitTime;
+            
+            // 使用 inline style 確保跨平台相容
+            const rowStyle = isCurrentRecord 
+                ? 'border:2px solid #4f46e5; background-color:#eef2ff;' 
+                : 'border-bottom:1px solid #e5e7eb;';
+            
+            const currentMarker = isCurrentRecord 
+                ? `<div style="display:block; background:#4f46e5; color:white; font-size:10px; padding:2px 4px; border-radius:3px; margin-top:4px; text-align:center; font-family:${CHINESE_FONT_STACK};">本次</div>` 
+                : '';
+            
+            const scoreColor = h.is_passed ? '#16a34a' : '#dc2626';
+            const statusBg = h.is_passed ? '#dcfce7' : '#fee2e2';
+            const statusColor = h.is_passed ? '#15803d' : '#b91c1c';
+            const statusText = h.is_passed ? '通過' : '未通過';
+            
+            return `
+                <tr style="${rowStyle} font-family:${CHINESE_FONT_STACK};">
+                    <td style="padding:0.5rem 1rem; text-align:center; vertical-align:middle;">${idx + 1}${currentMarker}</td>
+                    <td style="padding:0.5rem 1rem; text-align:center;">${h.submit_time ? new Date(h.submit_time).toLocaleString('zh-TW') : '-'}</td>
+                    <td style="padding:0.5rem 1rem; text-align:center; font-weight:bold; color:${scoreColor};">
+                        ${h.total_score}
+                    </td>
+                    <td style="padding:0.5rem 1rem; text-align:center;">
+                        <span style="display:inline-block; background:${statusBg}; color:${statusColor}; font-size:12px; padding:4px 8px; border-radius:4px; font-weight:bold; font-family:${CHINESE_FONT_STACK};">${statusText}</span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
 
         historyHtml = `
-            <div class="mt-8 mb-4">
-                <h3 class="text-lg font-bold text-gray-800 mb-2 border-b-2 border-gray-800 pb-1">
+            <div style="margin-top:2rem; margin-bottom:1rem; font-family:${CHINESE_FONT_STACK};">
+                <h3 style="font-size:1.125rem; font-weight:bold; color:#1f2937; margin-bottom:0.5rem; border-bottom:2px solid #1f2937; padding-bottom:0.25rem; font-family:${CHINESE_FONT_STACK};">
                     考試歷程 / Exam History
                 </h3>
-                <table class="w-full text-sm">
+                <table style="width:100%; font-size:0.875rem; border-collapse:collapse; font-family:${CHINESE_FONT_STACK};">
                     <thead>
-                        <tr class="bg-gray-100 border-b-2 border-gray-800">
-                            <th class="py-2 px-4 text-center w-16">次數</th>
-                            <th class="py-2 px-4 text-center">考試時間</th>
-                            <th class="py-2 px-4 text-center w-24">分數</th>
-                            <th class="py-2 px-4 text-center w-24">狀態</th>
+                        <tr style="background:#f3f4f6; border-bottom:2px solid #1f2937;">
+                            <th style="padding:0.5rem 1rem; text-align:center; width:4rem; font-family:${CHINESE_FONT_STACK};">次數</th>
+                            <th style="padding:0.5rem 1rem; text-align:center; font-family:${CHINESE_FONT_STACK};">考試時間</th>
+                            <th style="padding:0.5rem 1rem; text-align:center; width:6rem; font-family:${CHINESE_FONT_STACK};">分數</th>
+                            <th style="padding:0.5rem 1rem; text-align:center; width:6rem; font-family:${CHINESE_FONT_STACK};">狀態</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -332,12 +353,21 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
     // 4. 構建 HTML 內容
     const htmlContent = `
       <!DOCTYPE html>
-      <html>
+      <html lang="zh-TW">
         <head>
           <title>成績單 - ${detail.basic_info.plan_title}</title>
           <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <!-- Google Fonts 預連接 -->
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <!-- Noto Sans TC 中文字體 + Caveat 手寫體 -->
+          <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
           ${styles}
           <style>
+            /* 內嵌字體定義作為備援 */
+            @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap');
+            
             @media print {
               @page { 
                 margin: 20mm; 
@@ -349,14 +379,30 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
                 print-color-adjust: exact;
               }
             }
-            body {
+            
+            /* 全域字體設定 */
+            html, body {
               background-color: white;
-              font-family: "PingFang TC", "Heiti TC", "Microsoft JhengHei", "Microsoft YaHei", sans-serif;
+              font-family: ${CHINESE_FONT_STACK} !important;
+              -webkit-font-smoothing: antialiased;
+              -moz-osx-font-smoothing: grayscale;
             }
+            
+            /* 確保所有元素都使用中文字體 */
+            *, *::before, *::after {
+              font-family: ${CHINESE_FONT_STACK} !important;
+            }
+            
+            /* 手寫體字體樣式（用於總分）- 覆蓋全域 !important */
+            .score-handwriting {
+              font-family: "Caveat", "Comic Sans MS", "Patrick Hand", cursive !important;
+            }
+            
             /* 修正 iframe 內的 Tailwind transform */
             .transform { transform: var(--tw-transform); }
             .-rotate-3 { --tw-rotate: -3deg; transform: rotate(-3deg); }
             .rotate-12 { --tw-rotate: 12deg; transform: rotate(12deg); }
+            .rotate-14 { --tw-rotate: 14deg; transform: rotate(14deg); }
             .-rotate-12 { --tw-rotate: -12deg; transform: rotate(-12deg); }
             
             /* 強制分頁 */
@@ -365,12 +411,17 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
             
             /* 封面頁佈局：讓簽名欄推到底部 */
             .cover-page {
-                min-height: 250mm; /* 接近 A4 高度但留邊界 */
+                min-height: 250mm;
                 display: flex;
                 flex-direction: column;
             }
             .cover-content {
                 flex: 1;
+            }
+            
+            /* 中文字體強化 */
+            h1, h2, h3, h4, h5, h6, p, span, div, td, th, label {
+              font-family: ${CHINESE_FONT_STACK} !important;
             }
           </style>
         </head>
@@ -403,11 +454,11 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
             <div class="page-break"></div>
 
             <!-- 第二頁起：答題詳情 -->
-            <div class="pt-4">
-                <h2 class="text-2xl font-bold text-gray-900 mb-6 border-b-2 border-gray-800 pb-2">
+            <div style="padding-top:1rem;">
+                <h2 style="font-size:1.5rem; font-weight:bold; color:#111827; margin-bottom:1.5rem; border-bottom:2px solid #1f2937; padding-bottom:0.5rem; font-family:${CHINESE_FONT_STACK};">
                     答題詳情 / Answer Details
                 </h2>
-                <div class="space-y-4">
+                <div style="display:flex; flex-direction:column; gap:1rem;">
                     ${detailsHtml}
                 </div>
             </div>
@@ -422,23 +473,36 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
     doc.write(htmlContent);
     doc.close();
 
-    // 等待資源載入 (雖然是複製樣式，但 link 可能需要一點時間解析)
+    // 等待資源載入 (字體需要時間從 Google Fonts 載入)
     iframe.onload = () => {
-        setTimeout(() => {
+        // 等待字體載入完成 (使用 document.fonts.ready 或 fallback timeout)
+        const waitForFonts = async () => {
             try {
-                iframe.contentWindow?.focus();
-                iframe.contentWindow?.print();
-            } catch (e) {
-                console.error('Print failed:', e);
-            } finally {
-                // 給予足夠時間讓列印對話框出現後再移除 iframe
-                // 注意：在某些瀏覽器，print() 是阻塞的，這行會在列印對話框關閉後執行
-                // 在 Safari/Chrome 若非阻塞，設長一點的時間比較保險
-                setTimeout(() => {
-                    document.body.removeChild(iframe);
-                }, 2000);
+                // 嘗試使用 Font Loading API 等待字體載入
+                if (iframe.contentDocument?.fonts) {
+                    await iframe.contentDocument.fonts.ready;
+                }
+            } catch {
+                // 如果 Font Loading API 不可用，使用 fallback timeout
             }
-        }, 500);
+            
+            // 額外等待確保字體渲染完成
+            setTimeout(() => {
+                try {
+                    iframe.contentWindow?.focus();
+                    iframe.contentWindow?.print();
+                } catch (e) {
+                    console.error('Print failed:', e);
+                } finally {
+                    // 給予足夠時間讓列印對話框出現後再移除 iframe
+                    setTimeout(() => {
+                        document.body.removeChild(iframe);
+                    }, 3000);
+                }
+            }, 1000); // 增加等待時間，確保字體完全載入
+        };
+        
+        waitForFonts();
     };
   };
 
