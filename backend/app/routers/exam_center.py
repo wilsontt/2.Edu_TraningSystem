@@ -66,11 +66,14 @@ def get_my_exams(
     is_admin = current_user.role and current_user.role.name == "Admin"
     
     if is_admin:
-        plans = db.query(models.TrainingPlan).order_by(models.TrainingPlan.training_date.desc()).all()
-    else:
-        # 篩選受課單位包含使用者所屬部門的計畫
         plans = db.query(models.TrainingPlan).filter(
-            models.TrainingPlan.target_departments.any(id=current_user.dept_id)
+            models.TrainingPlan.is_archived == False
+        ).order_by(models.TrainingPlan.training_date.desc()).all()
+    else:
+        # 篩選受課單位包含使用者所屬部門的計畫，且未封存
+        plans = db.query(models.TrainingPlan).filter(
+            models.TrainingPlan.target_departments.any(id=current_user.dept_id),
+            models.TrainingPlan.is_archived == False
         ).order_by(models.TrainingPlan.training_date.desc()).all()
 
     results = []
@@ -130,6 +133,10 @@ def start_exam(
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Training plan not found")
+    
+    # 檢查計畫是否被封存
+    if plan.is_archived:
+        raise HTTPException(status_code=400, detail="該訓練計畫已被封存，無法進行考試")
         
     # Validation logic
     record = db.query(models.ExamRecord).filter(

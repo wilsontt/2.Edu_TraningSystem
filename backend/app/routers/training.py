@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List
-from datetime import date
+from fastapi import APIRouter, HTTPException, Depends, Request, Query
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, or_, and_
+from typing import List, Optional
+from datetime import date, datetime
 import qrcode
 import base64
 import os
@@ -55,6 +55,11 @@ def create_training_plan(
         # 預設為開課單位
         db_plan.target_departments = [dept]
     
+    # 處理個人受課對象
+    if plan.target_user_ids:
+        target_users = db.query(models.User).filter(models.User.emp_id.in_(plan.target_user_ids)).all()
+        db_plan.target_users = target_users
+    
     db.add(db_plan)
     try:
         db.commit()
@@ -102,6 +107,11 @@ def update_training_plan(
          # 正常情況不應發生，若無提供則略過
         pass
     
+    # 處理個人受課對象
+    if plan_update.target_user_ids is not None:
+        target_users = db.query(models.User).filter(models.User.emp_id.in_(plan_update.target_user_ids)).all()
+        db_plan.target_users = target_users
+    
     try:
         db.commit()
         db.refresh(db_plan)
@@ -112,11 +122,59 @@ def update_training_plan(
 
 @router.get("/plans", response_model=List[schemas.TrainingPlan])
 def get_training_plans(
+    status: Optional[str] = Query(None, description="狀態篩選: active, expired, archived, all (預設: 不過濾狀態，只過濾封存)"),
+    year: Optional[str] = Query(None, description="年份篩選"),
+    dept_id: Optional[int] = Query(None, description="單位篩選"),
+    category_id: Optional[int] = Query(None, description="分類篩選 (sub_category_id)"),
     db: Session = Depends(get_db),
     current_user = check_permission("menu:plan")
 ):
-    """獲取訓練計畫清單"""
-    return db.query(models.TrainingPlan).order_by(models.TrainingPlan.training_date.desc()).all()
+    """獲取訓練計畫清單，支援狀態、年份、單位、分類篩選
+    
+    預設行為：只過濾掉已封存的計畫，不過濾過期狀態（為了向後兼容）
+    使用 status 參數可以進一步篩選狀態
+    """
+    query = db.query(models.TrainingPlan)
+    
+    today = date.today()
+    
+    # 根據狀態篩選
+    if status == "active":
+        query = query.filter(
+            models.TrainingPlan.is_archived == False,
+            or_(
+                models.TrainingPlan.end_date >= today,
+                models.TrainingPlan.end_date.is_(None)
+            )
+        )
+    elif status == "expired":
+        query = query.filter(
+            models.TrainingPlan.is_archived == False,
+            models.TrainingPlan.end_date < today
+        )
+    elif status == "archived":
+        query = query.filter(models.TrainingPlan.is_archived == True)
+    elif status == "all":
+        # 不過濾封存狀態
+        pass
+    else:
+        # 預設：只過濾掉已封存的計畫，不過濾過期狀態（向後兼容）
+        query = query.filter(models.TrainingPlan.is_archived == False)
+    
+    # 年份篩選
+    if year:
+        query = query.filter(models.TrainingPlan.year == year)
+    
+    # 單位篩選
+    if dept_id:
+        query = query.filter(models.TrainingPlan.dept_id == dept_id)
+    
+    # 分類篩選
+    if category_id:
+        query = query.filter(models.TrainingPlan.sub_category_id == category_id)
+    
+    # 使用 joinedload 載入 sub_category 關聯，避免 N+1 查詢問題
+    return query.options(joinedload(models.TrainingPlan.sub_category)).order_by(models.TrainingPlan.training_date.desc()).all()
 
 @router.delete("/plans/{plan_id}")
 def delete_training_plan(
@@ -148,6 +206,64 @@ def delete_training_plan(
     
     return {"message": "訓練計畫已刪除"}
 
+@router.post("/plans/{plan_id}/archive", response_model=schemas.TrainingPlan)
+def archive_training_plan(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user = check_permission("menu:plan")
+):
+    """封存訓練計畫"""
+    db_plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not db_plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    
+    if db_plan.is_archived:
+        raise HTTPException(status_code=400, detail="該計畫已經被封存")
+    
+    db_plan.is_archived = True
+    try:
+        db.commit()
+        db.refresh(db_plan)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="封存訓練計畫失敗")
+    
+    return db_plan
+
+@router.post("/plans/{plan_id}/unarchive", response_model=schemas.TrainingPlan)
+def unarchive_training_plan(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user = check_permission("menu:plan")
+):
+    """取消封存訓練計畫"""
+    db_plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not db_plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    
+    if not db_plan.is_archived:
+        raise HTTPException(status_code=400, detail="該計畫未被封存")
+    
+    db_plan.is_archived = False
+    try:
+        db.commit()
+        db.refresh(db_plan)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="取消封存訓練計畫失敗")
+    
+    return db_plan
+
+@router.get("/plans/archived", response_model=List[schemas.TrainingPlan])
+def get_archived_plans(
+    db: Session = Depends(get_db),
+    current_user = check_permission("menu:plan")
+):
+    """查詢已封存的訓練計畫"""
+    return db.query(models.TrainingPlan).filter(
+        models.TrainingPlan.is_archived == True
+    ).order_by(models.TrainingPlan.training_date.desc()).all()
+
 # --- 報到統計與應到人數管理 ---
 
 @router.get("/plans/{plan_id}/attendance/stats", response_model=schemas.AttendanceStats)
@@ -171,15 +287,36 @@ def get_attendance_stats(
     if plan.expected_attendance is not None:
         expected_count = plan.expected_attendance
     else:
-        # 根據受課對象部門自動計算
+        # 根據受課對象部門和個人自動計算
+        expected_count = 0
+        
+        # 計算部門人數
         if plan.target_departments:
             dept_ids = [dept.id for dept in plan.target_departments]
-            expected_count = db.query(func.count(models.User.emp_id)).filter(
+            dept_user_count = db.query(func.count(models.User.emp_id)).filter(
                 models.User.dept_id.in_(dept_ids),
                 models.User.status == "active"
             ).scalar() or 0
-        else:
-            expected_count = 0
+            expected_count += dept_user_count
+        
+        # 計算個人受課對象人數（排除已在部門中的）
+        if plan.target_users:
+            # 如果沒有部門，直接計算個人數量
+            if not plan.target_departments:
+                expected_count = len([u for u in plan.target_users if u.status == "active"])
+            else:
+                # 如果有部門，只計算不在部門中的個人
+                dept_ids = [dept.id for dept in plan.target_departments]
+                dept_user_ids = set(
+                    db.query(models.User.emp_id).filter(
+                        models.User.dept_id.in_(dept_ids),
+                        models.User.status == "active"
+                    ).all()
+                )
+                dept_user_ids = {uid[0] for uid in dept_user_ids}
+                # 計算個人受課對象中不在部門的
+                personal_count = len([u for u in plan.target_users if u.status == "active" and u.emp_id not in dept_user_ids])
+                expected_count += personal_count
     
     # 計算出席率
     attendance_rate = (actual_count / expected_count * 100) if expected_count > 0 else 0.0
@@ -203,20 +340,37 @@ def get_attendance_stats(
     
     # 取得未報到用戶列表
     not_checked_in_users = []
+    all_target_user_ids = set()
+    
+    # 從部門取得用戶
     if plan.target_departments:
         dept_ids = [dept.id for dept in plan.target_departments]
-        all_target_users = db.query(models.User).filter(
+        dept_users = db.query(models.User).filter(
             models.User.dept_id.in_(dept_ids),
             models.User.status == "active"
         ).all()
-        
-        for user in all_target_users:
-            if user.emp_id not in checked_in_emp_ids:
-                not_checked_in_users.append({
-                    "emp_id": user.emp_id,
-                    "name": user.name,
-                    "dept_name": user.department.name if user.department else "未知"
-                })
+        for user in dept_users:
+            all_target_user_ids.add(user.emp_id)
+    
+    # 從個人受課對象取得用戶
+    if plan.target_users:
+        for user in plan.target_users:
+            if user.status == "active":
+                all_target_user_ids.add(user.emp_id)
+    
+    # 取得所有目標用戶
+    all_target_users = db.query(models.User).filter(
+        models.User.emp_id.in_(list(all_target_user_ids)),
+        models.User.status == "active"
+    ).all()
+    
+    for user in all_target_users:
+        if user.emp_id not in checked_in_emp_ids:
+            not_checked_in_users.append({
+                "emp_id": user.emp_id,
+                "name": user.name,
+                "dept_name": user.department.name if user.department else "未知"
+            })
     
     return {
         "plan_id": plan_id,
@@ -258,19 +412,44 @@ def calculate_expected_attendance(
     db: Session = Depends(get_db),
     current_user = check_permission("menu:plan")
 ):
-    """根據受課對象部門自動計算應到人數"""
+    """根據受課對象部門和個人自動計算應到人數"""
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
     
-    if not plan.target_departments:
-        return {"calculated_count": 0}
+    calculated_count = 0
+    all_target_user_ids = set()
     
-    dept_ids = [dept.id for dept in plan.target_departments]
-    calculated_count = db.query(func.count(models.User.emp_id)).filter(
-        models.User.dept_id.in_(dept_ids),
-        models.User.status == "active"
-    ).scalar() or 0
+    # 計算部門人數
+    if plan.target_departments:
+        dept_ids = [dept.id for dept in plan.target_departments]
+        dept_users = db.query(models.User).filter(
+            models.User.dept_id.in_(dept_ids),
+            models.User.status == "active"
+        ).all()
+        for user in dept_users:
+            all_target_user_ids.add(user.emp_id)
+    
+    # 計算個人受課對象人數（排除已在部門中的）
+    if plan.target_users:
+        # 如果沒有部門，直接計算個人數量
+        if not plan.target_departments:
+            calculated_count = len([u for u in plan.target_users if u.status == "active"])
+        else:
+            # 如果有部門，只計算不在部門中的個人
+            dept_ids = [dept.id for dept in plan.target_departments]
+            dept_user_ids = set(
+                db.query(models.User.emp_id).filter(
+                    models.User.dept_id.in_(dept_ids),
+                    models.User.status == "active"
+                ).all()
+            )
+            dept_user_ids = {uid[0] for uid in dept_user_ids}
+            # 計算個人受課對象中不在部門的
+            personal_count = len([u for u in plan.target_users if u.status == "active" and u.emp_id not in dept_user_ids])
+            calculated_count = len(all_target_user_ids) + personal_count
+    else:
+        calculated_count = len(all_target_user_ids)
     
     return {"calculated_count": calculated_count}
 

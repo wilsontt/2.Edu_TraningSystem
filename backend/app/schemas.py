@@ -55,13 +55,17 @@ class TrainingPlanBase(BaseModel):
 
 class TrainingPlanCreate(TrainingPlanBase):
     target_dept_ids: List[int] = [] # 新增受課單位 IDs
+    target_user_ids: List[str] = [] # 新增個人受課對象 IDs
     expected_attendance: Optional[int] = None  # 應到人數（可選）
 
 class TrainingPlan(TrainingPlanBase):
     id: int
     year: Optional[str] = None # 改為可選
+    sub_category: Optional['SubCategory'] = None  # 子分類詳情
     target_departments: List['Department'] = [] # 回傳受課單位詳情
+    target_users: List['User'] = [] # 回傳個人受課對象詳情
     expected_attendance: Optional[int] = None  # 應到人數
+    is_archived: bool = False  # 是否已封存
     
     class Config:
         from_attributes = True

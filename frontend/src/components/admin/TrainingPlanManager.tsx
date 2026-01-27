@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { AxiosError } from 'axios';
-import { Plus, Calendar, Clock, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Calendar, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Archive, MoreVertical } from 'lucide-react';
 import api from '../../api';
 import Pagination from '../common/Pagination';
 
@@ -29,11 +29,20 @@ interface TrainingPlan {
   end_date?: string | null;
   dept_id: number;
   sub_category_id: number;
+  sub_category?: {
+    id: number;
+    name: string;
+  };
   timer_enabled: boolean;
   time_limit: number;
   passing_score: number;
   target_departments: Department[];
+  target_users?: Array<{
+    emp_id: string;
+    name: string;
+  }>;
   expected_attendance?: number | null;
+  is_archived?: boolean;
 }
 
 interface AttendanceStats {
@@ -56,8 +65,17 @@ interface AttendanceStats {
 
 const TrainingPlanManager = () => {
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
+  const [allPlans, setAllPlans] = useState<TrainingPlan[]>([]); // 保存所有計畫用於提取年份選項
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 頁籤狀態
+  const [activeTab, setActiveTab] = useState<'active' | 'expired' | 'archived'>('active');
+  
+  // 篩選狀態
+  const [filterYear, setFilterYear] = useState<string>('');
+  const [filterDeptId, setFilterDeptId] = useState<string>('');
+  const [filterCategoryId, setFilterCategoryId] = useState<string>('');
   
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
@@ -73,7 +91,6 @@ const TrainingPlanManager = () => {
   const [attendanceStats, setAttendanceStats] = useState<Record<number, AttendanceStats>>({});
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
-  const [loadingAttendance, setLoadingAttendance] = useState(false);
   
   // 報到 QRcode 狀態
   const [checkinQRCode, setCheckinQRCode] = useState<{
@@ -89,9 +106,12 @@ const TrainingPlanManager = () => {
   const [deleteTarget, setDeleteTarget] = useState<TrainingPlan | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  
+  // 操作選單狀態
+  const [openActionMenu, setOpenActionMenu] = useState<number | null>(null);
 
   // 排序狀態
-  const [sortField, setSortField] = useState<keyof TrainingPlan | 'dept_name' | null>(null);
+  const [sortField, setSortField] = useState<keyof TrainingPlan | 'dept_name' | 'category_name' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // 表單資料
@@ -106,8 +126,13 @@ const TrainingPlanManager = () => {
     time_limit: 60,
     passing_score: 60,
     target_dept_ids: [] as string[],
+    target_user_ids: [] as string[],
     expected_attendance: '',
   });
+  
+  // 使用者列表（用於個人受課對象選擇）
+  const [users, setUsers] = useState<Array<{emp_id: string; name: string; dept_name: string}>>([]);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
 
   // 下拉選單資料
   const [categories, setCategories] = useState<MainCategory[]>([]);
@@ -118,30 +143,50 @@ const TrainingPlanManager = () => {
     try {
       const res = await api.get<AttendanceStats>(`/training/plans/${planId}/attendance/stats`);
       setAttendanceStats(prev => ({ ...prev, [planId]: res.data }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('載入報到統計失敗', err);
     }
   };
 
-  // 載入所有計畫的報到統計
-  const fetchAllAttendanceStats = async () => {
-    for (const plan of plans) {
-      await fetchAttendanceStats(plan.id);
-    }
-  };
   
   // 取得初始資料
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [plansRes, catsRes, deptsRes] = await Promise.all([
-          api.get('/training/plans'),
+        // 根據 activeTab 決定查詢狀態
+        const statusMap = {
+          'active': 'active',
+          'expired': 'expired',
+          'archived': 'archived'
+        };
+        const status = statusMap[activeTab];
+        
+        // 構建查詢參數
+        const params = new URLSearchParams();
+        params.append('status', status);
+        if (filterYear) params.append('year', filterYear);
+        if (filterDeptId) params.append('dept_id', filterDeptId);
+        if (filterCategoryId) params.append('category_id', filterCategoryId);
+        
+        const [plansRes, catsRes, deptsRes, usersRes, allPlansRes] = await Promise.all([
+          api.get(`/training/plans?${params.toString()}`),
           api.get('/admin/categories/main'),
-          api.get('/admin/departments')
+          api.get('/admin/departments'),
+          api.get('/admin/users'),
+          // 獲取所有未封存的計畫用於提取年份選項（不套用篩選）
+          api.get(`/training/plans?status=${statusMap[activeTab]}`)
         ]);
         setPlans(plansRes.data);
+        setAllPlans(allPlansRes.data); // 保存所有計畫用於提取年份選項
         setCategories(catsRes.data);
         setDepartments(deptsRes.data);
+        // 處理使用者列表
+        const usersList = usersRes.data.map((u: {emp_id: string; name: string; department?: {name: string}}) => ({
+          emp_id: u.emp_id,
+          name: u.name,
+          dept_name: u.department?.name || '未知'
+        }));
+        setUsers(usersList);
         
         // 載入報到統計
         for (const plan of plansRes.data) {
@@ -159,7 +204,7 @@ const TrainingPlanManager = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [activeTab, filterYear, filterDeptId, filterCategoryId]);
 
   const openModal = (plan?: TrainingPlan) => {
     if (plan) {
@@ -205,6 +250,7 @@ const TrainingPlanManager = () => {
         time_limit: plan.time_limit,
         passing_score: plan.passing_score,
         target_dept_ids: plan.target_departments ? plan.target_departments.map(d => d.id.toString()) : [],
+        target_user_ids: plan.target_users ? plan.target_users.map(u => u.emp_id) : [],
         expected_attendance: plan.expected_attendance ? plan.expected_attendance.toString() : '',
       });
     } else {
@@ -222,6 +268,7 @@ const TrainingPlanManager = () => {
         time_limit: 60,
         passing_score: 60,
         target_dept_ids: [],
+        target_user_ids: [],
         expected_attendance: '',
       });
     }
@@ -246,6 +293,7 @@ const TrainingPlanManager = () => {
         time_limit: formData.timer_enabled ? formData.time_limit : 0,
         passing_score: formData.passing_score,
         target_dept_ids: formData.target_dept_ids.map(id => parseInt(id)),
+        target_user_ids: formData.target_user_ids,
         expected_attendance: formData.expected_attendance ? parseInt(formData.expected_attendance) : null,
       };
 
@@ -255,9 +303,24 @@ const TrainingPlanManager = () => {
         await api.post('/training/plans', payload);
       }
       
-      // 更新列表
-      const res = await api.get('/training/plans');
+      // 更新列表（使用當前篩選條件）
+      const statusMap = {
+        'active': 'active',
+        'expired': 'expired',
+        'archived': 'archived'
+      };
+      const status = statusMap[activeTab];
+      const params = new URLSearchParams();
+      params.append('status', status);
+      if (filterYear) params.append('year', filterYear);
+      if (filterDeptId) params.append('dept_id', filterDeptId);
+      if (filterCategoryId) params.append('category_id', filterCategoryId);
+      const [res, allPlansRes] = await Promise.all([
+        api.get(`/training/plans?${params.toString()}`),
+        api.get(`/training/plans?status=${status}`)
+      ]);
       setPlans(res.data);
+      setAllPlans(allPlansRes.data);
       
       setIsModalOpen(false);
     } catch (err: unknown) {
@@ -277,8 +340,24 @@ const TrainingPlanManager = () => {
       setDeleteError(null);
       await api.delete(`/training/plans/${deleteTarget.id}`);
       
-      // 從列表中移除
-      setPlans(plans.filter(p => p.id !== deleteTarget.id));
+      // 更新列表（使用當前篩選條件）
+      const statusMap = {
+        'active': 'active',
+        'expired': 'expired',
+        'archived': 'archived'
+      };
+      const status = statusMap[activeTab];
+      const params = new URLSearchParams();
+      params.append('status', status);
+      if (filterYear) params.append('year', filterYear);
+      if (filterDeptId) params.append('dept_id', filterDeptId);
+      if (filterCategoryId) params.append('category_id', filterCategoryId);
+      const [res, allPlansRes] = await Promise.all([
+        api.get(`/training/plans?${params.toString()}`),
+        api.get(`/training/plans?status=${status}`)
+      ]);
+      setPlans(res.data);
+      setAllPlans(allPlansRes.data);
       setDeleteTarget(null);
     } catch (err) {
       if (err instanceof AxiosError && err.response) {
@@ -291,27 +370,99 @@ const TrainingPlanManager = () => {
     }
   };
 
-  // 找尋部門或分類名稱的輔助函式
-  const getDeptName = (id: number) => departments.find(d => d.id === id)?.name || '未知單位';
+  const handleArchivePlan = async (planId: number) => {
+    try {
+      await api.post(`/training/plans/${planId}/archive`);
+      // 重新載入列表
+      const statusMap = {
+        'active': 'active',
+        'expired': 'expired',
+        'archived': 'archived'
+      };
+      const status = statusMap[activeTab];
+      const params = new URLSearchParams();
+      params.append('status', status);
+      if (filterYear) params.append('year', filterYear);
+      if (filterDeptId) params.append('dept_id', filterDeptId);
+      if (filterCategoryId) params.append('category_id', filterCategoryId);
+      const [res, allPlansRes] = await Promise.all([
+        api.get(`/training/plans?${params.toString()}`),
+        api.get(`/training/plans?status=${status}`)
+      ]);
+      setPlans(res.data);
+      setAllPlans(allPlansRes.data);
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        alert(err.response.data.detail || '封存失敗');
+      } else {
+        alert('發生未預期錯誤');
+      }
+    }
+  };
 
-  const handleSort = (field: keyof TrainingPlan | 'dept_name') => {
+  const handleUnarchivePlan = async (planId: number) => {
+    try {
+      await api.post(`/training/plans/${planId}/unarchive`);
+      // 重新載入列表
+      const statusMap = {
+        'active': 'active',
+        'expired': 'expired',
+        'archived': 'archived'
+      };
+      const status = statusMap[activeTab];
+      const params = new URLSearchParams();
+      params.append('status', status);
+      if (filterYear) params.append('year', filterYear);
+      if (filterDeptId) params.append('dept_id', filterDeptId);
+      if (filterCategoryId) params.append('category_id', filterCategoryId);
+      const [res, allPlansRes] = await Promise.all([
+        api.get(`/training/plans?${params.toString()}`),
+        api.get(`/training/plans?status=${status}`)
+      ]);
+      setPlans(res.data);
+      setAllPlans(allPlansRes.data);
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        alert(err.response.data.detail || '取消封存失敗');
+      } else {
+        alert('發生未預期錯誤');
+      }
+    }
+  };
+
+  // 找尋部門或分類名稱的輔助函式
+  const getDeptName = useCallback((id: number) => departments.find(d => d.id === id)?.name || '未知單位', [departments]);
+
+  const handleSort = (field: keyof TrainingPlan | 'dept_name' | 'category_name') => {
     if (sortField === field) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+      // 循環：asc -> desc -> null (恢復原狀) -> asc -> desc ...
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else if (sortDirection === 'desc') {
+        // 恢復原狀：清除排序
+        setSortField(null);
+        setSortDirection('asc');
+      }
     } else {
       setSortField(field);
       setSortDirection('asc');
     }
   };
 
-  const renderSortIcon = (field: keyof TrainingPlan | 'dept_name') => {
-    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 text-indigo-300 opacity-50 group-hover:opacity-100" />;
-    return sortDirection === 'asc' 
-      ? <ArrowUp className="w-3 h-3 ml-1 text-indigo-600" />
-      : <ArrowDown className="w-3 h-3 ml-1 text-indigo-600" />;
+  const renderSortIcon = (field: keyof TrainingPlan | 'dept_name' | 'category_name') => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 ml-1 text-indigo-300 opacity-50 group-hover:opacity-100" />;
+    }
+    if (sortDirection === 'asc') {
+      return <ArrowUp className="w-3 h-3 ml-1 text-indigo-600" />;
+    } else if (sortDirection === 'desc') {
+      return <ArrowDown className="w-3 h-3 ml-1 text-indigo-600" />;
+    }
+    return <ArrowUpDown className="w-3 h-3 ml-1 text-indigo-300 opacity-50 group-hover:opacity-100" />;
   };
 
   const filteredPlans = useMemo(() => {
-    let result = plans.filter(plan => 
+    const result = plans.filter(plan => 
       plan.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       plan.year.includes(searchTerm)
     );
@@ -324,6 +475,9 @@ const TrainingPlanManager = () => {
         if (sortField === 'dept_name') {
            aVal = getDeptName(a.dept_id) || '';
            bVal = getDeptName(b.dept_id) || '';
+        } else if (sortField === 'category_name') {
+           aVal = a.sub_category?.name || '未知分類';
+           bVal = b.sub_category?.name || '未知分類';
         } else {
            aVal = a[sortField as keyof TrainingPlan] as string | number || '';
            bVal = b[sortField as keyof TrainingPlan] as string | number || '';
@@ -344,7 +498,7 @@ const TrainingPlanManager = () => {
         result.sort((a, b) => b.id - a.id);
     }
     return result;
-  }, [plans, searchTerm, sortField, sortDirection, departments]);
+  }, [plans, searchTerm, sortField, sortDirection, getDeptName]);
 
   // 分頁計算
   const totalPages = Math.ceil(filteredPlans.length / pageSize);
@@ -420,10 +574,120 @@ const TrainingPlanManager = () => {
         </button>
       </div>
 
-      {/* 列表區塊 (省略) ... */}
+      {/* 頁籤 */}
+      <div className="mb-6 flex gap-2 border-b border-gray-200">
+        <button
+          onClick={() => {
+            setActiveTab('active');
+            setCurrentPage(1);
+          }}
+          className={`px-6 py-3 font-bold transition-all duration-200 border-b-2 ${
+            activeTab === 'active'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          正在進行中
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('expired');
+            setCurrentPage(1);
+          }}
+          className={`px-6 py-3 font-bold transition-all duration-200 border-b-2 ${
+            activeTab === 'expired'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          已過期
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('archived');
+            setCurrentPage(1);
+          }}
+          className={`px-6 py-3 font-bold transition-all duration-200 border-b-2 ${
+            activeTab === 'archived'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          已封存
+        </button>
+      </div>
+
+      {/* 篩選區塊 */}
+      <div className="mb-6 bg-white rounded-xl shadow-md border border-indigo-100 p-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">年份</label>
+            <select
+              value={filterYear}
+              onChange={(e) => {
+                setFilterYear(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="">全部</option>
+              {Array.from(new Set(allPlans.map(p => p.year).filter(Boolean))).sort().reverse().map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">開課單位</label>
+            <select
+              value={filterDeptId}
+              onChange={(e) => {
+                setFilterDeptId(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="">全部</option>
+              {departments.map(dept => (
+                <option key={dept.id} value={dept.id.toString()}>{dept.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">分類</label>
+            <select
+              value={filterCategoryId}
+              onChange={(e) => {
+                setFilterCategoryId(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="">全部</option>
+              {categories.flatMap(cat => 
+                cat.sub_categories.map(sub => (
+                  <option key={sub.id} value={sub.id.toString()}>{cat.name} - {sub.name}</option>
+                ))
+              )}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <button
+              onClick={() => {
+                setFilterYear('');
+                setFilterDeptId('');
+                setFilterCategoryId('');
+                setCurrentPage(1);
+              }}
+              className="w-full px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-bold hover:bg-gray-200 transition-all duration-200"
+            >
+              清除篩選
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* List */}
       <div className="bg-white rounded-3xl shadow-xl shadow-indigo-100/30 border border-indigo-100/50 overflow-hidden">
-        {/* ... (table content) ... */}
         <div className="p-4 border-b border-indigo-100 bg-indigo-50/30">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -437,7 +701,7 @@ const TrainingPlanManager = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-visible">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-linear-to-r from-indigo-50/50 to-purple-50/30">
@@ -471,7 +735,15 @@ const TrainingPlanManager = () => {
                 </th>
                 <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">開始日期</th>
                 <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">結束日期</th>
-                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">計時</th>
+                <th 
+                    className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-colors group"
+                    onClick={() => handleSort('category_name')}
+                >
+                    <div className="flex items-center">
+                        分類名稱
+                        {renderSortIcon('category_name')}
+                    </div>
+                </th>
                 <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">報到統計</th>
                 <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">操作</th>
               </tr>
@@ -479,7 +751,7 @@ const TrainingPlanManager = () => {
             <tbody className="divide-y divide-gray-50">
               {paginatedPlans.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-gray-400 font-bold italic">
+                  <td colSpan={9} className="px-6 py-16 text-center text-gray-400 font-bold italic">
                     <div className="flex flex-col items-center gap-2">
                       <BookOpen className="w-8 h-8 opacity-20" />
                       目前沒有任何訓練計畫
@@ -519,17 +791,8 @@ const TrainingPlanManager = () => {
                          <span className="text-gray-400">-</span>
                        )}
                     </td>
-                    <td className="px-6 py-4 text-sm font-bold">
-                       <div className="flex items-center gap-1">
-                           {plan.timer_enabled ? (
-                             <div className="flex items-center gap-1 text-orange-600">
-                               <Clock className="w-4 h-4" />
-                               {plan.time_limit} 分
-                             </div>
-                           ) : (
-                             <span className="text-gray-400">-</span>
-                           )}
-                       </div>
+                    <td className="px-6 py-4 text-sm font-bold text-gray-600">
+                      {plan.sub_category?.name || '未知分類'}
                     </td>
                     <td className="px-6 py-4 text-sm">
                       {attendanceStats[plan.id] ? (
@@ -571,13 +834,70 @@ const TrainingPlanManager = () => {
                             <BarChart3 className="w-4 h-4" />
                           </button>
                         )}
-                        <button 
-                          onClick={() => setDeleteTarget(plan)}
-                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
-                          title="刪除計畫"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {/* 操作選單 */}
+                        <div className="relative" style={{ zIndex: openActionMenu === plan.id ? 100 : 'auto' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenActionMenu(openActionMenu === plan.id ? null : plan.id);
+                            }}
+                            className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                            title="更多操作"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          {openActionMenu === plan.id && (
+                            <>
+                              <div 
+                                className="fixed inset-0 z-[90]" 
+                                onClick={() => setOpenActionMenu(null)}
+                              />
+                              <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border-2 border-gray-300 z-[100] py-1">
+                                {!plan.is_archived && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenu(null);
+                                      if (window.confirm(`確定要封存「${plan.title}」嗎？\n\n封存後，該計畫將不會顯示在「正在進行中」和「已過期」列表中。`)) {
+                                        handleArchivePlan(plan.id);
+                                      }
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm font-bold text-purple-600 hover:bg-purple-50 flex items-center gap-2"
+                                  >
+                                    <Archive className="w-4 h-4" />
+                                    封存計畫
+                                  </button>
+                                )}
+                                {plan.is_archived && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenu(null);
+                                      if (window.confirm(`確定要取消封存「${plan.title}」嗎？\n\n取消封存後，該計畫將根據其狀態顯示在對應的列表中。`)) {
+                                        handleUnarchivePlan(plan.id);
+                                      }
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2"
+                                  >
+                                    <Archive className="w-4 h-4" />
+                                    取消封存
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenActionMenu(null);
+                                    setDeleteTarget(plan);
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  刪除計畫
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -794,7 +1114,7 @@ const TrainingPlanManager = () => {
                           const res = await api.get(`/training/plans/${editId}/calculate-expected-attendance`);
                           setFormData({...formData, expected_attendance: res.data.calculated_count.toString()});
                         }
-                      } catch (err: any) {
+                      } catch (err: unknown) {
                         console.error('計算應到人數失敗', err);
                       }
                     }}
@@ -900,6 +1220,99 @@ const TrainingPlanManager = () => {
                      </p>
                  )}
               </div>
+
+              {/* Target Users - 個人受課對象 */}
+              <div className="space-y-2 pt-2 border-t border-gray-100">
+                 <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-gray-500 uppercase">個人受課對象 (可複選)</label>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const allUserIds = users.map(u => u.emp_id);
+                            const isAllSelected = allUserIds.length > 0 && 
+                                allUserIds.every(id => formData.target_user_ids.includes(id));
+                            
+                            if (isAllSelected) {
+                                setFormData(prev => ({
+                                    ...prev,
+                                    target_user_ids: []
+                                }));
+                            } else {
+                                setFormData(prev => ({
+                                    ...prev,
+                                    target_user_ids: allUserIds
+                                }));
+                            }
+                        }}
+                        className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
+                    >
+                        {(() => {
+                            const allUserIds = users.map(u => u.emp_id);
+                            const isAllSelected = allUserIds.length > 0 && 
+                                allUserIds.every(id => formData.target_user_ids.includes(id));
+                            return isAllSelected ? '取消全選' : '全選';
+                        })()}
+                    </button>
+                 </div>
+                 <div className="mb-2">
+                    <input
+                        type="text"
+                        placeholder="搜尋員工編號、姓名或部門..."
+                        className="w-full px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
+                        value={userSearchTerm}
+                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                    />
+                 </div>
+                 <div className="border-2 border-indigo-200 rounded-xl p-3 max-h-40 overflow-y-auto bg-indigo-50/30">
+                    <div className="space-y-2">
+                        {users
+                            .filter(user => 
+                                userSearchTerm === '' || 
+                                user.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                                user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                                user.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase())
+                            )
+                            .map(user => (
+                            <label key={user.emp_id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white transition-colors duration-200 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                    checked={formData.target_user_ids.includes(user.emp_id)}
+                                    onChange={e => {
+                                        if (e.target.checked) {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                target_user_ids: [...prev.target_user_ids, user.emp_id]
+                                            }));
+                                        } else {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                target_user_ids: prev.target_user_ids.filter(id => id !== user.emp_id)
+                                            }));
+                                        }
+                                    }}
+                                />
+                                <span className="text-sm font-bold text-gray-700">
+                                    {user.name} ({user.emp_id}) - {user.dept_name}
+                                </span>
+                            </label>
+                        ))}
+                        {users.filter(user => 
+                            userSearchTerm === '' || 
+                            user.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                            user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                            user.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase())
+                        ).length === 0 && (
+                            <p className="text-xs text-gray-400 text-center py-2">沒有找到符合的使用者</p>
+                        )}
+                    </div>
+                 </div>
+                 {formData.target_user_ids.length > 0 && (
+                     <p className="text-xs text-indigo-600 font-bold">
+                         已選擇 {formData.target_user_ids.length} 位個人受課對象
+                     </p>
+                 )}
+              </div>
               {/* ... (footer buttons) ... */}
               <div className="pt-4 flex gap-3">
                 <button
@@ -970,7 +1383,6 @@ const TrainingPlanManager = () => {
             <div className="p-6 overflow-y-auto space-y-6">
               {(() => {
                 const stats = attendanceStats[selectedPlanId];
-                const plan = plans.find(p => p.id === selectedPlanId);
                 
                 return (
                   <>
@@ -1003,8 +1415,12 @@ const TrainingPlanManager = () => {
                               setGeneratingQRCode(true);
                               const res = await api.post(`/training/plans/${selectedPlanId}/checkin-qrcode/generate`);
                               setCheckinQRCode(res.data);
-                            } catch (err: any) {
-                              alert(err.response?.data?.detail || '產生報到 QRcode 失敗');
+                            } catch (err: unknown) {
+                              if (err instanceof AxiosError) {
+                                alert(err.response?.data?.detail || '產生報到 QRcode 失敗');
+                              } else {
+                                alert('產生報到 QRcode 失敗');
+                              }
                             } finally {
                               setGeneratingQRCode(false);
                             }
@@ -1078,11 +1494,26 @@ const TrainingPlanManager = () => {
                               });
                               // 重新載入統計
                               await fetchAttendanceStats(selectedPlanId);
-                              // 重新載入計畫列表以更新 expected_attendance
-                              const plansRes = await api.get('/training/plans');
+                              // 重新載入計畫列表以更新 expected_attendance（使用當前篩選條件）
+                              const statusMap = {
+                                'active': 'active',
+                                'expired': 'expired',
+                                'archived': 'archived'
+                              };
+                              const status = statusMap[activeTab];
+                              const params = new URLSearchParams();
+                              params.append('status', status);
+                              if (filterYear) params.append('year', filterYear);
+                              if (filterDeptId) params.append('dept_id', filterDeptId);
+                              if (filterCategoryId) params.append('category_id', filterCategoryId);
+                              const plansRes = await api.get(`/training/plans?${params.toString()}`);
                               setPlans(plansRes.data);
-                            } catch (err: any) {
-                              alert(err.response?.data?.detail || '更新失敗');
+                            } catch (err: unknown) {
+                              if (err instanceof AxiosError) {
+                                alert(err.response?.data?.detail || '更新失敗');
+                              } else {
+                                alert('更新失敗');
+                              }
                             }
                           }}
                           className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
@@ -1111,11 +1542,26 @@ const TrainingPlanManager = () => {
                                   attendance_rate: prev[selectedPlanId].actual_count / newValue * 100
                                 }
                               }));
-                              // 重新載入計畫列表
-                              const plansRes = await api.get('/training/plans');
+                              // 重新載入計畫列表（使用當前篩選條件）
+                              const statusMap = {
+                                'active': 'active',
+                                'expired': 'expired',
+                                'archived': 'archived'
+                              };
+                              const status = statusMap[activeTab];
+                              const params = new URLSearchParams();
+                              params.append('status', status);
+                              if (filterYear) params.append('year', filterYear);
+                              if (filterDeptId) params.append('dept_id', filterDeptId);
+                              if (filterCategoryId) params.append('category_id', filterCategoryId);
+                              const plansRes = await api.get(`/training/plans?${params.toString()}`);
                               setPlans(plansRes.data);
-                            } catch (err: any) {
-                              alert(err.response?.data?.detail || '更新失敗');
+                            } catch (err: unknown) {
+                              if (err instanceof AxiosError) {
+                                alert(err.response?.data?.detail || '更新失敗');
+                              } else {
+                                alert('更新失敗');
+                              }
                             }
                           }}
                         />

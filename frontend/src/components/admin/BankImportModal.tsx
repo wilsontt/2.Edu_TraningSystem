@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, Check, Search } from 'lucide-react';
 import api from '../../api';
 
 interface QuestionBankItem {
@@ -23,10 +23,14 @@ const BankImportModal = ({ planId, onClose, onImportSuccess }: BankImportModalPr
     
     const [page, setPage] = useState(1);
     const [pageSize] = useState(10); // 模態框使用較小的分頁大小
-    const [/* total */, setTotal] = useState(0);
+    const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
 
+    // 篩選條件
     const [keyword, setKeyword] = useState('');
+    const [questionType, setQuestionType] = useState('all');
+    const [tagFilter, setTagFilter] = useState('');
+    
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
     const fetchQuestions = useCallback(async () => {
@@ -36,6 +40,8 @@ const BankImportModal = ({ planId, onClose, onImportSuccess }: BankImportModalPr
             params.append('page', page.toString());
             params.append('size', pageSize.toString());
             if (keyword) params.append('keyword', keyword);
+            if (questionType && questionType !== 'all') params.append('question_type', questionType);
+            if (tagFilter) params.append('tags', tagFilter);
             
             const res = await api.get(`/admin/question-bank?${params.toString()}`);
             setQuestions(res.data.items);
@@ -46,7 +52,7 @@ const BankImportModal = ({ planId, onClose, onImportSuccess }: BankImportModalPr
         } finally {
             setLoading(false);
         }
-    }, [page, pageSize, keyword]);
+    }, [page, pageSize, keyword, questionType, tagFilter]);
 
     useEffect(() => {
         fetchQuestions();
@@ -54,6 +60,11 @@ const BankImportModal = ({ planId, onClose, onImportSuccess }: BankImportModalPr
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
+        setPage(1);
+        fetchQuestions();
+    };
+
+    const handleFilterChange = () => {
         setPage(1);
         fetchQuestions();
     };
@@ -101,19 +112,57 @@ const BankImportModal = ({ planId, onClose, onImportSuccess }: BankImportModalPr
                     </button>
                 </div>
 
-                <div className="p-4 border-b border-gray-100">
-                    <form onSubmit={handleSearch} className="flex gap-2">
+                <div className="p-4 border-b border-gray-100 bg-gray-50">
+                    <form onSubmit={handleSearch} className="flex flex-wrap gap-2">
+                        <div className="relative flex-1 min-w-[200px]">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400 w-4 h-4" />
+                            <input 
+                                type="text" 
+                                className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                                placeholder="搜尋題目內容..."
+                                value={keyword}
+                                onChange={(e) => setKeyword(e.target.value)}
+                            />
+                        </div>
+                        <select 
+                            className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer transition-all"
+                            value={questionType}
+                            onChange={(e) => {
+                                setQuestionType(e.target.value);
+                                handleFilterChange();
+                            }}
+                        >
+                            <option value="all">所有題型</option>
+                            <option value="single">單選題</option>
+                            <option value="multiple">多選題</option>
+                            <option value="true_false">是非題</option>
+                        </select>
                         <input 
-                            type="text" 
-                            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-bold focus:border-blue-500 outline-none"
-                            placeholder="搜尋題目..."
-                            value={keyword}
-                            onChange={(e) => setKeyword(e.target.value)}
+                            type="text"
+                            placeholder="標籤篩選"
+                            className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none w-32 transition-all"
+                            value={tagFilter}
+                            onChange={(e) => setTagFilter(e.target.value)}
+                            onBlur={handleFilterChange}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleFilterChange();
+                                }
+                            }}
                         />
-                        <button type="submit" className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-bold hover:bg-gray-200">
-                            搜尋
+                        <button 
+                            type="submit" 
+                            className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 hover:shadow-md hover:shadow-indigo-200 active:scale-95 transition-all cursor-pointer"
+                        >
+                            <Search className="w-4 h-4" />
                         </button>
                     </form>
+                    {total > 0 && (
+                        <div className="mt-2 text-xs text-indigo-600 font-bold">
+                            共找到 {total} 筆題目
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50/30">
@@ -122,24 +171,55 @@ const BankImportModal = ({ planId, onClose, onImportSuccess }: BankImportModalPr
                     ) : questions.length === 0 ? (
                         <div className="py-8 text-center text-gray-400 font-bold">查無題目</div>
                     ) : (
-                        questions.map(q => (
-                            <label key={q.id} className="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors">
-                                <input 
-                                    type="checkbox"
-                                    className="mt-1 w-4 h-4 text-blue-600 rounded"
-                                    checked={selectedIds.includes(q.id)}
-                                    onChange={() => toggleSelection(q.id)}
-                                />
-                                <div className="flex-1">
-                                    <div className="flex gap-2 mb-1">
-                                        <span className="text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                                            {q.question_type === 'multiple' ? '多選' : q.question_type === 'true_false' ? '是非' : '單選'}
-                                        </span>
+                        questions.map(q => {
+                            // 解析標籤
+                            let tags: string[] = [];
+                            try {
+                                const parsedTags = JSON.parse(q.tags || '[]');
+                                if (Array.isArray(parsedTags)) {
+                                    tags = parsedTags;
+                                }
+                            } catch {
+                                // 忽略解析錯誤
+                            }
+                            
+                            return (
+                                <label key={q.id} className="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:bg-indigo-50 cursor-pointer transition-colors">
+                                    <input 
+                                        type="checkbox"
+                                        className="mt-1 w-4 h-4 text-indigo-600 rounded focus:ring-2 focus:ring-indigo-500"
+                                        checked={selectedIds.includes(q.id)}
+                                        onChange={() => toggleSelection(q.id)}
+                                    />
+                                    <div className="flex-1">
+                                        <div className="flex gap-2 mb-2 items-center flex-wrap">
+                                            <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                                                q.question_type === 'true_false' ? 'bg-amber-100 text-amber-700' : 
+                                                q.question_type === 'multiple' ? 'bg-purple-100 text-purple-700' : 
+                                                'bg-indigo-100 text-indigo-700'
+                                            }`}>
+                                                {q.question_type === 'multiple' ? '多選' : q.question_type === 'true_false' ? '是非' : '單選'}
+                                            </span>
+                                            {tags.length > 0 && (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {tags.slice(0, 3).map((tag, idx) => (
+                                                        <span key={idx} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs rounded-full border border-indigo-100 font-medium">
+                                                            {tag}
+                                                        </span>
+                                                    ))}
+                                                    {tags.length > 3 && (
+                                                        <span className="px-2 py-0.5 text-indigo-500 text-xs font-medium">
+                                                            +{tags.length - 3}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="text-sm font-bold text-gray-800 line-clamp-2">{q.content}</div>
                                     </div>
-                                    <div className="text-sm font-bold text-gray-800 line-clamp-2">{q.content}</div>
-                                </div>
-                            </label>
-                        ))
+                                </label>
+                            );
+                        })
                     )}
                 </div>
 

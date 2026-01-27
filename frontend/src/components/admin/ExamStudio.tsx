@@ -79,7 +79,8 @@ const ExamStudio = () => {
     const fetchPlans = async () => {
         try {
             setIsLoadingPlans(true);
-            const res = await api.get('/training/plans'); // 正確的 API 端點
+            // 取得所有未封存的計畫（包括已過期的，因為考卷工坊需要查看所有計畫的題目）
+            const res = await api.get('/training/plans');
             setPlans(res.data);
         } catch (err) {
             console.error(err);

@@ -138,7 +138,8 @@ def get_overview_statistics(
     monthly_new_exams = db.query(models.TrainingPlan).filter(
         and_(
             models.TrainingPlan.training_date >= month_start_date,
-            models.TrainingPlan.training_date <= month_end_date
+            models.TrainingPlan.training_date <= month_end_date,
+            models.TrainingPlan.is_archived == False
         )
     ).count()
     
@@ -161,7 +162,8 @@ def get_overview_statistics(
             or_(
                 models.TrainingPlan.end_date.is_(None),
                 models.TrainingPlan.end_date >= today
-            )
+            ),
+            models.TrainingPlan.is_archived == False
         )
     ).all()
     
@@ -731,13 +733,14 @@ def get_plan_popularity(
     - 各計畫平均分數排行
     """
     try:
-        # 取得各計畫統計
+        # 取得各計畫統計（不包括已封存的計畫）
         plan_stats = db.query(
             models.TrainingPlan.id,
             models.TrainingPlan.title,
             func.count(models.ExamRecord.id).label("count"),
             func.avg(models.ExamRecord.total_score).label("avg_score")
         ).join(models.ExamRecord, models.TrainingPlan.id == models.ExamRecord.plan_id)\
+         .filter(models.TrainingPlan.is_archived == False)\
          .group_by(models.TrainingPlan.id)\
          .order_by(func.count(models.ExamRecord.id).desc())\
          .limit(limit).all()
@@ -867,14 +870,15 @@ def get_active_exams(
     """
     today = date.today()
     
-    # 找出所有有效的訓練計畫（今天在 training_date 和 end_date 之間）
+    # 找出所有有效的訓練計畫（今天在 training_date 和 end_date 之間，不包括已封存的）
     active_plans = db.query(models.TrainingPlan).filter(
         and_(
             models.TrainingPlan.training_date <= today,
             or_(
                 models.TrainingPlan.end_date.is_(None),
                 models.TrainingPlan.end_date >= today
-            )
+            ),
+            models.TrainingPlan.is_archived == False
         )
     ).all()
     
@@ -920,12 +924,13 @@ def get_expiring_soon(
     today = date.today()
     expiry_date = today + timedelta(days=days)
     
-    # 找出即將到期的訓練計畫
+    # 找出即將到期的訓練計畫（不包括已封存的）
     expiring_plans = db.query(models.TrainingPlan).filter(
         and_(
             models.TrainingPlan.end_date.isnot(None),
             models.TrainingPlan.end_date >= today,
-            models.TrainingPlan.end_date <= expiry_date
+            models.TrainingPlan.end_date <= expiry_date,
+            models.TrainingPlan.is_archived == False
         )
     ).all()
     

@@ -19,6 +19,14 @@ plan_target_departments = Table(
     Column("dept_id", Integer, ForeignKey("departments.id")),
 )
 
+# 訓練計畫與個人受課對象的關聯表 (Many-to-Many)
+plan_target_users = Table(
+    "plan_target_users",
+    Base.metadata,
+    Column("plan_id", Integer, ForeignKey("training_plans.id")),
+    Column("emp_id", String, ForeignKey("users.emp_id")),
+)
+
 class Department(Base):
     __tablename__ = "departments"
     id = Column(Integer, primary_key=True, index=True)
@@ -88,10 +96,12 @@ class TrainingPlan(Base):
     sub_category = relationship("SubCategory", back_populates="training_plans")
     location = relationship("Department", back_populates="training_plans") # 開課單位
     target_departments = relationship("Department", secondary=plan_target_departments, backref="target_plans") # 受課單位
+    target_users = relationship("User", secondary=plan_target_users, backref="target_plans") # 個人受課對象
     questions = relationship("Question", back_populates="training_plan")
     exam_records = relationship("ExamRecord", back_populates="training_plan")
     attendance_records = relationship("AttendanceRecord", back_populates="training_plan")
     expected_attendance = Column(Integer, nullable=True)  # 應到人數（可手動修改，預設為受課部門人數）
+    is_archived = Column(Boolean, default=False, nullable=False)  # 是否已封存
 
 class Question(Base):
     __tablename__ = "questions"
