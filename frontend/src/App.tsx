@@ -33,12 +33,12 @@ const CalendarIcon = () => {
     return () => clearInterval(timer);
   }, []);
   
-  // 格式化月份、日期、時間字串
+  // 格式化月份、日期、時間字串 (使用本地時間)
   // 返回 JSX（日曆圖示 + 日期時間文字）
-  const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+  const month = date.toLocaleString('default', { month: 'short' }).toUpperCase();
   const day = date.getDate();
   
-  // yyyy-MM-dd
+  // yyyy-MM-dd (本地時間)
   const dateString = date.getFullYear() + '-' + 
                     String(date.getMonth() + 1).padStart(2, '0') + '-' + 
                     String(date.getDate()).padStart(2, '0');
@@ -193,7 +193,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
         <div className="flex items-center gap-3 pr-2 sm:pr-4 border-r border-gray-200">
           <div className="text-right hidden sm:block">
             <p className="text-xs text-gray-500 font-medium leading-none">{user.role === 'Admin' ? 'IT管理員' : user.dept_name}</p>
-            <p className="text-sm font-bold text-gray-800">{user.name}</p>
+            <p className="text-sm font-bold text-gray-800">{user.name} <span className="text-gray-400 font-normal">({user.emp_id})</span></p>
           </div>
           <CalendarIcon />
         </div>

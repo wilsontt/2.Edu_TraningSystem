@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { AxiosError } from 'axios';
-import { Plus, Calendar, Clock, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check, Trash2 } from 'lucide-react';
+import { Plus, Calendar, Clock, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../../api';
 import Pagination from '../common/Pagination';
 
@@ -89,6 +89,10 @@ const TrainingPlanManager = () => {
   const [deleteTarget, setDeleteTarget] = useState<TrainingPlan | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // 排序狀態
+  const [sortField, setSortField] = useState<keyof TrainingPlan | 'dept_name' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // 表單資料
   const [formData, setFormData] = useState({
@@ -287,12 +291,60 @@ const TrainingPlanManager = () => {
     }
   };
 
+  // 找尋部門或分類名稱的輔助函式
+  const getDeptName = (id: number) => departments.find(d => d.id === id)?.name || '未知單位';
+
+  const handleSort = (field: keyof TrainingPlan | 'dept_name') => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const renderSortIcon = (field: keyof TrainingPlan | 'dept_name') => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 text-indigo-300 opacity-50 group-hover:opacity-100" />;
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="w-3 h-3 ml-1 text-indigo-600" />
+      : <ArrowDown className="w-3 h-3 ml-1 text-indigo-600" />;
+  };
+
   const filteredPlans = useMemo(() => {
-    return plans.filter(plan => 
+    let result = plans.filter(plan => 
       plan.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       plan.year.includes(searchTerm)
     );
-  }, [plans, searchTerm]);
+
+    if (sortField) {
+      result.sort((a, b) => {
+        let aVal: string | number = '';
+        let bVal: string | number = '';
+
+        if (sortField === 'dept_name') {
+           aVal = getDeptName(a.dept_id) || '';
+           bVal = getDeptName(b.dept_id) || '';
+        } else {
+           aVal = a[sortField as keyof TrainingPlan] as string | number || '';
+           bVal = b[sortField as keyof TrainingPlan] as string | number || '';
+        }
+
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+             return sortDirection === 'asc' 
+                ? aVal.localeCompare(bVal, 'zh-TW') 
+                : bVal.localeCompare(aVal, 'zh-TW');
+        }
+
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    } else {
+        // 預設依照 ID 倒序 (新到舊)
+        result.sort((a, b) => b.id - a.id);
+    }
+    return result;
+  }, [plans, searchTerm, sortField, sortDirection, departments]);
 
   // 分頁計算
   const totalPages = Math.ceil(filteredPlans.length / pageSize);
@@ -304,11 +356,12 @@ const TrainingPlanManager = () => {
     setCurrentPage(1);
   }, [searchTerm, pageSize]);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
 
-  // 找尋部門或分類名稱的輔助函式
-  const getDeptName = (id: number) => departments.find(d => d.id === id)?.name || '未知單位';
-  
   // 如果編輯模式且 main_category_id 為空，但 sub_category_id 有值，嘗試找到對應的子分類並自動設定主分類
   useEffect(() => {
     if (isModalOpen && isEditing && !formData.main_category_id && formData.sub_category_id) {
@@ -387,11 +440,35 @@ const TrainingPlanManager = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-gradient-to-r from-indigo-50/50 to-purple-50/30">
+              <tr className="bg-linear-to-r from-indigo-50/50 to-purple-50/30">
                 <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider w-16">項次</th>
-                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider w-24">年份</th>
-                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">計畫名稱</th>
-                <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">開課單位</th>
+                <th 
+                    className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider w-24 cursor-pointer hover:bg-indigo-50 transition-colors group"
+                    onClick={() => handleSort('year')}
+                >
+                    <div className="flex items-center">
+                        年份
+                        {renderSortIcon('year')}
+                    </div>
+                </th>
+                <th 
+                    className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-colors group"
+                    onClick={() => handleSort('title')}
+                >
+                    <div className="flex items-center">
+                        計畫名稱
+                        {renderSortIcon('title')}
+                    </div>
+                </th>
+                <th 
+                    className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-colors group"
+                    onClick={() => handleSort('dept_name')}
+                >
+                    <div className="flex items-center">
+                        開課單位
+                        {renderSortIcon('dept_name')}
+                    </div>
+                </th>
                 <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">開始日期</th>
                 <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">結束日期</th>
                 <th className="px-6 py-4 text-xs font-black text-indigo-500 uppercase tracking-wider">計時</th>
@@ -411,7 +488,7 @@ const TrainingPlanManager = () => {
                 </tr>
               ) : (
                 paginatedPlans.map((plan, index) => {
-                  const isExpired = plan.end_date && plan.end_date < today;
+                  const isExpired = plan.end_date && plan.end_date < todayStr;
                   const displayIndex = startIndex + index + 1;
                   return (
                   <tr key={plan.id} className={`group border-b border-gray-50 transition-all duration-200 even:bg-gray-50/50 hover:bg-indigo-50/30 cursor-pointer ${isExpired ? 'border-l-4 border-l-orange-400 bg-orange-50/10' : ''}`}>
@@ -531,7 +608,7 @@ const TrainingPlanManager = () => {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-            <div className={`p-6 border-b flex items-center justify-between ${isEditing ? 'border-indigo-100 bg-gradient-to-r from-indigo-50 to-purple-50' : 'border-green-100 bg-gradient-to-r from-green-50 to-emerald-50'}`}>
+            <div className={`p-6 border-b flex items-center justify-between ${isEditing ? 'border-indigo-100 bg-linear-to-r from-indigo-50 to-purple-50' : 'border-green-100 bg-linear-to-r from-green-50 to-emerald-50'}`}>
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 {isEditing ? <PenTool className="w-5 h-5 text-indigo-600" /> : <Plus className="w-5 h-5 text-green-600" />}
                 {isEditing ? '編輯訓練計畫' : '新增訓練計畫'}
@@ -874,10 +951,10 @@ const TrainingPlanManager = () => {
       {isAttendanceModalOpen && selectedPlanId && attendanceStats[selectedPlanId] && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-indigo-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
+            <div className="p-6 border-b border-indigo-100 flex items-center justify-between bg-linear-to-r from-indigo-50 to-purple-50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-indigo-600" />
-                報到統計
+                報到統計 - {plans.find(p => p.id === selectedPlanId)?.title}
               </h3>
               <button 
                 onClick={() => {
@@ -1137,7 +1214,7 @@ const TrainingPlanManager = () => {
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-red-100 bg-gradient-to-r from-red-50 to-orange-50">
+            <div className="p-6 border-b border-red-100 bg-linear-to-r from-red-50 to-orange-50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 <Trash2 className="w-5 h-5 text-red-600" />
                 確認刪除訓練計畫

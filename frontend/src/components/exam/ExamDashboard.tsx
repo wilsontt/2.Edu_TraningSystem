@@ -27,7 +27,27 @@ const ExamDashboard = () => {
     const fetchExams = async () => {
         try {
             const res = await api.get('/exam/my_exams');
-            setExams(res.data);
+            // 過濾掉已過期的考試 (後端狀態為 expired 或 日期已過且未完成)
+            // 使用本地時間來進行比較，避免 UTC 時間差問題
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const today = `${year}-${month}-${day}`;
+            
+            const activeExams = res.data.filter((exam: ExamItem) => {
+                // 如果後端已經標記為過期，直接過濾
+                if (exam.status === 'expired') return false;
+                
+                // 雙重檢查日期 (防止後端時區差異或狀態更新延遲)
+                // 如果有結束日期，且今天已經超過結束日期，且尚未完成，則視為過期
+                if (exam.end_date && exam.end_date < today && exam.status !== 'completed') {
+                    return false;
+                }
+                
+                return true;
+            });
+            setExams(activeExams);
         } catch (err) {
             console.error(err);
         } finally {

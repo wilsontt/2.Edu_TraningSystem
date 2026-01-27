@@ -134,9 +134,9 @@ const CategoryManager = () => {
     try {
         await api.delete(`/admin/categories/main/${id}`);
         fetchCategories();
-    } catch (err) {
+    } catch (err: unknown) {
         if (err instanceof AxiosError && err.response?.data?.detail) {
-            alert(err.response.data.detail);
+            alert(`刪除失敗：${err.response.data.detail}`);
         } else {
             alert('刪除失敗');
         }
@@ -149,9 +149,9 @@ const CategoryManager = () => {
     try {
         await api.delete(`/admin/categories/sub/${id}`);
         fetchCategories();
-    } catch (err) {
+    } catch (err: unknown) {
         if (err instanceof AxiosError && err.response?.data?.detail) {
-            alert(err.response.data.detail);
+            alert(`刪除失敗：${err.response.data.detail}`);
         } else {
             alert('刪除失敗');
         }
