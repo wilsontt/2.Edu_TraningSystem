@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { AxiosError } from 'axios';
-import { Plus, Calendar, Clock, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check } from 'lucide-react';
+import { Plus, Calendar, Clock, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check, Trash2 } from 'lucide-react';
 import api from '../../api';
 import Pagination from '../common/Pagination';
 
@@ -84,6 +84,11 @@ const TrainingPlanManager = () => {
   } | null>(null);
   const [generatingQRCode, setGeneratingQRCode] = useState(false);
   const [copiedCheckinUrl, setCopiedCheckinUrl] = useState(false);
+  
+  // 刪除狀態
+  const [deleteTarget, setDeleteTarget] = useState<TrainingPlan | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // 表單資料
   const [formData, setFormData] = useState({
@@ -257,6 +262,28 @@ const TrainingPlanManager = () => {
       } else {
         setErrorMessage(isEditing ? '更新計畫失敗' : '新增計畫失敗');
       }
+    }
+  };
+
+  const handleDeletePlan = async () => {
+    if (!deleteTarget) return;
+    
+    try {
+      setIsDeleting(true);
+      setDeleteError(null);
+      await api.delete(`/training/plans/${deleteTarget.id}`);
+      
+      // 從列表中移除
+      setPlans(plans.filter(p => p.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        setDeleteError(err.response.data.detail || '刪除失敗');
+      } else {
+        setDeleteError('發生未預期錯誤');
+      }
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -447,7 +474,7 @@ const TrainingPlanManager = () => {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <button 
                           onClick={() => openModal(plan)}
                           className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
@@ -467,6 +494,13 @@ const TrainingPlanManager = () => {
                             <BarChart3 className="w-4 h-4" />
                           </button>
                         )}
+                        <button 
+                          onClick={() => setDeleteTarget(plan)}
+                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                          title="刪除計畫"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1093,6 +1127,74 @@ const TrainingPlanManager = () => {
                 className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
                 關閉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-red-100 bg-gradient-to-r from-red-50 to-orange-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-red-600" />
+                確認刪除訓練計畫
+              </h3>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="space-y-3 bg-red-50/50 p-4 rounded-xl border border-red-100">
+                <p className="text-sm font-bold text-gray-700">
+                  確定要刪除以下訓練計畫？
+                </p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-red-500" />
+                    <span className="font-bold text-gray-900">{deleteTarget.title}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-gray-600">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      <span>{deleteTarget.training_date}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Building2 className="w-4 h-4 text-gray-400" />
+                      <span>{getDeptName(deleteTarget.dept_id)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <p className="text-xs text-red-600 font-bold flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                此操作無法復原，請確認後再進行。
+              </p>
+
+              {deleteError && (
+                <div className="p-3 bg-red-50 text-red-600 rounded-xl text-sm font-bold flex items-center gap-2 animate-in slide-in-from-top-2">
+                  <AlertCircle className="w-4 h-4" />
+                  {deleteError}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button
+                onClick={() => { setDeleteTarget(null); setDeleteError(null); }}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                disabled={isDeleting}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleDeletePlan}
+                disabled={isDeleting}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-red-600 shadow-md shadow-red-200 hover:bg-red-700 hover:shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                確認刪除
               </button>
             </div>
           </div>

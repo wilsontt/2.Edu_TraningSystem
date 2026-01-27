@@ -180,7 +180,7 @@ const ExamStudio = () => {
             setIsUploading(true);
             setUploadError(null);
             setUploadSuccess(null);
-            
+                
             const res = await api.post('/admin/exams/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
@@ -543,6 +543,7 @@ const ExamStudio = () => {
                                             目前無題目
                                         </div>
                                     ) : (
+                                        <>
                                         <div className="divide-y divide-gray-50 border border-indigo-100 rounded-2xl overflow-hidden">
                                             {paginatedQuestions.map((q: Question, idx: number) => {
                                                 const displayIndex = questionStartIndex + idx + 1;
@@ -650,6 +651,7 @@ const ExamStudio = () => {
                                                 className="mt-4 rounded-xl border border-indigo-100"
                                             />
                                         )}
+                                        </>
                                     )}
                                 </div>
                             </div>

@@ -118,6 +118,36 @@ def get_training_plans(
     """獲取訓練計畫清單"""
     return db.query(models.TrainingPlan).order_by(models.TrainingPlan.training_date.desc()).all()
 
+@router.delete("/plans/{plan_id}")
+def delete_training_plan(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user = check_permission("menu:plan")
+):
+    """刪除訓練計畫"""
+    db_plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not db_plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    
+    # 檢查是否有考試記錄
+    exam_records_count = db.query(models.ExamRecord).filter(models.ExamRecord.plan_id == plan_id).count()
+    if exam_records_count > 0:
+        raise HTTPException(status_code=400, detail=f"該計畫有 {exam_records_count} 筆考試記錄，無法刪除")
+    
+    # 檢查是否有報到記錄
+    attendance_count = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.plan_id == plan_id).count()
+    if attendance_count > 0:
+        raise HTTPException(status_code=400, detail=f"該計畫有 {attendance_count} 筆報到記錄，無法刪除")
+    
+    try:
+        db.delete(db_plan)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="刪除訓練計畫失敗")
+    
+    return {"message": "訓練計畫已刪除"}
+
 # --- 報到統計與應到人數管理 ---
 
 @router.get("/plans/{plan_id}/attendance/stats", response_model=schemas.AttendanceStats)

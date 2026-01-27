@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { AxiosError } from 'axios';
-import { Search, Edit2, Check, X, User as UserIcon, Shield, Building2, Loader2, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Search, Edit2, Check, X, User as UserIcon, Shield, Building2, Loader2, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown, Trash2 } from 'lucide-react';
 import api from '../../api';
 import Pagination from '../common/Pagination';
 
@@ -47,6 +47,10 @@ const UserManager = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  
+  // 刪除狀態
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // 排序狀態
   const [sortConfig, setSortConfig] = useState<{
@@ -139,6 +143,27 @@ const UserManager = () => {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    
+    try {
+      setIsDeleting(true);
+      await api.delete(`/admin/users/${deleteTarget.emp_id}`);
+      
+      // 從列表中移除
+      setUsers(users.filter(u => u.emp_id !== deleteTarget.emp_id));
+      setDeleteTarget(null);
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        setError(err.response.data.detail || '刪除失敗');
+      } else {
+        setError('發生未預期錯誤');
+      }
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -420,12 +445,24 @@ const UserManager = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleEdit(user); }}
-                        className="text-gray-400 hover:text-indigo-600 transition-all duration-200 p-2 hover:bg-indigo-50 rounded-lg cursor-pointer"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex justify-end gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleEdit(user); }}
+                          className="text-gray-400 hover:text-indigo-600 transition-all duration-200 p-2 hover:bg-indigo-50 rounded-lg cursor-pointer"
+                          title="編輯"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        {user.emp_id.toLowerCase() !== 'admin' && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(user); }}
+                            className="text-gray-400 hover:text-red-500 transition-all duration-200 p-2 hover:bg-red-50 rounded-lg cursor-pointer"
+                            title="刪除"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -549,6 +586,67 @@ const UserManager = () => {
               >
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
                 儲存變更
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-red-100 bg-gradient-to-r from-red-50 to-orange-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-red-600" />
+                確認刪除
+              </h3>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="space-y-2 bg-red-50/50 p-4 rounded-xl border border-red-100">
+                <p className="text-sm font-bold text-gray-700">
+                  確定要刪除以下使用者？
+                </p>
+                <div className="flex items-center gap-3 mt-2">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center text-white font-bold">
+                    {deleteTarget.name[0]}
+                  </div>
+                  <div>
+                    <div className="font-bold text-gray-900">{deleteTarget.name}</div>
+                    <div className="text-xs text-gray-500 font-mono">{deleteTarget.emp_id}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <p className="text-xs text-red-600 font-bold flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                此操作無法復原，請確認後再進行。
+              </p>
+
+              {error && (
+                <div className="p-3 bg-red-50 text-red-600 rounded-xl text-sm font-bold flex items-center gap-2 animate-in slide-in-from-top-2">
+                  <AlertCircle className="w-4 h-4" />
+                  {error}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button
+                onClick={() => { setDeleteTarget(null); setError(null); }}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-600 bg-white border-2 border-gray-200 hover:bg-gray-50 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                disabled={isDeleting}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-red-600 shadow-md shadow-red-200 hover:bg-red-700 hover:shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                確認刪除
               </button>
             </div>
           </div>

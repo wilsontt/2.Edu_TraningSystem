@@ -14,7 +14,7 @@ interface PaginationProps {
   onPageChange: (page: number) => void;
   /** 每頁筆數變更回調 */
   onPageSizeChange: (size: number) => void;
-  /** 每頁筆數選項，預設 [10, 20, 50] */
+  /** 每頁筆數選項，預設 [5, 10, 20, 50] */
   pageSizeOptions?: number[];
   /** 是否顯示每頁筆數選擇器，預設 true */
   showPageSizeSelector?: boolean;

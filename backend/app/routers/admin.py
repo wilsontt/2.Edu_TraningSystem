@@ -223,6 +223,36 @@ def update_user(emp_id: str, user_update: schemas.UserUpdate, db: Session = Depe
         raise HTTPException(status_code=400, detail="更新失敗")
     return db_user
 
+@router.delete("/users/{emp_id}")
+def delete_user(emp_id: str, db: Session = Depends(get_db), current_user = check_permission("menu:admin:user")):
+    """刪除使用者"""
+    db_user = db.query(models.User).filter(models.User.emp_id == emp_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="使用者不存在")
+    
+    # 保護 admin 帳號不被刪除
+    if emp_id.lower() == 'admin':
+        raise HTTPException(status_code=400, detail="系統預設管理員不能被刪除")
+    
+    # 檢查是否有關聯的考試記錄
+    exam_records_count = db.query(models.ExamRecord).filter(models.ExamRecord.emp_id == emp_id).count()
+    if exam_records_count > 0:
+        raise HTTPException(status_code=400, detail=f"該使用者有 {exam_records_count} 筆考試記錄，無法刪除。建議改為停用帳號。")
+    
+    # 檢查是否有關聯的報到記錄
+    attendance_count = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.emp_id == emp_id).count()
+    if attendance_count > 0:
+        raise HTTPException(status_code=400, detail=f"該使用者有 {attendance_count} 筆報到記錄，無法刪除。建議改為停用帳號。")
+    
+    try:
+        db.delete(db_user)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="刪除失敗")
+    
+    return {"message": "使用者已刪除"}
+
 # --- Role Management ---
 @router.get("/roles", response_model=List[schemas.Role])
 def get_roles(db: Session = Depends(get_db), current_user = check_permission("menu:admin:role")):
