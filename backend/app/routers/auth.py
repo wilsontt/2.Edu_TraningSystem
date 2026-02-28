@@ -263,9 +263,9 @@ def check_permission(required_func_code: str):
             if not current_user.role:
                 raise HTTPException(status_code=403, detail="使用者未分配角色")
 
-            # Admin 或 System Admin 擁有所有權限
+            # Admin、System Admin、系統管理 擁有所有權限
             role_name = current_user.role.name
-            if role_name in ["Admin", "System Admin"]:
+            if role_name in ["Admin", "System Admin", "系統管理"]:
                 return current_user
             
             # 檢查該角色的功能清單中是否包含要求的代碼

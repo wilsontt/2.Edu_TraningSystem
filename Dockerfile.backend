@@ -10,6 +10,8 @@ COPY data/ /data/
 # database.py 使用 ../data，exam 使用 data/materials；建立 symlink 使兩者皆指向 /data
 RUN ln -sf /data /app/data
 
+# 抑制 pip 以 root 執行之警告（Docker build 環境可安全忽略）
+ENV PIP_ROOT_USER_ACTION=ignore
 RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 8000
