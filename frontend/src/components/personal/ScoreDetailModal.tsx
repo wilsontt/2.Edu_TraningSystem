@@ -1,6 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { X, CheckCircle, XCircle, Clock, User, FileText, Award, Printer } from 'lucide-react';
 import clsx from 'clsx';
+import { API_BASE_URL } from '../../api';
 import type { ScoreDetail } from './types';
 
 // 動態導入以避免循環依賴
@@ -28,7 +29,7 @@ export default function ScoreDetailModal({ recordId, historyId, isOpen, onClose 
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const baseURL = `http://${window.location.hostname}:8000/api`;
+      const baseURL = API_BASE_URL;
       
       let url = `${baseURL}/exam/record/${recordId}/detail`;
       if (historyId) {
@@ -187,7 +188,7 @@ export default function ScoreDetailModal({ recordId, historyId, isOpen, onClose 
                     答題詳情
                   </h4>
                   <div className="space-y-4">
-                    {detail.question_details.map((q, idx) => {
+                    {detail.question_details.map((q) => {
                       const options = parseOptions(q.options);
                       const isWrong = !q.is_correct;
                       

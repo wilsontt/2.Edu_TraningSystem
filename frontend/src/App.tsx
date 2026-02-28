@@ -21,7 +21,7 @@ import QRCodeLoginPage from './components/QRCodeLoginPage';
 import CheckInPage from './components/exam/CheckInPage';
 import type { User } from './types';
 import { useRef } from 'react';
-// ... (imports are fine, just adding one) ...
+import logoUrl from './assets/CROWN_logo.png';
 
 
 
@@ -124,7 +124,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
       <div className="flex items-center gap-3">
         <Link to="/">
           <div className="w-12 h-12 flex items-center justify-center overflow-hidden rounded-xl shadow-lg shadow-blue-100 bg-white">
-            <img src="/CROWN-Logo.png" alt="Logo" className="w-full h-full object-contain" />
+            <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col">
             <span className="font-black text-xl text-gray-800 leading-tight tracking-tight">CROWNVAN 海灣國際</span>
@@ -316,7 +316,7 @@ const App = () => {
   }
 
   return (
-    <Router>
+    <Router basename="/training">
       <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
         <Routes>
           <Route path="/auth/login/qrcode/:token" element={<QRCodeLoginPage onLoginSuccess={(u: User) => setUser(u)} />} />
@@ -339,7 +339,7 @@ const App = () => {
                     <Route path="/" element={<ExamDashboard />} />
                     <Route path="/exam/run/:planId" element={<ExamRunner />} />
                     <Route path="/plans" element={user.functions?.includes('menu:plan') || user.role === 'Admin' ? <TrainingPlanManager /> : <Navigate to="/" />} />
-                    <Route path="/exams" element={user.role === 'Admin' ? <ExamStudio /> : <Navigate to="/" />} />
+                    <Route path="/exams" element={user.functions?.includes('menu:exam') || user.role === 'Admin' ? <ExamStudio /> : <Navigate to="/" />} />
                     <Route path="/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <PersonalScorePage />} />
                     <Route path="/reports/personal" element={<PersonalScorePage />} />
                     <Route path="/admin/departments" element={user.role === 'Admin' ? <DepartmentManager /> : <Navigate to="/" />} />

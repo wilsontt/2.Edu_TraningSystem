@@ -290,7 +290,7 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
                   <img 
                     src={captchaData.image} 
                     alt="驗證碼" 
-                    className="h-12 w-auto border border-gray-200 rounded-lg"
+                    className="h-12 w-auto border border-gray-200 rounded-lg object-contain"
                   />
                 )}
                 <button

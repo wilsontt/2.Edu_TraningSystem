@@ -17,7 +17,7 @@ def get_questions(
     tags: Optional[str] = None,
     question_type: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user = check_permission("menu:exam_studio")
+    current_user = check_permission("menu:exam")
 ):
     """
     查詢題庫列表 (支援分頁與篩選)
@@ -51,7 +51,7 @@ def update_question_bank(
     id: int,
     q_update: schemas.QuestionBankUpdate,
     db: Session = Depends(get_db),
-    current_user = check_permission("menu:exam_studio")
+    current_user = check_permission("menu:exam")
 ):
     """更新題庫題目"""
     db_q = db.query(models.QuestionBank).filter(models.QuestionBank.id == id).first()
@@ -84,7 +84,7 @@ def update_question_bank(
 def delete_question_bank(
     id: int,
     db: Session = Depends(get_db),
-    current_user = check_permission("menu:exam_studio")
+    current_user = check_permission("menu:exam")
 ):
     """刪除題庫題目"""
     db_q = db.query(models.QuestionBank).filter(models.QuestionBank.id == id).first()
@@ -105,7 +105,7 @@ def import_questions_to_plan(
     plan_id: int = Body(..., embed=True),
     question_ids: List[int] = Body(..., embed=True),
     db: Session = Depends(get_db),
-    current_user = check_permission("menu:exam_studio")
+    current_user = check_permission("menu:exam")
 ):
     """從題庫匯入題目至訓練計畫"""
     # 檢查計畫

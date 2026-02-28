@@ -927,7 +927,8 @@ const TrainingPlanManager = () => {
       {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+          {/* 調整 Form 的寬度：max-w-lg：320px 窄、max-w-xl：480px 較窄、max-w-2xl：672px 常用、 3xl：768px 較寬、4xl：896px 很寬、5xl：1024px 最寬 */}
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
             <div className={`p-6 border-b flex items-center justify-between ${isEditing ? 'border-indigo-100 bg-linear-to-r from-indigo-50 to-purple-50' : 'border-green-100 bg-linear-to-r from-green-50 to-emerald-50'}`}>
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 {isEditing ? <PenTool className="w-5 h-5 text-indigo-600" /> : <Plus className="w-5 h-5 text-green-600" />}
@@ -937,384 +938,403 @@ const TrainingPlanManager = () => {
                 <X className="w-5 h-5 text-gray-400" />
               </button>
             </div>
-            
+            {/* 訓練計劃 設定卡片 */}
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
-              {/* Title */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500 uppercase">計畫名稱</label>
-                <input
-                  autoFocus
-                  required
-                  type="text"
-                  className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
-                  placeholder="例如：新人入職教育訓練"
-                  value={formData.title}
-                  onChange={e => setFormData({...formData, title: e.target.value})}
-                />
-              </div>
-
-              {/* Categories */}
-              <div className="grid grid-cols-2 gap-4">
+              
+              {/* 計劃與時程卡片 */}
+              <div className="grid grid-cols-2 gap-4">              
+                {/* Title */}
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-500 uppercase">訓練大類</label>
+                  <label className="text-xs font-bold text-gray-500 uppercase">計畫名稱</label>
+                  <input
+                    autoFocus
+                    required
+                    type="text"
+                    className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
+                    placeholder="例如：新人入職教育訓練"
+                    value={formData.title}
+                    onChange={e => setFormData({...formData, title: e.target.value})}
+                  />
+                </div>
+
+                {/* Categories */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase">訓練大類</label>
+                    <select
+                      required
+                      className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white cursor-pointer"
+                      value={formData.main_category_id}
+                      onChange={e => {
+                          const val = e.target.value;
+                          setFormData(prev => ({...prev, main_category_id: val, sub_category_id: ''}));
+                      }}
+                    >
+                      <option value="">請選擇</option>
+                      {categories.map(c => (
+                        <option key={c.id} value={String(c.id)}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase">子類別</label>
+                    <select
+                      required
+                      disabled={!formData.main_category_id && !isEditing}
+                      className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white disabled:bg-gray-50 disabled:text-gray-400 cursor-pointer"
+                      value={formData.sub_category_id}
+                      onChange={e => setFormData({...formData, sub_category_id: e.target.value})}
+                    >
+                      <option value="">請選擇</option>
+                      {activeSubCategories.map(sub => (
+                        <option key={sub.id} value={String(sub.id)}>{sub.name}</option>
+                      ))}
+                    </select>
+                    {isEditing && !formData.main_category_id && formData.sub_category_id && (
+                      <p className="text-xs text-orange-600 font-medium mt-1">
+                        提示：無法自動找到主分類，請手動選擇主分類以編輯子分類
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Department */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-500 uppercase">開課單位</label>
                   <select
                     required
                     className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white cursor-pointer"
-                    value={formData.main_category_id}
-                    onChange={e => {
-                        const val = e.target.value;
-                        setFormData(prev => ({...prev, main_category_id: val, sub_category_id: ''}));
-                    }}
+                    value={formData.dept_id}
+                    onChange={e => setFormData({...formData, dept_id: e.target.value})}
                   >
-                    <option value="">請選擇</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={String(c.id)}>{c.name}</option>
+                    <option value="">請選擇單位</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={String(d.id)}>{d.name}</option>
                     ))}
                   </select>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-500 uppercase">子類別</label>
-                  <select
-                    required
-                    disabled={!formData.main_category_id && !isEditing}
-                    className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white disabled:bg-gray-50 disabled:text-gray-400 cursor-pointer"
-                    value={formData.sub_category_id}
-                    onChange={e => setFormData({...formData, sub_category_id: e.target.value})}
-                  >
-                    <option value="">請選擇</option>
-                    {activeSubCategories.map(sub => (
-                      <option key={sub.id} value={String(sub.id)}>{sub.name}</option>
-                    ))}
-                  </select>
-                  {isEditing && !formData.main_category_id && formData.sub_category_id && (
-                    <p className="text-xs text-orange-600 font-medium mt-1">
-                      提示：無法自動找到主分類，請手動選擇主分類以編輯子分類
-                    </p>
+
+                {/* Date */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-500 uppercase">開始日期</label>
+                      <input
+                        required
+                        type="date"
+                        className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 cursor-pointer"
+                        value={formData.training_date}
+                        onChange={handleStartDateChange}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-500 uppercase">結束日期 (選填)</label>
+                      <input
+                        type="date"
+                        className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 cursor-pointer"
+                        value={formData.end_date}
+                        min={formData.training_date}
+                        onChange={e => setFormData({...formData, end_date: e.target.value})}
+                      />
+                    </div>
+                </div>
+              </div>
+
+              {/* 考試設定卡片 */}
+              <div className="grid grid-cols-3 gap-4 pt-2 border-t border-gray-100">
+
+                {/* Timer Settings */}
+                <div className="pt-2 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="text-sm font-bold text-gray-700">啟用考試計時器</label>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({...formData, timer_enabled: !formData.timer_enabled})}
+                      className={`relative w-12 h-6 rounded-full transition-colors duration-200 ease-in-out cursor-pointer ${formData.timer_enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                    >
+                      <span className={`block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ease-in-out mt-0.5 ml-0.5 ${formData.timer_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                  
+                  {formData.timer_enabled && (
+                    <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <label className="text-xs font-bold text-gray-500 uppercase">考試時限</label>
+                      <div className="flex gap-2">
+                          <select
+                            className="flex-1 px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white cursor-pointer"
+                            value={[10, 15, 20, 30, 60].includes(formData.time_limit) ? formData.time_limit : 'custom'}
+                            onChange={e => {
+                                const val = e.target.value;
+                                if (val !== 'custom') {
+                                    setFormData({...formData, time_limit: parseInt(val)});
+                                } else {
+                                    setFormData({...formData, time_limit: 0});
+                                }
+                            }}
+                          >
+                              <option value="10">10 分鐘</option>
+                              <option value="15">15 分鐘</option>
+                              <option value="20">20 分鐘</option>
+                              <option value="30">30 分鐘</option>
+                              <option value="60">1 小時</option>
+                              <option value="custom">自訂時間</option>
+                          </select>
+                          {(formData.time_limit === 0 || ![10, 15, 20, 30, 60].includes(formData.time_limit)) && (
+                              <div className="relative w-24">
+                                  <input
+                                  type="number"
+                                  min="1"
+                                  placeholder="分鐘"
+                                  className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
+                                  value={formData.time_limit || ''}
+                                  onChange={e => setFormData({...formData, time_limit: parseInt(e.target.value) || 0})}
+                                  />
+                              </div>
+                          )}
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
 
-              {/* Department */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500 uppercase">開課單位</label>
-                <select
-                  required
-                  className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white cursor-pointer"
-                  value={formData.dept_id}
-                  onChange={e => setFormData({...formData, dept_id: e.target.value})}
-                >
-                  <option value="">請選擇單位</option>
-                  {departments.map(d => (
-                    <option key={d.id} value={String(d.id)}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Date */}
-              <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase">開始日期</label>
-                    <input
-                      required
-                      type="date"
-                      className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 cursor-pointer"
-                      value={formData.training_date}
-                      onChange={handleStartDateChange}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase">結束日期 (選填)</label>
-                    <input
-                      type="date"
-                      className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 cursor-pointer"
-                      value={formData.end_date}
-                      min={formData.training_date}
-                      onChange={e => setFormData({...formData, end_date: e.target.value})}
-                    />
-                  </div>
-              </div>
-
-              {/* Timer Settings */}
-              <div className="pt-2 border-t border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <label className="text-sm font-bold text-gray-700">啟用考試計時器</label>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({...formData, timer_enabled: !formData.timer_enabled})}
-                    className={`relative w-12 h-6 rounded-full transition-colors duration-200 ease-in-out cursor-pointer ${formData.timer_enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
-                  >
-                    <span className={`block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ease-in-out mt-0.5 ml-0.5 ${formData.timer_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                  </button>
+                {/* Passing Score */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-500 uppercase">及格分數 (絕對分數)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
+                    value={formData.passing_score}
+                    onChange={e => setFormData({...formData, passing_score: parseInt(e.target.value) || 0})}
+                  />
+                  <p className="text-xs text-gray-400 font-bold">例如：總分 100 分，請填寫 60。</p>
                 </div>
                 
-                {formData.timer_enabled && (
-                  <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <label className="text-xs font-bold text-gray-500 uppercase">考試時限</label>
-                    <div className="flex gap-2">
-                        <select
-                           className="flex-1 px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white cursor-pointer"
-                           value={[10, 15, 20, 30, 60].includes(formData.time_limit) ? formData.time_limit : 'custom'}
-                           onChange={e => {
-                               const val = e.target.value;
-                               if (val !== 'custom') {
-                                   setFormData({...formData, time_limit: parseInt(val)});
-                               } else {
-                                   setFormData({...formData, time_limit: 0});
-                               }
-                           }}
-                        >
-                            <option value="10">10 分鐘</option>
-                            <option value="15">15 分鐘</option>
-                            <option value="20">20 分鐘</option>
-                            <option value="30">30 分鐘</option>
-                            <option value="60">1 小時</option>
-                            <option value="custom">自訂時間</option>
-                        </select>
-                        {(formData.time_limit === 0 || ![10, 15, 20, 30, 60].includes(formData.time_limit)) && (
-                            <div className="relative w-24">
-                                <input
-                                type="number"
-                                min="1"
-                                placeholder="分鐘"
-                                className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
-                                value={formData.time_limit || ''}
-                                onChange={e => setFormData({...formData, time_limit: parseInt(e.target.value) || 0})}
-                                />
-                            </div>
-                        )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Passing Score */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500 uppercase">及格分數 (絕對分數)</label>
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
-                  value={formData.passing_score}
-                  onChange={e => setFormData({...formData, passing_score: parseInt(e.target.value) || 0})}
-                />
-                <p className="text-xs text-gray-400 font-bold">例如：總分 100 分，請填寫 60。</p>
-              </div>
-
-              {/* Expected Attendance */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-gray-500 uppercase">應到人數 (選填)</label>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        // 計算應到人數需要 plan_id，但新增時還沒有，所以只在編輯模式下可用
-                        if (editId) {
-                          const res = await api.get(`/training/plans/${editId}/calculate-expected-attendance`);
-                          setFormData({...formData, expected_attendance: res.data.calculated_count.toString()});
-                        }
-                      } catch (err: unknown) {
-                        console.error('計算應到人數失敗', err);
-                      }
-                    }}
-                    className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
-                    disabled={!editId}
-                  >
-                    自動計算
-                  </button>
-                </div>
-                <input
-                  type="number"
-                  min="0"
-                  className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
-                  value={formData.expected_attendance || ''}
-                  onChange={e => setFormData({...formData, expected_attendance: e.target.value})}
-                  placeholder="留空將根據受課對象部門自動計算"
-                />
-                <p className="text-xs text-gray-400 font-bold">留空將根據受課對象部門人數自動計算</p>
-              </div>
-
-              {/* Target Departments */}
-              <div className="space-y-2">
-                 <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-500 uppercase">受課對象 (可複選)</label>
-                    <div className="flex items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                // 檢查是否已經全選
-                                const allDeptIds = departments.map(d => d.id.toString());
-                                const isAllSelected = allDeptIds.length > 0 && 
-                                    allDeptIds.every(id => formData.target_dept_ids.includes(id));
-                                
-                                if (isAllSelected) {
-                                    // 如果已經全選，則全部取消
-                                    setFormData(prev => ({
-                                        ...prev,
-                                        target_dept_ids: []
-                                    }));
-                                } else {
-                                    // 如果沒有全選，則全選
-                                    setFormData(prev => ({
-                                        ...prev,
-                                        target_dept_ids: allDeptIds
-                                    }));
-                                }
-                            }}
-                            className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
-                        >
-                            {(() => {
-                                const allDeptIds = departments.map(d => d.id.toString());
-                                const isAllSelected = allDeptIds.length > 0 && 
-                                    allDeptIds.every(id => formData.target_dept_ids.includes(id));
-                                return isAllSelected ? '取消全選' : '全選';
-                            })()}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                // 同開課單位
-                                if (formData.dept_id) {
-                                    setFormData(prev => {
-                                        const newIds = new Set(prev.target_dept_ids);
-                                        newIds.add(prev.dept_id);
-                                        return {...prev, target_dept_ids: Array.from(newIds)};
-                                    });
-                                }
-                            }}
-                            className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
-                        >
-                            + 同開課單位
-                        </button>
-                    </div>
-                 </div>
-                 <div className="border-2 border-indigo-200 rounded-xl p-3 max-h-40 overflow-y-auto bg-indigo-50/30">
-                    <div className="grid grid-cols-2 gap-2">
-                        {departments.map(dept => (
-                            <label key={dept.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white transition-colors duration-200 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                                    checked={formData.target_dept_ids.includes(dept.id.toString())}
-                                    onChange={e => {
-                                        const id = dept.id.toString();
-                                        setFormData(prev => {
-                                            if (e.target.checked) {
-                                                return {...prev, target_dept_ids: [...prev.target_dept_ids, id]};
-                                            } else {
-                                                return {...prev, target_dept_ids: prev.target_dept_ids.filter(tid => tid !== id)};
-                                            }
-                                        });
-                                    }}
-                                />
-                                <span className="text-sm font-bold text-gray-700">{dept.name}</span>
-                            </label>
-                        ))}
-                    </div>
-                 </div>
-                 {formData.target_dept_ids.length === 0 && (
-                     <p className="text-xs text-orange-500 font-bold flex items-center gap-1">
-                         <AlertCircle className="w-3 h-3" />
-                         未選擇任何對象，將預設為開課單位
-                     </p>
-                 )}
-              </div>
-
-              {/* Target Users - 個人受課對象 */}
-              <div className="space-y-2 pt-2 border-t border-gray-100">
-                 <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-500 uppercase">個人受課對象 (可複選)</label>
+                {/* Expected Attendance */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-gray-500 uppercase">應到人數 (選填)</label>
                     <button
-                        type="button"
-                        onClick={() => {
-                            const allUserIds = users.map(u => u.emp_id);
-                            const isAllSelected = allUserIds.length > 0 && 
-                                allUserIds.every(id => formData.target_user_ids.includes(id));
-                            
-                            if (isAllSelected) {
-                                setFormData(prev => ({
-                                    ...prev,
-                                    target_user_ids: []
-                                }));
-                            } else {
-                                setFormData(prev => ({
-                                    ...prev,
-                                    target_user_ids: allUserIds
-                                }));
-                            }
-                        }}
-                        className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          // 計算應到人數需要 plan_id，但新增時還沒有，所以只在編輯模式下可用
+                          if (editId) {
+                            const res = await api.get(`/training/plans/${editId}/calculate-expected-attendance`);
+                            setFormData({...formData, expected_attendance: res.data.calculated_count.toString()});
+                          }
+                        } catch (err: unknown) {
+                          console.error('計算應到人數失敗', err);
+                        }
+                      }}
+                      className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
+                      disabled={!editId}
                     >
-                        {(() => {
-                            const allUserIds = users.map(u => u.emp_id);
-                            const isAllSelected = allUserIds.length > 0 && 
-                                allUserIds.every(id => formData.target_user_ids.includes(id));
-                            return isAllSelected ? '取消全選' : '全選';
-                        })()}
+                      自動計算
                     </button>
-                 </div>
-                 <div className="mb-2">
-                    <input
-                        type="text"
-                        placeholder="搜尋員工編號、姓名或部門..."
-                        className="w-full px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
-                        value={userSearchTerm}
-                        onChange={(e) => setUserSearchTerm(e.target.value)}
-                    />
-                 </div>
-                 <div className="border-2 border-indigo-200 rounded-xl p-3 max-h-40 overflow-y-auto bg-indigo-50/30">
-                    <div className="space-y-2">
-                        {users
-                            .filter(user => 
-                                userSearchTerm === '' || 
-                                user.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-                                user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-                                user.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase())
-                            )
-                            .map(user => (
-                            <label key={user.emp_id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white transition-colors duration-200 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                                    checked={formData.target_user_ids.includes(user.emp_id)}
-                                    onChange={e => {
-                                        if (e.target.checked) {
-                                            setFormData(prev => ({
-                                                ...prev,
-                                                target_user_ids: [...prev.target_user_ids, user.emp_id]
-                                            }));
-                                        } else {
-                                            setFormData(prev => ({
-                                                ...prev,
-                                                target_user_ids: prev.target_user_ids.filter(id => id !== user.emp_id)
-                                            }));
-                                        }
-                                    }}
-                                />
-                                <span className="text-sm font-bold text-gray-700">
-                                    {user.name} ({user.emp_id}) - {user.dept_name}
-                                </span>
-                            </label>
-                        ))}
-                        {users.filter(user => 
-                            userSearchTerm === '' || 
-                            user.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-                            user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-                            user.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase())
-                        ).length === 0 && (
-                            <p className="text-xs text-gray-400 text-center py-2">沒有找到符合的使用者</p>
-                        )}
-                    </div>
-                 </div>
-                 {formData.target_user_ids.length > 0 && (
-                     <p className="text-xs text-indigo-600 font-bold">
-                         已選擇 {formData.target_user_ids.length} 位個人受課對象
-                     </p>
-                 )}
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
+                    value={formData.expected_attendance || ''}
+                    onChange={e => setFormData({...formData, expected_attendance: e.target.value})}
+                    placeholder="留空將根據受課對象部門自動計算"
+                  />
+                  <p className="text-xs text-gray-400 font-bold">留空將根據受課對象部門人數自動計算</p>
+                </div>
+
               </div>
+              
+              {/* 受課對象卡片 */}
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+                
+                {/* Target Departments - 受課單位 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-gray-500 uppercase">受課單位 (可複選)</label>
+                      <div className="flex items-center gap-3">
+                          <button
+                              type="button"
+                              onClick={() => {
+                                  // 檢查是否已經全選
+                                  const allDeptIds = departments.map(d => d.id.toString());
+                                  const isAllSelected = allDeptIds.length > 0 && 
+                                      allDeptIds.every(id => formData.target_dept_ids.includes(id));
+                                  
+                                  if (isAllSelected) {
+                                      // 如果已經全選，則全部取消
+                                      setFormData(prev => ({
+                                          ...prev,
+                                          target_dept_ids: []
+                                      }));
+                                  } else {
+                                      // 如果沒有全選，則全選
+                                      setFormData(prev => ({
+                                          ...prev,
+                                          target_dept_ids: allDeptIds
+                                      }));
+                                  }
+                              }}
+                              className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
+                          >
+                              {(() => {
+                                  const allDeptIds = departments.map(d => d.id.toString());
+                                  const isAllSelected = allDeptIds.length > 0 && 
+                                      allDeptIds.every(id => formData.target_dept_ids.includes(id));
+                                  return isAllSelected ? '取消全選' : '全選';
+                              })()}
+                          </button>
+                          <button
+                              type="button"
+                              onClick={() => {
+                                  // 同開課單位
+                                  if (formData.dept_id) {
+                                      setFormData(prev => {
+                                          const newIds = new Set(prev.target_dept_ids);
+                                          newIds.add(prev.dept_id);
+                                          return {...prev, target_dept_ids: Array.from(newIds)};
+                                      });
+                                  }
+                              }}
+                              className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
+                          >
+                              + 同開課單位
+                          </button>
+                      </div>
+                  </div>
+                  <div className="border-2 border-indigo-200 rounded-xl p-3 max-h-55 overflow-y-auto bg-indigo-50/30">
+                      <div className="grid grid-cols-2 gap-2">
+                          {departments.map(dept => (  
+                              // 移除 p-2，避免內部元素之間有間距
+                              <label key={dept.id} className="flex items-center gap-2 p-0 rounded-lg hover:bg-white transition-colors duration-200 cursor-pointer">
+                                  <input
+                                      type="checkbox"
+                                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                      checked={formData.target_dept_ids.includes(dept.id.toString())}
+                                      onChange={e => {
+                                          const id = dept.id.toString();
+                                          setFormData(prev => {
+                                              if (e.target.checked) {
+                                                  return {...prev, target_dept_ids: [...prev.target_dept_ids, id]};
+                                              } else {
+                                                  return {...prev, target_dept_ids: prev.target_dept_ids.filter(tid => tid !== id)};
+                                              }
+                                          });
+                                      }}
+                                  />
+                                  <span className="text-sm font-bold text-gray-700">{dept.name}</span>
+                              </label>
+                          ))}
+                      </div>
+                  </div>
+                  {formData.target_dept_ids.length === 0 && (
+                      <p className="text-xs text-orange-500 font-bold flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          未選擇任何對象，將預設為開課單位
+                      </p>
+                  )}
+                </div>
+
+                {/* Target Users - 個人受課對象 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-gray-500 uppercase">個人受課對象 (可複選)</label>
+                      <button
+                          type="button"
+                          onClick={() => {
+                              const allUserIds = users.map(u => u.emp_id);
+                              const isAllSelected = allUserIds.length > 0 && 
+                                  allUserIds.every(id => formData.target_user_ids.includes(id));
+                              
+                              if (isAllSelected) {
+                                  setFormData(prev => ({
+                                      ...prev,
+                                      target_user_ids: []
+                                  }));
+                              } else {
+                                  setFormData(prev => ({
+                                      ...prev,
+                                      target_user_ids: allUserIds
+                                  }));
+                              }
+                          }}
+                          className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
+                      >
+                          {(() => {
+                              const allUserIds = users.map(u => u.emp_id);
+                              const isAllSelected = allUserIds.length > 0 && 
+                                  allUserIds.every(id => formData.target_user_ids.includes(id));
+                              return isAllSelected ? '取消全選' : '全選';
+                          })()}
+                      </button>
+                  </div>
+                  <div className="mb-2">
+                      <input
+                          type="text"
+                          placeholder="搜尋員工編號、姓名或部門..."
+                          className="w-full px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
+                          value={userSearchTerm}
+                          onChange={(e) => setUserSearchTerm(e.target.value)}
+                      />
+                  </div>
+                  {/* 移除 p-3，避免內部元素之間有間距 */}
+                  <div className="border-2 border-indigo-200 rounded-xl p-1 max-h-43 overflow-y-auto bg-indigo-50/30">
+                      <div className="space-y-0"> {/* 移除 space-y-2，避免內部元素之間有間距 */}
+                          {users
+                              .filter(user => 
+                                  userSearchTerm === '' || 
+                                  user.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                                  user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                                  user.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase())
+                              )
+                              .map(user => (
+                              // 移除 p-1，避免內部元素之間有間距
+                              <label key={user.emp_id} className="flex items-center gap-2 p-1 rounded-lg hover:bg-white transition-colors duration-200 cursor-pointer">
+                                  <input
+                                      type="checkbox"
+                                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                      checked={formData.target_user_ids.includes(user.emp_id)}
+                                      onChange={e => {
+                                          if (e.target.checked) {
+                                              setFormData(prev => ({
+                                                  ...prev,
+                                                  target_user_ids: [...prev.target_user_ids, user.emp_id]
+                                              }));
+                                          } else {
+                                              setFormData(prev => ({
+                                                  ...prev,
+                                                  target_user_ids: prev.target_user_ids.filter(id => id !== user.emp_id)
+                                              }));
+                                          }
+                                      }}
+                                  />
+                                  <span className="text-sm font-bold text-gray-700">
+                                      {user.name} ({user.emp_id}) - {user.dept_name}
+                                  </span>
+                              </label>
+                          ))}
+                          {users.filter(user => 
+                              userSearchTerm === '' || 
+                              user.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                              user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                              user.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase())
+                          ).length === 0 && (
+                              <p className="text-xs text-gray-400 text-center py-2">沒有找到符合的使用者</p>
+                          )}
+                      </div>
+                  </div>
+                  {formData.target_user_ids.length > 0 && (
+                      <p className="text-xs text-indigo-600 font-bold">
+                          已選擇 {formData.target_user_ids.length} 位個人受課對象
+                      </p>
+                  )}
+                </div>                
+              </div>
+
+              
               {/* ... (footer buttons) ... */}
-              <div className="pt-4 flex gap-3">
+              {/* 按鈕卡片 */}
+              <div className="flex gap-3 pt-2 border-t border-gray-100">
                 <button
                   type="submit"
                   className={`flex-1 py-3 text-white rounded-xl font-bold transition-all duration-200 shadow-lg active:scale-95 cursor-pointer ${isEditing ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300' : 'bg-green-500 hover:bg-green-600 shadow-green-200 hover:shadow-green-300'}`}

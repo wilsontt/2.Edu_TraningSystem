@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Award, TrendingUp, Clock, Target, CheckCircle, XCircle } from 'lucide-react';
-import clsx from 'clsx';
+import { API_BASE_URL } from '../../api';
 
 interface PersonalOverview {
   emp_id: string;
@@ -28,7 +28,7 @@ export default function PersonalScoreOverview({ empId }: PersonalScoreOverviewPr
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const baseURL = `http://${window.location.hostname}:8000/api`;
+      const baseURL = API_BASE_URL;
       const url = empId 
         ? `${baseURL}/exam/personal/overview?emp_id=${empId}`
         : `${baseURL}/exam/personal/overview`;

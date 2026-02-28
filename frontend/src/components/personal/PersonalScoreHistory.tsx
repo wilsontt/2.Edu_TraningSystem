@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Clock, CheckCircle, XCircle, TrendingUp, Calendar, Eye } from 'lucide-react';
+import { CheckCircle, XCircle, Eye } from 'lucide-react';
 import clsx from 'clsx';
+import { API_BASE_URL } from '../../api';
 import PlanHistoryModal from './PlanHistoryModal';
 import {
   LineChart,
@@ -79,7 +80,7 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
       if (empId) {
         params.append('emp_id', empId);
       }
-      const baseURL = `http://${window.location.hostname}:8000/api`;
+      const baseURL = API_BASE_URL;
       const response = await fetch(
         `${baseURL}/exam/personal/history?${params.toString()}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -104,7 +105,7 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
   const fetchPlansHistory = async (records: HistoryRecord[]) => {
     try {
       const token = localStorage.getItem('token');
-      const baseURL = `http://${window.location.hostname}:8000/api`;
+      const baseURL = API_BASE_URL;
       
       // 並行取得所有計畫的詳細資料
       const detailPromises = records.map(record =>

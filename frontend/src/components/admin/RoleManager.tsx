@@ -41,7 +41,7 @@ const RoleManager = () => {
   const [isAddingMemberToRole, setIsAddingMemberToRole] = useState(false);
   const [removingMemberFromRole, setRemovingMemberFromRole] = useState<{emp_id: string; name: string} | null>(null);
   const [allUsers, setAllUsers] = useState<Array<{emp_id: string; name: string; role_id: number | null; department?: {name: string}}>>([]);
-  const [loadingAllUsers, setLoadingAllUsers] = useState(false);
+  const [loadingAllUsers, _setLoadingAllUsers] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [targetRoleId, setTargetRoleId] = useState<number | null>(null);
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);

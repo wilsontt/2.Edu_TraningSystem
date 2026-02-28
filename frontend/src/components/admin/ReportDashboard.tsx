@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Download, Users, FileText, CheckCircle, TrendingUp, AlertCircle, RefreshCw, Calendar, Timer, Target, Repeat, X, ChevronDown, ChevronRight, Filter, TrendingDown, Eye, BarChart3, Search } from "lucide-react";
 import Pagination from '../common/Pagination';
+import { API_BASE_URL } from '../../api';
 import clsx from 'clsx';
 import { format } from "date-fns";
 import { Link } from 'react-router-dom';
@@ -225,7 +226,7 @@ export default function ReportDashboard() {
       const headers = { 'Authorization': `Bearer ${token}` };
 
       // 建立時間篩選參數
-      const baseURL = `http://${window.location.hostname}:8000/api`;
+      const baseURL = API_BASE_URL;
       let deptUrl = `${baseURL}/admin/reports/department`;
       let planUrl = `${baseURL}/admin/reports/plan`;
       const params = new URLSearchParams();
@@ -291,7 +292,7 @@ export default function ReportDashboard() {
   const handleExportPDF = async () => {
     try {
       const token = localStorage.getItem('token');
-      const baseURL = `http://${window.location.hostname}:8000/api`;
+      const baseURL = API_BASE_URL;
       const response = await fetch(`${baseURL}/admin/reports/export/pdf`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -419,7 +420,7 @@ export default function ReportDashboard() {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={fetchData}
+            onClick={() => fetchData(true)} // 重新整理使用全頁 loading
             className="flex items-center px-4 py-2.5 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-600 rounded-xl transition-all duration-200 font-bold shadow-sm cursor-pointer"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
@@ -916,7 +917,6 @@ export default function ReportDashboard() {
                   const isExpanded = activeTab === 'department' 
                     ? expandedDept === itemId 
                     : expandedPlan === itemId;
-                  const displayIndex = statsStartIndex + idx + 1;
                   
                   return (
                     <>
@@ -934,7 +934,7 @@ export default function ReportDashboard() {
                                     if (!deptDetails[itemId]) {
                                       try {
                                         const token = localStorage.getItem('token');
-                                        const baseURL = `http://${window.location.hostname}:8000/api`;
+                                        const baseURL = API_BASE_URL;
                                         const res = await fetch(
                                           `${baseURL}/admin/reports/department/${itemId}/details?page=1&page_size=10`,
                                           { headers: { 'Authorization': `Bearer ${token}` } }
@@ -957,7 +957,7 @@ export default function ReportDashboard() {
                                     if (!planDetails[itemId]) {
                                       try {
                                         const token = localStorage.getItem('token');
-                                        const baseURL = `http://${window.location.hostname}:8000/api`;
+                                        const baseURL = API_BASE_URL;
                                         const res = await fetch(
                                           `${baseURL}/admin/reports/plan/${itemId}/details?page=1&page_size=10`,
                                           { headers: { 'Authorization': `Bearer ${token}` } }

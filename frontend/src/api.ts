@@ -1,8 +1,10 @@
 import axios from 'axios';
 
+/** API 基礎路徑，本地由 Vite proxy 轉發，Docker 由 Nginx 轉發 */
+export const API_BASE_URL = '/training/api';
+
 const api = axios.create({
-  // 自動判斷後端位置：如果是 localhost 就用 localhost，如果是 IP 就用 IP
-  baseURL: `http://${window.location.hostname}:8000/api`,
+  baseURL: API_BASE_URL,
 });
 
 // 請求攔截器：自動加入 JWT Token

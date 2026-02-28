@@ -162,7 +162,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           <div className="absolute bottom-0 left-0 -ml-10 -mb-10 w-32 h-32 bg-blue-400/20 rounded-full blur-2xl"></div>
           
           <div className="relative z-10">
-            <div className="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-6 backdrop-blur-md border border-white/30 rotate-3 transition-transform hover:rotate-0">
+            <div className="w-11 h-24 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-6 backdrop-blur-md border border-white/30 rotate-3 transition-transform hover:rotate-0">
               {isRegister ? <UserPlus className="w-10 h-10" /> : <LogIn className="w-10 h-10" />}
             </div>
             <h2 className="text-3xl font-extrabold tracking-tight">

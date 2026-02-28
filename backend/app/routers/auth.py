@@ -102,8 +102,8 @@ async def get_captcha():
     # 生成 4 位純數字驗證碼
     captcha_text = "".join(random.choices(string.digits, k=4))
     
-    # 使用 Pillow 繪製更清晰的驗證碼
-    width, height = 160, 60
+    # 使用 Pillow 繪製更清晰的驗證碼（200x72 確保 4 碼完整顯示）
+    width, height = 200, 72
     image = Image.new('RGB', (width, height), color=(255, 255, 255))
     draw = ImageDraw.Draw(image)
     
@@ -115,23 +115,29 @@ async def get_captcha():
         y2 = random.randint(0, height)
         draw.line(((x1, y1), (x2, y2)), fill=(240, 240, 240), width=2)
 
-    # 繪製文字
-    # 嘗試載入系統字體，若無則使用預設
-    try:
-        # 嘗試常見的粗體字型
-        font = ImageFont.truetype("Arial.ttf", 40)
-    except:
+    # 繪製文字（字體 48px 提升可讀性）
+    # 依序嘗試：Linux Docker → macOS → Windows → 預設
+    font_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  # Linux (fonts-dejavu-core)
+        "/System/Library/Fonts/Helvetica.ttc",                     # macOS
+        "Arial.ttf",
+    ]
+    font = None
+    for path in font_paths:
         try:
-            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 40)
-        except:
-             font = ImageFont.load_default()
+            font = ImageFont.truetype(path, 48)
+            break
+        except Exception:
+            continue
+    if font is None:
+        font = ImageFont.load_default()
 
     # 每個字的顏色
-    colors = [(220, 38, 38), (22, 163, 74), (37, 99, 235), (234, 88, 12)] # 紅, 綠, 藍, 橘
+    colors = [(220, 38, 38), (22, 163, 74), (37, 99, 235), (234, 88, 12)]  # 紅, 綠, 藍, 橘
     
     for i, char in enumerate(captcha_text):
-        x = 20 + i * 35
-        y = 5 + random.randint(0, 5)
+        x = 16 + i * 44  # 4 碼：16, 60, 104, 148，皆在 width 200 內
+        y = 10 + random.randint(0, 6)
         color = colors[i % len(colors)]
         draw.text((x, y), char, font=font, fill=color)
 

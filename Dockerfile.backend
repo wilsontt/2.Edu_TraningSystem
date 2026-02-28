@@ -1,0 +1,18 @@
+# 教育訓練後端（build context 為 2.教育訓練教材及線上考卷/）
+FROM python:3.12-slim
+
+# 安裝字型，確保驗證碼在 Docker 與本地顯示一致
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY backend/ ./
+COPY data/ /data/
+# database.py 使用 ../data，exam 使用 data/materials；建立 symlink 使兩者皆指向 /data
+RUN ln -sf /data /app/data
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+

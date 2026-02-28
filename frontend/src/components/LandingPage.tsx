@@ -11,6 +11,7 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import logoUrl from '../assets/CROWN_logo.png';
 import { 
   BookOpen, 
   BarChart3, 
@@ -93,7 +94,7 @@ const LandingPage: React.FC = () => {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 flex items-center justify-center overflow-hidden rounded-xl shadow-lg shadow-indigo-100 bg-white">
-                <img src="/CROWN-Logo.png" alt="Logo" className="w-full h-full object-contain" />
+                <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div className="hidden sm:block">
                 <span className="font-heading font-bold text-lg text-[var(--color-text)]">CROWNVAN</span>
@@ -324,7 +325,7 @@ const LandingPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                <img src="/CROWN-Logo.png" alt="Logo" className="w-full h-full object-contain" />
+                <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
               </div>
               <span className="text-white font-semibold">CROWNVAN 海灣國際</span>
             </div>

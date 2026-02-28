@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { TrendingUp, TrendingDown, Target, BookOpen } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { TrendingUp, TrendingDown, Target } from 'lucide-react';
+import { API_BASE_URL } from '../../api';
 import {
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -40,8 +38,6 @@ interface PersonalAnalysis {
   }>;
 }
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-
 interface PersonalLearningAnalysisProps {
   empId?: string;
 }
@@ -65,7 +61,7 @@ export default function PersonalLearningAnalysis({ empId }: PersonalLearningAnal
       
       setLoading(true);
       const token = localStorage.getItem('token');
-      const baseURL = `http://${window.location.hostname}:8000/api`;
+      const baseURL = API_BASE_URL;
       const url = empId
         ? `${baseURL}/exam/personal/analysis?emp_id=${empId}&trend_period=${trendPeriod}`
         : `${baseURL}/exam/personal/analysis?trend_period=${trendPeriod}`;

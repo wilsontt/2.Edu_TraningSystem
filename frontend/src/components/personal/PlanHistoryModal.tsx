@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { X, Eye, CheckCircle, XCircle } from 'lucide-react';
 import clsx from 'clsx';
+import { API_BASE_URL } from '../../api';
 import ScoreDetailModal from './ScoreDetailModal';
-import type { ScoreDetail, ExamHistoryItem } from './types';
+import type { ScoreDetail } from './types';
 
 interface PlanHistoryModalProps {
   recordId: number;
@@ -25,7 +26,7 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose }: PlanHist
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const baseURL = `http://${window.location.hostname}:8000/api`;
+      const baseURL = API_BASE_URL;
       const response = await fetch(
         `${baseURL}/exam/record/${recordId}/detail`,
         { headers: { 'Authorization': `Bearer ${token}` } }
