@@ -35,10 +35,12 @@ const QuestionBankManager = () => {
     
     // 編輯狀態
     const [editingQuestion, setEditingQuestion] = useState<QuestionBankItem | null>(null);
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
     const fetchQuestions = useCallback(async () => {
         try {
             setLoading(true);
+            setFetchError(null);
             const params = new URLSearchParams();
             params.append('page', page.toString());
             params.append('size', pageSize.toString());
@@ -46,12 +48,20 @@ const QuestionBankManager = () => {
             if (questionType && questionType !== 'all') params.append('question_type', questionType);
             if (tagFilter) params.append('tags', tagFilter);
 
-            const res = await api.get(`/admin/question-bank?${params.toString()}`);
+            const res = await api.get(`/admin/question-bank/?${params.toString()}`);
             setQuestions(res.data.items);
             setTotal(res.data.total);
             setTotalPages(res.data.total_pages);
-        } catch (err) {
+        } catch (err: unknown) {
             console.error(err);
+            const msg = err && typeof err === 'object' && 'response' in err
+                ? (err as { response?: { data?: { detail?: string }; status?: number } }).response?.data?.detail
+                    || `HTTP ${(err as { response?: { status?: number } }).response?.status}`
+                : '載入題庫失敗';
+            setFetchError(String(msg));
+            setQuestions([]);
+            setTotal(0);
+            setTotalPages(0);
         } finally {
             setLoading(false);
         }
@@ -152,6 +162,8 @@ const QuestionBankManager = () => {
                     <tbody className="divide-y divide-gray-50">
                         {loading ? (
                             <tr><td colSpan={5} className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600"/></td></tr>
+                        ) : fetchError ? (
+                            <tr><td colSpan={5} className="p-8 text-center"><span className="text-red-600 font-bold">{fetchError}</span></td></tr>
                         ) : questions.length === 0 ? (
                             <tr><td colSpan={5} className="p-8 text-center text-gray-400 italic font-bold">查無資料</td></tr>
                         ) : (

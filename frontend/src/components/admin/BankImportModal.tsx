@@ -43,7 +43,7 @@ const BankImportModal = ({ planId, onClose, onImportSuccess }: BankImportModalPr
             if (questionType && questionType !== 'all') params.append('question_type', questionType);
             if (tagFilter) params.append('tags', tagFilter);
             
-            const res = await api.get(`/admin/question-bank?${params.toString()}`);
+            const res = await api.get(`/admin/question-bank/?${params.toString()}`);
             setQuestions(res.data.items);
             setTotal(res.data.total);
             setTotalPages(res.data.total_pages);
