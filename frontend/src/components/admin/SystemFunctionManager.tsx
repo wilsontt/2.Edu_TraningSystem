@@ -136,15 +136,16 @@ const SystemFunctionManager = () => {
     }
   };
 
-  const renderNode = (func: SystemFunction, level: number = 0) => {
+  const renderNode = (func: SystemFunction, level: number = 0, index?: number) => {
     const isEditing = editingId === func.id;
     const isExpanded = expandedIds.has(func.id);
     const hasChildren = func.children && func.children.length > 0;
+    const stripe = typeof index === 'number' && index % 2 === 1 ? 'bg-gray-100' : '';
 
     return (
       <div key={func.id} className="relative">
         <div 
-            className={`flex items-center gap-2 p-3 rounded-xl border-b border-gray-50 hover:bg-gray-50 transition-colors ${level === 0 ? 'bg-white' : ''}`}
+            className={`flex items-center gap-2 p-3 rounded-xl border-b border-gray-50 hover:bg-gray-50 transition-colors ${level === 0 ? '' : ''} ${stripe}`}
             style={{ paddingLeft: `${level * 1.5 + 1}rem` }}
         >
             {hasChildren ? (
@@ -258,7 +259,7 @@ const SystemFunctionManager = () => {
         {/* Children Recursion */}
         {isExpanded && func.children && (
             <div className="border-l-2 border-gray-100 ml-4">
-                {func.children.map(child => renderNode(child, level + 1))}
+                {func.children.map((child, j) => renderNode(child, level + 1, j))}
             </div>
         )}
       </div>
@@ -331,7 +332,7 @@ const SystemFunctionManager = () => {
                     無功能資料
                  </div>
             ) : (
-                functions.map(f => renderNode(f))
+                functions.map((f, i) => renderNode(f, 0, i))
             )}
         </div>
       </div>

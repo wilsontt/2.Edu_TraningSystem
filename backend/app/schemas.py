@@ -17,6 +17,29 @@ class Department(DepartmentBase):
     class Config:
         from_attributes = True
 
+
+# --- 職務資料結構 ---
+class JobTitleBase(BaseModel):
+    name: str
+
+
+class JobTitleCreate(JobTitleBase):
+    pass
+
+
+class JobTitleUpdate(BaseModel):
+    name: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class JobTitle(JobTitleBase):
+    id: int
+    sort_order: int = 0
+
+    class Config:
+        from_attributes = True
+
+
 # --- 分類資料結構 ---
 class SubCategoryBase(BaseModel):
     name: str
@@ -107,6 +130,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=20, description="姓名，最長20個字符")
     dept_id: Optional[int] = None
     role_id: Optional[int] = None
+    job_title_id: Optional[int] = None
     status: Optional[str] = None
     
     @field_validator('name')
@@ -123,11 +147,10 @@ class UserUpdate(BaseModel):
         return v
 
 class User(UserBase):
-    dept_id: int
+    dept_id: Optional[int] = None
     role_id: Optional[int] = None
     status: str
-    
-    # 關聯欄位，方便前端顯示
+
     class Config:
         from_attributes = True
 
@@ -151,6 +174,7 @@ class Role(RoleBase):
 class UserDetail(User):
     department: Optional[Department] = None
     role: Optional[Role] = None
+    job_title: Optional[JobTitle] = None
 
 class SystemFunctionBase(BaseModel):
     name: str
@@ -179,6 +203,7 @@ class QuestionBase(BaseModel):
     answer: str
     points: int = 10
     hint: Optional[str] = None
+    level: Optional[str] = None  # 題目難易度 E/M/H
 
 class QuestionCreate(QuestionBase):
     plan_id: int
@@ -190,6 +215,7 @@ class QuestionUpdate(BaseModel):
     answer: Optional[str] = None
     points: Optional[int] = None
     hint: Optional[str] = None
+    level: Optional[str] = None
 
 class Question(QuestionBase):
     id: int
@@ -206,6 +232,7 @@ class QuestionBankBase(BaseModel):
     answer: str
     tags: Optional[str] = None
     hint: Optional[str] = None
+    level: Optional[str] = None  # 題目難易度 E/M/H
 
 class QuestionBankCreate(QuestionBankBase):
     pass
@@ -217,6 +244,7 @@ class QuestionBankUpdate(BaseModel):
     answer: Optional[str] = None
     tags: Optional[str] = None
     hint: Optional[str] = None
+    level: Optional[str] = None
 
 class QuestionBank(QuestionBankBase):
     id: int
@@ -271,6 +299,14 @@ class ExpectedAttendanceUpdate(BaseModel):
 
 class CalculatedAttendance(BaseModel):
     calculated_count: int
+
+
+class AbsenceReasonUpdate(BaseModel):
+    """未報到原因：填寫/更新"""
+    emp_id: str
+    reason_code: str  # sick_leave, business_trip, official_leave, other
+    reason_text: Optional[str] = None  # 選 other 時必填
+
 
 # --- 登入 Token 資料結構 ---
 class LoginTokenBase(BaseModel):

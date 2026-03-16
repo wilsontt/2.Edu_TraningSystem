@@ -920,7 +920,7 @@ export default function ReportDashboard() {
                   
                   return (
                     <>
-                      <tr key={idx} className="hover:bg-indigo-50/30 transition-colors duration-200">
+                      <tr key={idx} className="even:bg-gray-100 hover:bg-indigo-50/30 transition-colors duration-200">
                         <td className="px-6 py-4">
                           {itemId && (
                             <button
@@ -1080,7 +1080,7 @@ export default function ReportDashboard() {
                                         </thead>
                                         <tbody>
                                           {deptDetails[itemId].records.map((record: any, rIdx: number) => (
-                                            <tr key={rIdx} className="border-b">
+                                            <tr key={rIdx} className="border-b even:bg-gray-100">
                                               <td className="px-4 py-2">{record.name}</td>
                                               <td className="px-4 py-2">{record.plan_title}</td>
                                               <td className="px-4 py-2 text-right">{record.total_score}</td>
@@ -1189,7 +1189,7 @@ export default function ReportDashboard() {
                                         </thead>
                                         <tbody>
                                           {planDetails[itemId].records.map((record: any, rIdx: number) => (
-                                            <tr key={rIdx} className="border-b">
+                                            <tr key={rIdx} className="border-b even:bg-gray-100">
                                               <td className="px-4 py-2">{record.name}</td>
                                               <td className="px-4 py-2">{record.dept_name}</td>
                                               <td className="px-4 py-2 text-right">{record.total_score}</td>

@@ -102,9 +102,21 @@ class TXTParser:
                 except ValueError:
                     current_question["points"] = 0 # 解析錯誤時預設為 0
             elif line.startswith("HINT:") or line.startswith("HINT："):  # 支援半形和全形冒號
-                # 移除 "HINT:" 或 "HINT：" 前綴
                 hint_text = line[5:].strip() if line.startswith("HINT:") else line[6:].strip()
                 current_question["hint"] = hint_text
+            elif line.startswith("LEVEL:") or line.startswith("LEVEL：") or line.startswith("Level:") or line.startswith("Level："):
+                raw = line.split(":", 1)[-1].split("：", 1)[-1].strip()
+                # 標準化為 E/M/H（Easy/Medium/Hard 取首字母）
+                if raw.upper() in ("E", "M", "H"):
+                    current_question["level"] = raw.upper()
+                elif raw.lower().startswith("easy"):
+                    current_question["level"] = "E"
+                elif raw.lower().startswith("medium"):
+                    current_question["level"] = "M"
+                elif raw.lower().startswith("hard"):
+                    current_question["level"] = "H"
+                else:
+                    current_question["level"] = raw or None
 
         # 加入最後一題
         if current_question and "content" in current_question:

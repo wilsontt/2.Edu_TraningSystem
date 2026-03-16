@@ -315,7 +315,7 @@ const QRCodeManager = () => {
                                 {tokens.map((token) => (
                                     <tr 
                                         key={token.id} 
-                                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                                        className="border-b border-gray-100 even:bg-gray-100 hover:bg-gray-50 transition-colors"
                                     >
                                         <td className="py-3 px-4">
                                             <code className="text-xs font-mono text-gray-600">

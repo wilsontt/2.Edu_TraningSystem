@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Body
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from .. import models, schemas
 from ..database import get_db
@@ -184,11 +184,98 @@ def delete_sub_category(id: int, db: Session = Depends(get_db), current_user = c
     db.commit()
     return {"message": "刪除成功"}
 
+# --- 職務管理 (Job Titles) ---
+@router.get("/job-titles", response_model=List[schemas.JobTitle])
+def get_job_titles(db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
+    """取得所有職務（用於人員管理編輯與職務維護）"""
+    return db.query(models.JobTitle).order_by(models.JobTitle.sort_order, models.JobTitle.id).all()
+
+
+@router.post("/job-titles", response_model=schemas.JobTitle)
+def create_job_title(body: schemas.JobTitleCreate, db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
+    """新增職務"""
+    existing = db.query(models.JobTitle).filter(models.JobTitle.name == body.name.strip()).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="職務名稱已存在")
+    max_order = db.query(models.JobTitle).count()
+    obj = models.JobTitle(name=body.name.strip(), sort_order=max_order)
+    db.add(obj)
+    try:
+        db.commit()
+        db.refresh(obj)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="新增職務失敗")
+    return obj
+
+
+@router.put("/job-titles/{id}", response_model=schemas.JobTitle)
+def update_job_title(id: int, body: schemas.JobTitleUpdate, db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
+    """更新職務"""
+    obj = db.query(models.JobTitle).filter(models.JobTitle.id == id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="職務不存在")
+    if body.name is not None:
+        obj.name = body.name.strip()
+    if body.sort_order is not None:
+        obj.sort_order = body.sort_order
+    try:
+        db.commit()
+        db.refresh(obj)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="更新職務失敗")
+    return obj
+
+
+@router.get("/job-titles/{id}/users")
+def get_job_title_users(id: int, db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
+    """取得綁定此職務的使用者列表（用於職務管理「查看」）"""
+    obj = db.query(models.JobTitle).filter(models.JobTitle.id == id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="職務不存在")
+    users = db.query(models.User).options(
+        joinedload(models.User.department),
+        joinedload(models.User.role),
+    ).filter(models.User.job_title_id == id).all()
+    return {
+        "job_title_id": id,
+        "job_title_name": obj.name,
+        "users": [
+            {
+                "emp_id": u.emp_id,
+                "name": u.name,
+                "department": u.department.name if u.department else None,
+                "role": u.role.name if u.role else None,
+                "status": u.status,
+            }
+            for u in users
+        ],
+    }
+
+
+@router.delete("/job-titles/{id}")
+def delete_job_title(id: int, db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
+    """刪除職務（若尚有使用者綁定則不允許刪除）"""
+    obj = db.query(models.JobTitle).filter(models.JobTitle.id == id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="職務不存在")
+    if obj.users:
+        raise HTTPException(status_code=400, detail="尚有使用者綁定此職務，無法刪除")
+    db.delete(obj)
+    db.commit()
+    return {"message": "刪除成功"}
+
+
 # --- User Management ---
 @router.get("/users", response_model=List[schemas.UserDetail])
-def get_users(db: Session = Depends(get_db), current_user = check_permission("menu:admin:user")):
+def get_users(db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
     """取得所有使用者"""
-    return db.query(models.User).all()
+    return db.query(models.User).options(
+        joinedload(models.User.department),
+        joinedload(models.User.role),
+        joinedload(models.User.job_title),
+    ).all()
 
 @router.put("/users/{emp_id}", response_model=schemas.UserDetail)
 def update_user(emp_id: str, user_update: schemas.UserUpdate, db: Session = Depends(get_db), current_user = check_permission("menu:admin:user")):
@@ -203,6 +290,8 @@ def update_user(emp_id: str, user_update: schemas.UserUpdate, db: Session = Depe
         db_user.dept_id = user_update.dept_id
     if user_update.role_id is not None:
         db_user.role_id = user_update.role_id
+    if user_update.job_title_id is not None:
+        db_user.job_title_id = user_update.job_title_id if user_update.job_title_id else None
     if user_update.status is not None:
         if emp_id.lower() == 'admin' and user_update.status != 'active':
             raise HTTPException(status_code=400, detail="系統預設管理員不能被停用")
@@ -337,17 +426,30 @@ def get_functions(db: Session = Depends(get_db), current_user = check_permission
     # 但若無限層級，SQLAlchemy 通常建議用 Adjacency List pattern 配合 lazy load。
     # 這裡我們嘗試加上 options 看看是否解決 User 只能看到 Root 的問題。
     # 若 Children 在 DB 有資料，lazy load 應該會抓到。
-    # 問題可能是 Pydantic schema 之前沒 children，現在有了。
-    # 如果還不行，我們加上 joinedload。
-    
-    return db.query(models.SystemFunction).filter(models.SystemFunction.parent_id == None).options(joinedload(models.SystemFunction.children)).all()
+    # 排列順序依導覽列：考試中心、訓練計畫、報到總覽、考卷工坊、成績中心、系統管理（及其子項）
+    NAV_ROOT_ORDER = ["menu:home", "menu:plan", "menu:attendance-overview", "menu:exam", "menu:report", "menu:admin"]
+    ADMIN_CHILDREN_NAMES_ORDER = ["單位管理", "分類管理", "人員管理", "職務管理", "角色管理", "權限管理", "功能清單管理", "QRcode 管理"]
+
+    roots = db.query(models.SystemFunction).filter(models.SystemFunction.parent_id == None).options(
+        joinedload(models.SystemFunction.children),
+    ).all()
+    code_to_order = {c: i for i, c in enumerate(NAV_ROOT_ORDER)}
+    roots_sorted = sorted(roots, key=lambda f: code_to_order.get(f.code, 999))
+    for node in roots_sorted:
+        if node.children and node.code == "menu:admin":
+            name_to_order = {n: i for i, n in enumerate(ADMIN_CHILDREN_NAMES_ORDER)}
+            node.children.sort(key=lambda c: name_to_order.get(c.name, 999))
+    return roots_sorted
 
 @router.get("/roles/{role_id}/permissions", response_model=List[int])
 def get_role_permissions(role_id: int, db: Session = Depends(get_db), current_user = check_permission("menu:admin:perm")):
-    """取得特定角色的功能 ID 列表"""
+    """取得特定角色的功能 ID 列表。角色為 Admin 時永遠回傳全部功能 ID（Admin 永遠擁有全部權限）。"""
     role = db.query(models.Role).filter(models.Role.id == role_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
+    if role.name == "Admin":
+        all_funcs = db.query(models.SystemFunction).all()
+        return [f.id for f in all_funcs]
     return [f.id for f in role.functions]
 
 @router.post("/functions", response_model=schemas.SystemFunction)

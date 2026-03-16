@@ -375,8 +375,8 @@ const CategoryManager = () => {
                   {/* Sub Categories List */}
                   {mainCat.sub_categories
                     .filter(sub => !searchTerm || sub.name.toLowerCase().includes(searchTerm.toLowerCase()) || mainCat.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .map((subCat) => (
-                    <div key={subCat.id} className="flex items-center justify-between p-3 bg-gray-50 hover:bg-indigo-50/50 rounded-xl transition-all duration-200 group cursor-pointer">
+                    .map((subCat, subIdx) => (
+                    <div key={subCat.id} className={`flex items-center justify-between p-3 rounded-xl transition-all duration-200 group cursor-pointer ${subIdx % 2 === 0 ? 'bg-gray-100' : 'bg-white'} hover:bg-indigo-50/50`}>
                       {editingSubId === subCat.id ? (
                         <input
                           autoFocus

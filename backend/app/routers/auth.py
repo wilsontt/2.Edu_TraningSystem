@@ -31,9 +31,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     if not emp_id:
         raise HTTPException(status_code=401, detail="無效的認證憑證")
     
-    # 預先載入角色與功能，避免非同步環境下的 Lazy Load 問題
+    # 預先載入角色、功能與職務（職務用於未報到原因權限：部門主管）
     user = db.query(models.User).options(
-        joinedload(models.User.role).joinedload(models.Role.functions)
+        joinedload(models.User.role).joinedload(models.Role.functions),
+        joinedload(models.User.job_title),
     ).filter(models.User.emp_id == emp_id).first()
     
     if not user:

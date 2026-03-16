@@ -137,7 +137,7 @@ export default function PersonalScorePage() {
             
             {showUserSelector && filteredUsers.length > 0 && (
               <div className="absolute z-10 w-full mt-2 bg-white border border-indigo-100 rounded-xl shadow-lg max-h-60 overflow-y-auto">
-                {filteredUsers.map((user) => (
+                {filteredUsers.map((user, uIdx) => (
                   <button
                     key={user.emp_id}
                     onClick={() => {
@@ -147,7 +147,7 @@ export default function PersonalScorePage() {
                       // 更新 URL 參數
                       setSearchParams({ emp_id: user.emp_id });
                     }}
-                    className="w-full px-4 py-3 text-left hover:bg-indigo-50/50 transition-all duration-200 border-b border-gray-100 last:border-b-0 cursor-pointer"
+                    className={`w-full px-4 py-3 text-left hover:bg-indigo-50/50 transition-all duration-200 border-b border-gray-100 last:border-b-0 cursor-pointer ${uIdx % 2 === 0 ? 'bg-white' : 'bg-gray-100'}`}
                   >
                     <div className="font-medium text-gray-900">{user.name}</div>
                     <div className="text-sm text-gray-500">

@@ -27,6 +27,15 @@ plan_target_users = Table(
     Column("emp_id", String, ForeignKey("users.emp_id")),
 )
 
+class JobTitle(Base):
+    """職務（可增減）：主管、稽核、行政助理、倉儲作業、總稽核、工程師等"""
+    __tablename__ = "job_titles"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    sort_order = Column(Integer, default=0)
+    users = relationship("User", back_populates="job_title")
+
+
 class Department(Base):
     __tablename__ = "departments"
     id = Column(Integer, primary_key=True, index=True)
@@ -59,10 +68,12 @@ class User(Base):
     name = Column(String)
     dept_id = Column(Integer, ForeignKey("departments.id"))
     role_id = Column(Integer, ForeignKey("roles.id"))
+    job_title_id = Column(Integer, ForeignKey("job_titles.id"), nullable=True)  # 職務
     status = Column(String, default="active")
     
     department = relationship("Department", back_populates="users")
     role = relationship("Role", back_populates="users")
+    job_title = relationship("JobTitle", back_populates="users")
     exam_records = relationship("ExamRecord", back_populates="user")
     attendance_records = relationship("AttendanceRecord", back_populates="user")
 
@@ -113,6 +124,7 @@ class Question(Base):
     answer = Column(String)
     points = Column(Integer, default=10)
     hint = Column(Text, nullable=True) # 提示內容（可選）
+    level = Column(String(20), nullable=True) # 題目難易度 E/M/H（可選）
     
     training_plan = relationship("TrainingPlan", back_populates="questions")
 
@@ -125,6 +137,7 @@ class QuestionBank(Base):
     answer = Column(String, nullable=False)
     tags = Column(Text, nullable=True) # JSON 字串陣列
     hint = Column(Text, nullable=True) # 提示內容（可選）
+    level = Column(String(20), nullable=True) # 題目難易度 E/M/H（可選）
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -176,6 +189,18 @@ class AttendanceRecord(Base):
     
     user = relationship("User", back_populates="attendance_records")
     training_plan = relationship("TrainingPlan", back_populates="attendance_records")
+
+
+class AttendanceAbsenceReason(Base):
+    """未報到原因記錄：主管或有權限者填寫未到者原因（病假、出差、公假、其他）"""
+    __tablename__ = "attendance_absence_reasons"
+    id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(Integer, ForeignKey("training_plans.id"), nullable=False)
+    emp_id = Column(String, ForeignKey("users.emp_id"), nullable=False)
+    reason_code = Column(String(50), nullable=False)  # sick_leave, business_trip, official_leave, other
+    reason_text = Column(String(500), nullable=True)   # 選「其他」時必填
+    recorded_by = Column(String, ForeignKey("users.emp_id"), nullable=False)
+    recorded_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class LoginToken(Base):
     __tablename__ = "login_tokens"

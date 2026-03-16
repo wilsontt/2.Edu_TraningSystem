@@ -4,20 +4,22 @@ import { Search, Edit2, Check, X, User as UserIcon, Shield, Building2, Loader2, 
 import api from '../../api';
 import Pagination from '../common/Pagination';
 
+interface JobTitle {
+  id: number;
+  name: string;
+  sort_order?: number;
+}
+
 interface User {
   emp_id: string;
   name: string;
   dept_id: number;
   role_id: number | null;
+  job_title_id?: number | null;
   status: string;
-  department?: {
-    id: number;
-    name: string;
-  };
-  role?: {
-    id: number;
-    name: string;
-  };
+  department?: { id: number; name: string };
+  role?: { id: number; name: string };
+  job_title?: JobTitle;
 }
 
 interface Role {
@@ -34,6 +36,7 @@ const UserManager = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [jobTitles, setJobTitles] = useState<JobTitle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -42,6 +45,7 @@ const UserManager = () => {
   const [editForm, setEditForm] = useState({
     role_id: 0,
     dept_id: 0,
+    job_title_id: 0 as number | null,
     status: 'active'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,14 +76,16 @@ const UserManager = () => {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [usersRes, rolesRes, deptsRes] = await Promise.all([
+      const [usersRes, rolesRes, deptsRes, jobTitlesRes] = await Promise.all([
         api.get('/admin/users'),
         api.get('/admin/roles'),
-        api.get('/admin/departments')
+        api.get('/admin/departments'),
+        api.get('/admin/job-titles')
       ]);
       setUsers(usersRes.data);
       setRoles(rolesRes.data);
       setDepartments(deptsRes.data);
+      setJobTitles(jobTitlesRes.data || []);
     } catch (err) {
       console.error('Failed to fetch data', err);
       setError('無法載入資料');
@@ -92,7 +98,8 @@ const UserManager = () => {
     setEditingUser(user);
     setEditForm({
       role_id: user.role_id || 0,
-      dept_id: user.dept_id,
+      dept_id: user.dept_id ?? 0,
+      job_title_id: user.job_title_id ?? user.job_title?.id ?? 0,
       status: user.status
     });
   };
@@ -117,19 +124,20 @@ const UserManager = () => {
       const payload = {
         role_id: editForm.role_id === 0 ? null : editForm.role_id,
         dept_id: editForm.dept_id,
+        job_title_id: !editForm.job_title_id ? null : editForm.job_title_id,
         status: editForm.status
       };
 
       await api.put(`/admin/users/${editingUser.emp_id}`, payload);
       
-      // Update local state
       setUsers(users.map(u => 
         u.emp_id === editingUser.emp_id 
           ? { 
               ...u, 
               ...payload, 
               role: roles.find(r => r.id === payload.role_id),
-              department: departments.find(d => d.id === payload.dept_id)
+              department: departments.find(d => d.id === payload.dept_id),
+              job_title: jobTitles.find(j => j.id === payload.job_title_id) ?? undefined
             } 
           : u
       ));
@@ -366,6 +374,7 @@ const UserManager = () => {
                       )}
                     </div>
                   </th>
+                  <th className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider">職務</th>
                   <th 
                     onClick={() => handleSort('status')}
                     className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-all duration-200 group"
@@ -396,7 +405,7 @@ const UserManager = () => {
                     className={`transition-all duration-200 group cursor-pointer ${
                       isSelected 
                         ? 'bg-indigo-50 border-l-4 border-l-indigo-500' 
-                        : 'hover:bg-indigo-50/30 even:bg-gray-50/50'
+                        : 'hover:bg-indigo-50/30 even:bg-gray-100'
                     }`}
                     onClick={() => handleRowClick(user.emp_id)}
                     onDoubleClick={() => handleEdit(user)}
@@ -434,6 +443,9 @@ const UserManager = () => {
                       ) : (
                         <span className="text-sm text-gray-400 italic">未分配</span>
                       )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {user.job_title?.name ?? '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -543,6 +555,20 @@ const UserManager = () => {
                   <option value={0}>未分配</option>
                   {roles.map(role => (
                     <option key={role.id} value={role.id}>{role.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">職務</label>
+                <select
+                  value={editForm.job_title_id ?? 0}
+                  onChange={(e) => setEditForm({ ...editForm, job_title_id: Number(e.target.value) || null })}
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 font-medium text-gray-800 cursor-pointer"
+                >
+                  <option value={0}>未設定</option>
+                  {jobTitles.map(jt => (
+                    <option key={jt.id} value={jt.id}>{jt.name}</option>
                   ))}
                 </select>
               </div>

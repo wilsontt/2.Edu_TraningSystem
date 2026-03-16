@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Any, Dict
 import os
+import json
 import shutil
 from pathlib import Path
 from datetime import datetime
@@ -72,7 +73,8 @@ async def upload_material(
                 content=q["content"],
                 options=q["options"],
                 answer=q["answer"],
-                hint=q.get("hint"),  # 支援提示欄位
+                hint=q.get("hint"),
+                level=q.get("level"),  # 題目難易度 E/M/H
                 points=q.get("points", 10)
             )
             db.add(new_q)
@@ -98,7 +100,8 @@ async def upload_material(
                     options=q["options"],
                     answer=q["answer"],
                     tags=json.dumps(tags_list, ensure_ascii=False),
-                    hint=q.get("hint"),  # 支援提示欄位
+                    hint=q.get("hint"),
+                    level=q.get("level"),
                     created_by=current_user.emp_id if hasattr(current_user, 'emp_id') else 'system'
                 )
                 db.add(qb)
@@ -116,25 +119,81 @@ async def upload_material(
         "failed": 0
     }
 
-    # 4. 備份原始檔案
-    try:
-        year = plan.year if plan.year else "unknown"
-        upload_dir = get_upload_dir(year, plan_id)
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        file_path = upload_dir / file.filename
-        
-        # 不重置檔案游標，直接寫入已讀取的內容
-        with file_path.open("w", encoding="utf-8") as f:
-            f.write(content)
-            
-    except Exception as e:
-        print(f"備份失敗: {e}") # 非致命錯誤
-        
-    return {
-        "filename": file.filename,
-        "parsed_count": len(new_questions),
-        "message": f"成功匯入 {len(new_questions)} 題"
-    }
+@router.post("/upload/preview")
+async def upload_preview(
+    file: UploadFile = File(...),
+    current_user = check_permission("menu:exam")
+):
+    """僅解析 TXT 不寫入 DB，回傳題目列表供前端預覽與勾選後再匯入。"""
+    if not file.filename.lower().endswith('.txt'):
+        raise HTTPException(status_code=400, detail="僅支援 .txt 格式")
+    content = (await file.read()).decode('utf-8')
+    from ..services.parser import TXTParser
+    questions_data = TXTParser.parse_content(content)
+    if not questions_data:
+        raise HTTPException(status_code=400, detail="無法解析題目，請檢查檔案格式 (需包含 Q:, ANS:, SCORE:)")
+    # 回傳結構化題目（含 type, content, options, answer, points, hint, level）
+    return {"filename": file.filename, "questions": questions_data}
+
+@router.post("/import-from-preview")
+async def import_from_preview(
+    plan_id: int = Body(...),
+    questions: List[Dict[str, Any]] = Body(...),
+    add_to_bank: bool = Body(True),
+    db: Session = Depends(get_db),
+    current_user = check_permission("menu:exam")
+):
+    """將預覽後勾選的題目寫入該訓練計畫，並可選擇同步寫入題庫。"""
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    imported = 0
+    duplicate = 0
+    for q in questions:
+        if not q.get("content") or not q.get("answer"):
+            continue
+        exists = db.query(models.Question).filter(
+            models.Question.plan_id == plan_id,
+            models.Question.content == q["content"]
+        ).first()
+        if exists:
+            duplicate += 1
+            continue
+        new_q = models.Question(
+            plan_id=plan_id,
+            question_type=q.get("type", "single"),
+            content=q["content"],
+            options=q.get("options", "{}"),
+            answer=q["answer"],
+            hint=q.get("hint"),
+            level=q.get("level"),
+            points=q.get("points", 10)
+        )
+        db.add(new_q)
+        imported += 1
+        if add_to_bank:
+            exists_bank = db.query(models.QuestionBank).filter(
+                models.QuestionBank.content == q["content"]
+            ).first()
+            if not exists_bank:
+                tags_list = []
+                if plan.title:
+                    tags_list.append(plan.title)
+                if plan.sub_category and plan.sub_category.name:
+                    tags_list.append(plan.sub_category.name)
+                qb = models.QuestionBank(
+                    content=q["content"],
+                    question_type=q.get("type", "single"),
+                    options=q.get("options", "{}"),
+                    answer=q["answer"],
+                    tags=json.dumps(tags_list, ensure_ascii=False),
+                    hint=q.get("hint"),
+                    level=q.get("level"),
+                    created_by=current_user.emp_id if hasattr(current_user, 'emp_id') else 'system'
+                )
+                db.add(qb)
+    db.commit()
+    return {"imported": imported, "duplicate": duplicate}
 
 @router.get("/materials/{plan_id}")
 def list_materials(

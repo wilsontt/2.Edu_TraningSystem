@@ -60,8 +60,17 @@ interface AttendanceStats {
     emp_id: string;
     name: string;
     dept_name: string;
+    absence_reason_code?: string;
+    absence_reason_text?: string;
   }>;
 }
+
+const ABSENCE_REASON_OPTIONS: Array<{ code: string; label: string }> = [
+  { code: 'sick_leave', label: '病假' },
+  { code: 'business_trip', label: '出差' },
+  { code: 'official_leave', label: '公假' },
+  { code: 'other', label: '其他' },
+];
 
 const TrainingPlanManager = () => {
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
@@ -110,6 +119,15 @@ const TrainingPlanManager = () => {
   // 操作選單狀態
   const [openActionMenu, setOpenActionMenu] = useState<number | null>(null);
 
+  // 未報到原因編輯（報到統計 Modal 內）
+  const [absenceReasonEdit, setAbsenceReasonEdit] = useState<{
+    empId: string;
+    name: string;
+    reasonCode: string;
+    reasonText: string;
+  } | null>(null);
+  const [savingAbsenceReason, setSavingAbsenceReason] = useState(false);
+
   // 排序狀態
   const [sortField, setSortField] = useState<keyof TrainingPlan | 'dept_name' | 'category_name' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -130,8 +148,8 @@ const TrainingPlanManager = () => {
     expected_attendance: '',
   });
   
-  // 使用者列表（用於個人受課對象選擇）
-  const [users, setUsers] = useState<Array<{emp_id: string; name: string; dept_name: string}>>([]);
+  // 使用者列表（用於個人受課對象選擇，含 dept_id 以支援受課單位勾選時自動勾選該部門人員）
+  const [users, setUsers] = useState<Array<{emp_id: string; name: string; dept_name: string; dept_id: number | null}>>([]);
   const [userSearchTerm, setUserSearchTerm] = useState('');
 
   // 下拉選單資料
@@ -180,11 +198,12 @@ const TrainingPlanManager = () => {
         setAllPlans(allPlansRes.data); // 保存所有計畫用於提取年份選項
         setCategories(catsRes.data);
         setDepartments(deptsRes.data);
-        // 處理使用者列表
-        const usersList = usersRes.data.map((u: {emp_id: string; name: string; department?: {name: string}}) => ({
+        // 處理使用者列表（含 dept_id 供受課單位勾選時自動勾選個人受訓對象）
+        const usersList = usersRes.data.map((u: {emp_id: string; name: string; department?: {id: number; name: string}}) => ({
           emp_id: u.emp_id,
           name: u.name,
-          dept_name: u.department?.name || '未知'
+          dept_name: u.department?.name || '未知',
+          dept_id: u.department?.id ?? null
         }));
         setUsers(usersList);
         
@@ -763,7 +782,7 @@ const TrainingPlanManager = () => {
                   const isExpired = plan.end_date && plan.end_date < todayStr;
                   const displayIndex = startIndex + index + 1;
                   return (
-                  <tr key={plan.id} className={`group border-b border-gray-50 transition-all duration-200 even:bg-gray-50/50 hover:bg-indigo-50/30 cursor-pointer ${isExpired ? 'border-l-4 border-l-orange-400 bg-orange-50/10' : ''}`}>
+                  <tr key={plan.id} className={`group border-b border-gray-50 transition-all duration-200 even:bg-gray-100 hover:bg-indigo-50/30 cursor-pointer ${isExpired ? 'border-l-4 border-l-orange-400 bg-orange-50/10' : ''}`}>
                     <td className="px-6 py-4 text-sm font-black text-gray-300">{displayIndex}</td>
                     <td className="px-6 py-4 text-sm font-black text-indigo-600">{plan.year}</td>
                     <td className="px-6 py-4">
@@ -1213,12 +1232,21 @@ const TrainingPlanManager = () => {
                                       checked={formData.target_dept_ids.includes(dept.id.toString())}
                                       onChange={e => {
                                           const id = dept.id.toString();
+                                          const checked = e.target.checked;
                                           setFormData(prev => {
-                                              if (e.target.checked) {
-                                                  return {...prev, target_dept_ids: [...prev.target_dept_ids, id]};
+                                              const nextDeptIds = checked
+                                                ? [...prev.target_dept_ids, id]
+                                                : prev.target_dept_ids.filter(tid => tid !== id);
+                                              // 受課單位變更時，同步個人受訓對象：勾選部門則加入該部門所有人；取消部門則從 target_user_ids 移除該部門所有人
+                                              let nextUserIds: string[];
+                                              if (checked) {
+                                                const toAdd = users.filter(u => u.dept_id === dept.id).map(u => u.emp_id);
+                                                nextUserIds = [...new Set([...prev.target_user_ids, ...toAdd])];
                                               } else {
-                                                  return {...prev, target_dept_ids: prev.target_dept_ids.filter(tid => tid !== id)};
+                                                const toRemove = users.filter(u => u.dept_id === dept.id).map(u => u.emp_id);
+                                                nextUserIds = prev.target_user_ids.filter(empId => !toRemove.includes(empId));
                                               }
+                                              return { ...prev, target_dept_ids: nextDeptIds, target_user_ids: nextUserIds };
                                           });
                                       }}
                                   />
@@ -1406,8 +1434,8 @@ const TrainingPlanManager = () => {
                 
                 return (
                   <>
-                    {/* 統計卡片 */}
-                    <div className="grid grid-cols-3 gap-4">
+                    {/* 統計卡片：應到、實到、未到、出席率 */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200">
                         <div className="text-sm font-bold text-indigo-600 mb-1">應到人數</div>
                         <div className="text-2xl font-black text-indigo-800">{stats.expected_count}</div>
@@ -1416,12 +1444,18 @@ const TrainingPlanManager = () => {
                         <div className="text-sm font-bold text-green-600 mb-1">實到人數</div>
                         <div className="text-2xl font-black text-green-800">{stats.actual_count}</div>
                       </div>
+                      <div className="bg-orange-50 p-4 rounded-xl border border-orange-200">
+                        <div className="text-sm font-bold text-orange-600 mb-1">未到人數</div>
+                        <div className="text-2xl font-black text-orange-800">{Math.max(0, stats.expected_count - stats.actual_count)}</div>
+                      </div>
                       <div className="bg-purple-50 p-4 rounded-xl border border-purple-200">
                         <div className="text-sm font-bold text-purple-600 mb-1">出席率</div>
                         <div className="text-2xl font-black text-purple-800">{stats.attendance_rate.toFixed(1)}%</div>
                       </div>
                     </div>
 
+                    {/* 報到 QRcode 與應到人數設定：左右排列 */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* 報到 QRcode 生成 */}
                     <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200">
                       <div className="flex items-center justify-between mb-3">
@@ -1588,6 +1622,7 @@ const TrainingPlanManager = () => {
                         <span className="text-xs text-gray-500">人</span>
                       </div>
                     </div>
+                    </div>
 
                     {/* 已報到用戶列表 */}
                     <div>
@@ -1612,7 +1647,7 @@ const TrainingPlanManager = () => {
                               </tr>
                             ) : (
                               stats.checked_in_users.map((user, idx) => (
-                                <tr key={idx} className="hover:bg-gray-50">
+                                <tr key={idx} className="even:bg-gray-100 hover:bg-gray-50">
                                   <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
                                   <td className="px-4 py-2 font-bold">{user.name}</td>
                                   <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
@@ -1641,14 +1676,38 @@ const TrainingPlanManager = () => {
                                 <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">員工編號</th>
                                 <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
                                 <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">部門</th>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">未到原因</th>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">操作</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                               {stats.not_checked_in_users.map((user, idx) => (
-                                <tr key={idx} className="hover:bg-gray-50">
+                                <tr key={idx} className="even:bg-gray-100 hover:bg-gray-50">
                                   <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
                                   <td className="px-4 py-2 font-bold">{user.name}</td>
                                   <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
+                                  <td className="px-4 py-2 text-gray-600 text-xs">
+                                    {user.absence_reason_code ? (
+                                      <span title={user.absence_reason_text || ''}>
+                                        {ABSENCE_REASON_OPTIONS.find(o => o.code === user.absence_reason_code)?.label || user.absence_reason_code}
+                                        {user.absence_reason_text && user.absence_reason_code === 'other' && `：${user.absence_reason_text}`}
+                                      </span>
+                                    ) : '-'}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setAbsenceReasonEdit({
+                                        empId: user.emp_id,
+                                        name: user.name,
+                                        reasonCode: user.absence_reason_code || '',
+                                        reasonText: user.absence_reason_text || '',
+                                      })}
+                                      className="px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
+                                    >
+                                      {user.absence_reason_code ? '編輯原因' : '填寫原因'}
+                                    </button>
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1666,10 +1725,86 @@ const TrainingPlanManager = () => {
                 onClick={() => {
                   setIsAttendanceModalOpen(false);
                   setSelectedPlanId(null);
+                  setAbsenceReasonEdit(null);
                 }}
                 className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
                 關閉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 未報到原因編輯 Modal */}
+      {absenceReasonEdit && selectedPlanId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-4 border-b border-indigo-100 bg-indigo-50/50">
+              <h3 className="text-lg font-black text-gray-900">填寫未報到原因 - {absenceReasonEdit.name}</h3>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">原因</label>
+                <select
+                  value={absenceReasonEdit.reasonCode}
+                  onChange={(e) => setAbsenceReasonEdit(prev => prev ? { ...prev, reasonCode: e.target.value } : null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">請選擇</option>
+                  {ABSENCE_REASON_OPTIONS.map((opt) => (
+                    <option key={opt.code} value={opt.code}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              {absenceReasonEdit.reasonCode === 'other' && (
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">原因說明（必填）</label>
+                  <input
+                    type="text"
+                    value={absenceReasonEdit.reasonText}
+                    onChange={(e) => setAbsenceReasonEdit(prev => prev ? { ...prev, reasonText: e.target.value } : null)}
+                    placeholder="請填寫未到原因"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-100 flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setAbsenceReasonEdit(null)}
+                className="px-4 py-2 text-gray-600 font-bold rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={savingAbsenceReason || !absenceReasonEdit.reasonCode || (absenceReasonEdit.reasonCode === 'other' && !absenceReasonEdit.reasonText.trim())}
+                onClick={async () => {
+                  if (!absenceReasonEdit || !selectedPlanId) return;
+                  setSavingAbsenceReason(true);
+                  try {
+                    await api.put(`/training/plans/${selectedPlanId}/attendance/absence-reason`, {
+                      emp_id: absenceReasonEdit.empId,
+                      reason_code: absenceReasonEdit.reasonCode,
+                      reason_text: absenceReasonEdit.reasonCode === 'other' ? absenceReasonEdit.reasonText : undefined,
+                    });
+                    await fetchAttendanceStats(selectedPlanId);
+                    setAbsenceReasonEdit(null);
+                  } catch (err: unknown) {
+                    if (err instanceof AxiosError) {
+                      alert(err.response?.data?.detail || '儲存失敗');
+                    } else {
+                      alert('儲存失敗');
+                    }
+                  } finally {
+                    setSavingAbsenceReason(false);
+                  }
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {savingAbsenceReason ? '儲存中…' : '儲存'}
               </button>
             </div>
           </div>

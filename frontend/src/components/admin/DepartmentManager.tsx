@@ -775,7 +775,7 @@ const DepartmentManager = () => {
                     className={`transition-all duration-200 group cursor-pointer ${
                       isEditing === dept.id 
                         ? 'bg-indigo-50/50 border-l-4 border-l-indigo-500' 
-                        : 'hover:bg-indigo-50/30 even:bg-gray-50/50'
+                        : 'hover:bg-indigo-50/30 even:bg-gray-100'
                     }`}
                     onDoubleClick={() => {
                       setIsEditing(dept.id);

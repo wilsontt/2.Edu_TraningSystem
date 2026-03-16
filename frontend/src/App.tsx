@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { LayoutDashboard, BookOpen, PenTool, BarChart3, Settings, LogOut, ChevronDown, Menu, X } from 'lucide-react';
+import { LayoutDashboard, BookOpen, PenTool, BarChart3, Settings, LogOut, ChevronDown, Menu, X, ClipboardList } from 'lucide-react';
 import api from './api';
 import LoginPage from './components/LoginPage';
 import LandingPage from './components/LandingPage';
@@ -8,6 +8,7 @@ import DepartmentManager from './components/admin/DepartmentManager';
 import CategoryManager from './components/admin/CategoryManager';
 import TrainingPlanManager from './components/admin/TrainingPlanManager';
 import UserManager from './components/admin/UserManager';
+import JobTitleManager from './components/admin/JobTitleManager';
 import RoleManager from './components/admin/RoleManager';
 import PermissionManager from './components/admin/PermissionManager';
 import SystemFunctionManager from './components/admin/SystemFunctionManager';
@@ -19,6 +20,7 @@ import ExamRunner from './components/exam/ExamRunner';
 import PersonalScorePage from './components/personal/PersonalScorePage';
 import QRCodeLoginPage from './components/QRCodeLoginPage';
 import CheckInPage from './components/exam/CheckInPage';
+import AttendanceOverviewPage from './components/attendance/AttendanceOverviewPage';
 import type { User } from './types';
 import { useRef } from 'react';
 import logoUrl from './assets/CROWN_logo.png';
@@ -101,6 +103,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
   const navItems = [
     { name: '考試中心', path: '/', icon: <LayoutDashboard className="w-4 h-4" />, code: 'menu:home' },
     { name: '訓練計畫', path: '/plans', icon: <BookOpen className="w-4 h-4" />, code: 'menu:plan' },
+    { name: '報到總覽', path: '/attendance-overview', icon: <ClipboardList className="w-4 h-4" />, code: 'menu:attendance-overview' },
     { name: '考卷工坊', path: '/exams', icon: <PenTool className="w-4 h-4" />, code: 'menu:exam' },
     { name: '成績中心', path: '/reports', icon: <BarChart3 className="w-4 h-4" />, code: 'menu:report' },
   ].filter(item => user.role === 'Admin' || functions.includes(item.code));
@@ -109,6 +112,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     { name: '單位管理', path: '/admin/departments', code: 'menu:admin:dept' },
     { name: '分類管理', path: '/admin/categories', code: 'menu:admin' },
     { name: '人員管理', path: '/admin/users', code: 'menu:admin:user' },
+    { name: '職務管理', path: '/admin/job-titles', code: 'menu:admin:user' },
     { name: '角色管理', path: '/admin/roles', code: 'menu:admin:role' },
     { name: '權限管理', path: '/admin/permissions', code: 'menu:admin:perm' },
     { name: '功能清單管理', path: '/admin/functions', code: 'menu:admin:func' },
@@ -339,12 +343,14 @@ const App = () => {
                     <Route path="/" element={<ExamDashboard />} />
                     <Route path="/exam/run/:planId" element={<ExamRunner />} />
                     <Route path="/plans" element={user.functions?.includes('menu:plan') || user.role === 'Admin' ? <TrainingPlanManager /> : <Navigate to="/" />} />
+                    <Route path="/attendance-overview" element={user.functions?.includes('menu:attendance-overview') || user.role === 'Admin' ? <AttendanceOverviewPage /> : <Navigate to="/" />} />
                     <Route path="/exams" element={user.functions?.includes('menu:exam') || user.role === 'Admin' ? <ExamStudio /> : <Navigate to="/" />} />
                     <Route path="/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <PersonalScorePage />} />
                     <Route path="/reports/personal" element={<PersonalScorePage />} />
                     <Route path="/admin/departments" element={user.role === 'Admin' ? <DepartmentManager /> : <Navigate to="/" />} />
                     <Route path="/admin/categories" element={user.role === 'Admin' ? <CategoryManager /> : <Navigate to="/" />} />
                     <Route path="/admin/users" element={user.role === 'Admin' ? <UserManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/job-titles" element={user.role === 'Admin' ? <JobTitleManager /> : <Navigate to="/" />} />
                     <Route path="/admin/roles" element={user.role === 'Admin' ? <RoleManager /> : <Navigate to="/" />} />
                     <Route path="/admin/permissions" element={user.role === 'Admin' ? <PermissionManager /> : <Navigate to="/" />} />
                     <Route path="/admin/functions" element={user.role === 'Admin' ? <SystemFunctionManager /> : <Navigate to="/" />} />

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Request as FastAPIRequest
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from datetime import date, datetime, timedelta
@@ -61,20 +61,26 @@ def get_my_exams(
     
     today = date.today()
     
-    # 檢查是否為 Admin (假設 Role 名稱為 "Admin")
-    # 注意: current_user.role 可能為 None (雖然 schema 定義 optional，但實務上應有)
-    is_admin = current_user.role and current_user.role.name == "Admin"
-    
-    if is_admin:
-        plans = db.query(models.TrainingPlan).filter(
-            models.TrainingPlan.is_archived == False
-        ).order_by(models.TrainingPlan.training_date.desc()).all()
+    # Admin、系統管理者：可看所有未封存計畫；一般使用者：受課對象包含自己，或「未設定受課對象」的計畫（全公司）才看得到
+    role_name = (current_user.role and current_user.role.name) or ""
+    is_admin_or_system = (role_name and role_name.strip().lower() == "admin") or role_name == "系統管理者"
+    base_query = db.query(models.TrainingPlan).options(
+        joinedload(models.TrainingPlan.questions),
+    ).filter(models.TrainingPlan.is_archived == False)
+
+    if is_admin_or_system:
+        plans = base_query.order_by(models.TrainingPlan.training_date.desc()).all()
     else:
-        # 篩選受課單位包含使用者所屬部門的計畫，且未封存
-        plans = db.query(models.TrainingPlan).filter(
-            models.TrainingPlan.target_departments.any(id=current_user.dept_id),
-            models.TrainingPlan.is_archived == False
-        ).order_by(models.TrainingPlan.training_date.desc()).all()
+        # 條件：未設定受課對象（全公司） OR 個人受訓對象含自己 OR 受課單位含自己部門
+        no_targets = and_(
+            ~models.TrainingPlan.target_departments.any(),
+            ~models.TrainingPlan.target_users.any(),
+        )
+        in_target_users = models.TrainingPlan.target_users.any(emp_id=current_user.emp_id)
+        or_conds = [no_targets, in_target_users]
+        if current_user.dept_id is not None:
+            or_conds.append(models.TrainingPlan.target_departments.any(id=current_user.dept_id))
+        plans = base_query.filter(or_(*or_conds)).order_by(models.TrainingPlan.training_date.desc()).all()
 
     results = []
     

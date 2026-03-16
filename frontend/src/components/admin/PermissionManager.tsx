@@ -215,7 +215,7 @@ const PermissionManager = () => {
                    className={`w-full text-left p-4 flex items-center justify-between transition-all duration-200 cursor-pointer ${
                      selectedRoleId === role.id 
                        ? 'bg-indigo-50 text-indigo-700 font-bold border-l-4 border-indigo-600' 
-                       : 'text-gray-600 hover:bg-indigo-50/30 hover:text-gray-900 font-medium border-l-4 border-transparent'
+                       : `text-gray-600 hover:bg-indigo-50/30 hover:text-gray-900 font-medium border-l-4 border-transparent ${index % 2 === 0 ? 'bg-white' : 'bg-gray-100'}`
                    }`}
                  >
                    <div className="flex items-center gap-3">
@@ -248,7 +248,7 @@ const PermissionManager = () => {
             </button>
           </div>
           
-          <div className="p-6 h-[600px] overflow-y-auto">
+          <div className="p-6 h-[900px] overflow-y-auto">
              {error && (
                 <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-xl font-bold flex items-center gap-2">
                   <AlertCircle className="w-5 h-5" />

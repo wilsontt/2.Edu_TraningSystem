@@ -168,7 +168,7 @@ const QuestionBankManager = () => {
                             <tr><td colSpan={5} className="p-8 text-center text-gray-400 italic font-bold">查無資料</td></tr>
                         ) : (
                             questions.map((q, idx) => (
-                                <tr key={q.id} className="group transition-all duration-200 border-b border-gray-50 last:border-0 even:bg-gray-50/50 hover:bg-indigo-50/80">
+                                <tr key={q.id} className="group transition-all duration-200 border-b border-gray-50 last:border-0 even:bg-gray-100 hover:bg-indigo-50/80">
                                     <td className="px-6 py-3 text-xs font-mono text-gray-400">
                                         {(page - 1) * pageSize + idx + 1}
                                     </td>

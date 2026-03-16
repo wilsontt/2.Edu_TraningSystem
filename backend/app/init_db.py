@@ -36,6 +36,7 @@ def init_db():
         functions = [
             {"name": "考試中心", "code": "menu:home", "path": "/", "parent_id": 0},
             {"name": "訓練計畫", "code": "menu:plan", "path": "/plans", "parent_id": 0},
+            {"name": "報到總覽", "code": "menu:attendance-overview", "path": "/attendance-overview", "parent_id": 0},
             {"name": "考卷工坊", "code": "menu:exam", "path": "/exams", "parent_id": 0},
             {"name": "成績中心", "code": "menu:report", "path": "/reports", "parent_id": 0},
             {"name": "系統管理", "code": "menu:admin", "path": "/admin", "parent_id": 0},

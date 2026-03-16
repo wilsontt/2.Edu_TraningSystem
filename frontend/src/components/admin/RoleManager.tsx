@@ -40,9 +40,11 @@ const RoleManager = () => {
   // 成員管理狀態
   const [isAddingMemberToRole, setIsAddingMemberToRole] = useState(false);
   const [removingMemberFromRole, setRemovingMemberFromRole] = useState<{emp_id: string; name: string} | null>(null);
-  const [allUsers, setAllUsers] = useState<Array<{emp_id: string; name: string; role_id: number | null; department?: {name: string}}>>([]);
+  const [allUsers, setAllUsers] = useState<Array<{emp_id: string; name: string; role_id: number | null; department?: {name: string}; job_title?: {id: number; name: string}}>>([]);
   const [loadingAllUsers, _setLoadingAllUsers] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [userJobTitleFilter, setUserJobTitleFilter] = useState<number | ''>('');
+  const [jobTitles, setJobTitles] = useState<Array<{id: number; name: string}>>([]);
   const [targetRoleId, setTargetRoleId] = useState<number | null>(null);
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);
   const [roleUsers, setRoleUsers] = useState<Array<{emp_id: string; name: string; role_id: number}>>([]);
@@ -177,6 +179,13 @@ const RoleManager = () => {
             setRoleUsers(users);
             // 預載入所有用戶列表（用於新增成員）
             setAllUsers(res.data);
+            // 一併載入職務清單（用於新增成員時依職務篩選）
+            try {
+              const jtRes = await api.get<Array<{id: number; name: string}>>('/admin/job-titles');
+              setJobTitles(jtRes.data || []);
+            } catch {
+              setJobTitles([]);
+            }
         } else {
             // 取得權限列表，需將 ID 轉換為功能名稱
             const [permRes, funcRes] = await Promise.all([
@@ -311,7 +320,7 @@ const RoleManager = () => {
             {roles.map((role, index) => (
               <div 
                 key={role.id} 
-                className="p-6 bg-white border-2 border-gray-100 rounded-2xl hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-100/50 transition-all duration-200 group cursor-pointer"
+                className={`p-6 border-2 border-gray-100 rounded-2xl hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-100/50 transition-all duration-200 group cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-gray-100'}`}
                 onDoubleClick={() => {
                   if (role.name !== 'Admin') {
                     openEditModal(role);
@@ -427,10 +436,10 @@ const RoleManager = () => {
                             <p className="text-gray-500 font-bold">目前無成員</p>
                           </div>
                         ) : (
-                          roleUsers.map((user: {emp_id: string; name: string; role_id: number}) => (
+                          roleUsers.map((user: {emp_id: string; name: string; role_id: number}, uIdx: number) => (
                             <div
                               key={user.emp_id}
-                              className="flex items-center justify-between p-4 bg-gray-50 hover:bg-indigo-50/50 rounded-xl transition-all duration-200 group cursor-pointer"
+                              className={`flex items-center justify-between p-4 rounded-xl transition-all duration-200 group cursor-pointer hover:bg-indigo-50/50 ${uIdx % 2 === 0 ? 'bg-gray-100' : 'bg-white'}`}
                             >
                               <div className="flex items-center gap-4">
                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-sm">
@@ -458,7 +467,7 @@ const RoleManager = () => {
                 ) : (
                     <div className="divide-y divide-gray-50">
                         {detailModal.items.map((item, idx) => (
-                            <div key={idx} className="p-4 text-sm font-bold text-gray-700 hover:bg-indigo-50/50 transition-colors duration-200">
+                            <div key={idx} className={`p-4 text-sm font-bold text-gray-700 hover:bg-indigo-50/50 transition-colors duration-200 ${idx % 2 === 0 ? 'bg-gray-100' : 'bg-white'}`}>
                                 {item}
                             </div>
                         ))}
@@ -502,16 +511,31 @@ const RoleManager = () => {
             </div>
             
             <div className="p-6 flex-1 overflow-y-auto">
-              <div className="mb-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="搜尋用戶姓名或員工編號..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-2 border-indigo-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200 font-bold"
-                    value={userSearchTerm}
-                    onChange={(e) => setUserSearchTerm(e.target.value)}
-                  />
+              <div className="mb-4 space-y-3">
+                <div className="flex flex-wrap gap-3 items-center">
+                  <div className="flex-1 min-w-[200px] relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="搜尋用戶姓名或員工編號..."
+                      className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-2 border-indigo-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200 font-bold"
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-600">職務</span>
+                    <select
+                      value={userJobTitleFilter === '' ? '' : userJobTitleFilter}
+                      onChange={(e) => setUserJobTitleFilter(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    >
+                      <option value="">全部</option>
+                      {jobTitles.map((jt) => (
+                        <option key={jt.id} value={jt.id}>{jt.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
               
@@ -524,10 +548,8 @@ const RoleManager = () => {
                 <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                   {allUsers
                     .filter(user => {
-                      // 排除已有當前角色的用戶
                       if (user.role_id === detailModal.roleId) return false;
-                      
-                      // 搜尋過濾
+                      if (userJobTitleFilter !== '' && (user.job_title?.id ?? null) !== userJobTitleFilter) return false;
                       if (userSearchTerm) {
                         const searchLower = userSearchTerm.toLowerCase();
                         return user.name.toLowerCase().includes(searchLower) || 
@@ -553,6 +575,9 @@ const RoleManager = () => {
                             {user.department && (
                               <p className="text-xs text-gray-400 font-medium">部門：{user.department.name}</p>
                             )}
+                            {user.job_title && (
+                              <p className="text-xs text-indigo-600 font-medium">職務：{user.job_title.name}</p>
+                            )}
                           </div>
                         </div>
                         {isSubmittingMember ? (
@@ -564,6 +589,7 @@ const RoleManager = () => {
                     ))}
                   {allUsers.filter(user => {
                     if (user.role_id === detailModal.roleId) return false;
+                    if (userJobTitleFilter !== '' && (user.job_title?.id ?? null) !== userJobTitleFilter) return false;
                     if (userSearchTerm) {
                       const searchLower = userSearchTerm.toLowerCase();
                       return user.name.toLowerCase().includes(searchLower) || 
@@ -593,6 +619,7 @@ const RoleManager = () => {
                   setIsAddingMemberToRole(false);
                   setError(null);
                   setUserSearchTerm('');
+                  setUserJobTitleFilter('');
                 }}
                 className="w-full py-2.5 bg-gray-600 text-white rounded-xl font-bold hover:bg-gray-700 transition-all duration-200 active:scale-95 cursor-pointer"
                 disabled={isSubmittingMember}

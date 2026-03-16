@@ -365,7 +365,7 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
                 </tr>
               ) : (
                 history.records.map((record) => (
-                  <tr key={record.record_id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={record.record_id} className="even:bg-gray-100 hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 font-medium text-gray-900">{record.plan_title}</td>
                     <td className={clsx(
                       "px-6 py-4 text-right font-bold",

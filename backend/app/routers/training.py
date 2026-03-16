@@ -364,13 +364,25 @@ def get_attendance_stats(
         models.User.status == "active"
     ).all()
     
+    # 查詢已填寫的未到原因
+    absence_reasons = {}
+    reason_rows = db.query(models.AttendanceAbsenceReason).filter(
+        models.AttendanceAbsenceReason.plan_id == plan_id
+    ).all()
+    for r in reason_rows:
+        absence_reasons[r.emp_id] = {"reason_code": r.reason_code, "reason_text": r.reason_text}
+
     for user in all_target_users:
         if user.emp_id not in checked_in_emp_ids:
-            not_checked_in_users.append({
+            item = {
                 "emp_id": user.emp_id,
                 "name": user.name,
                 "dept_name": user.department.name if user.department else "未知"
-            })
+            }
+            if user.emp_id in absence_reasons:
+                item["absence_reason_code"] = absence_reasons[user.emp_id]["reason_code"]
+                item["absence_reason_text"] = absence_reasons[user.emp_id]["reason_text"]
+            not_checked_in_users.append(item)
     
     return {
         "plan_id": plan_id,
@@ -380,6 +392,63 @@ def get_attendance_stats(
         "checked_in_users": checked_in_users,
         "not_checked_in_users": not_checked_in_users
     }
+
+
+def _can_edit_absence_reason(current_user: models.User, absent_emp_id: str, db: Session) -> bool:
+    """僅部門主管（同部門）或 Admin / 系統管理者可填寫未報到原因。"""
+    role_name = current_user.role.name if current_user.role else ""
+    if role_name in ("Admin", "系統管理者"):
+        return True
+    if current_user.job_title and current_user.job_title.name == "主管":
+        absent_user = db.query(models.User).filter(models.User.emp_id == absent_emp_id).first()
+        if absent_user and current_user.dept_id is not None and absent_user.dept_id == current_user.dept_id:
+            return True
+    return False
+
+
+@router.put("/plans/{plan_id}/attendance/absence-reason")
+def update_absence_reason(
+    plan_id: int,
+    body: schemas.AbsenceReasonUpdate,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:plan"),
+):
+    """填寫或更新未報到者的原因。僅部門主管（只能改自己部門）或 Admin／系統管理者可操作。"""
+    if not _can_edit_absence_reason(current_user, body.emp_id, db):
+        raise HTTPException(status_code=403, detail="僅部門主管（同部門）或 Admin、系統管理者可填寫未報到原因")
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    if body.reason_code == "other" and not (body.reason_text or "").strip():
+        raise HTTPException(status_code=400, detail="選擇「其他」時請填寫原因說明")
+    allowed_codes = {"sick_leave", "business_trip", "official_leave", "other"}
+    if body.reason_code not in allowed_codes:
+        raise HTTPException(status_code=400, detail="無效的未到原因代碼")
+    existing = db.query(models.AttendanceAbsenceReason).filter(
+        models.AttendanceAbsenceReason.plan_id == plan_id,
+        models.AttendanceAbsenceReason.emp_id == body.emp_id
+    ).first()
+    if existing:
+        existing.reason_code = body.reason_code
+        existing.reason_text = body.reason_text
+        existing.recorded_by = current_user.emp_id
+        existing.recorded_at = datetime.utcnow()
+    else:
+        new_rec = models.AttendanceAbsenceReason(
+            plan_id=plan_id,
+            emp_id=body.emp_id,
+            reason_code=body.reason_code,
+            reason_text=body.reason_text,
+            recorded_by=current_user.emp_id
+        )
+        db.add(new_rec)
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"儲存未到原因失敗：{str(e)}")
+    return {"success": True}
+
 
 @router.put("/plans/{plan_id}/expected-attendance")
 def update_expected_attendance(

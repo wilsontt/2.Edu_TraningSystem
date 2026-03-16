@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download, Lightbulb, ChevronUp, ChevronDown, X } from 'lucide-react';
 import { AxiosError } from 'axios';
 import api from '../../api';
 import QuestionEditorModal from './QuestionEditorModal';
@@ -116,6 +116,13 @@ const ExamStudio = () => {
     const [previewContent, setPreviewContent] = useState<string | null>(null);
     const [previewFileName, setPreviewFileName] = useState<string | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
+    /** 上傳預覽：解析後的題目列表，使用者勾選後再匯入 */
+    const [uploadPreviewQuestions, setUploadPreviewQuestions] = useState<Array<{ content: string; type?: string; answer?: string; options?: string; points?: number; hint?: string; level?: string }>>([]);
+    const [uploadPreviewFileName, setUploadPreviewFileName] = useState<string | null>(null);
+    const [uploadPreviewSelected, setUploadPreviewSelected] = useState<Set<number>>(new Set());
+    const [uploadPreviewAddToBank, setUploadPreviewAddToBank] = useState(true);
+    const [showUploadPreviewModal, setShowUploadPreviewModal] = useState(false);
+    const [isImportingFromPreview, setIsImportingFromPreview] = useState(false);
 
     // ... 現有的 useEffects ...
 
@@ -158,54 +165,70 @@ const ExamStudio = () => {
 
     const handleFileUpload = async (files: FileList | null) => {
         if (!files || files.length === 0 || !selectedPlanId) return;
-        
         const file = files[0];
         if (!file.name.toLowerCase().endsWith('.txt')) {
             setUploadError('僅支援 TXT 檔案格式');
             return;
         }
-
-        // 檢查是否重複
-        const isDuplicate = materials.some(m => m.filename.toLowerCase() === file.name.toLowerCase());
-        if (isDuplicate) {
-            if (!window.confirm(`檔案 "${file.name}" 已存在。確定要重新上傳並覆蓋嗎？`)) {
-                return;
-            }
-        }
-
-        const formData = new FormData();
-        formData.append('plan_id', selectedPlanId.toString());
-        formData.append('file', file);
-        
         try {
             setIsUploading(true);
             setUploadError(null);
             setUploadSuccess(null);
-                
-            const res = await api.post('/admin/exams/upload', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await api.post('/admin/exams/upload/preview', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
-            
-            const { imported, duplicate, failed } = res.data;
-            let msg = `檔案上傳皆匯入成功 (共 ${imported} 題)`;
-            if (duplicate > 0 || failed > 0) {
-                msg = `匯入完成：成功 ${imported} 題`;
-                if (duplicate > 0) msg += `，重複 ${duplicate} 題未匯入`;
-                if (failed > 0) msg += `，失敗 ${failed} 題`;
-            }
-            setUploadSuccess(msg);
-            fetchMaterials(selectedPlanId); // Refresh materials list
-            fetchQuestions(selectedPlanId); // Refresh questions list
+            setUploadPreviewQuestions(res.data.questions || []);
+            setUploadPreviewFileName(res.data.filename || file.name);
+            setUploadPreviewSelected(new Set((res.data.questions || []).map((_: unknown, i: number) => i)));
+            setShowUploadPreviewModal(true);
         } catch (err) {
             if (err instanceof AxiosError && err.response) {
-                setUploadError(err.response.data.detail || '上傳失敗');
+                setUploadError(String(err.response.data?.detail || '解析失敗'));
             } else {
                 setUploadError('發生未預期錯誤');
             }
         } finally {
             setIsUploading(false);
+        }
+    };
+
+    const handleImportFromPreview = async () => {
+        if (!selectedPlanId || uploadPreviewQuestions.length === 0) return;
+        const selected = Array.from(uploadPreviewSelected).sort((a, b) => a - b);
+        const toImport = selected.map(i => uploadPreviewQuestions[i]).filter(q => q.content && q.answer);
+        if (toImport.length === 0) {
+            setUploadError('請至少勾選一題');
+            return;
+        }
+        try {
+            setIsImportingFromPreview(true);
+            setUploadError(null);
+            const res = await api.post('/admin/exams/import-from-preview', {
+                plan_id: selectedPlanId,
+                questions: toImport.map(q => ({
+                    type: q.type || 'single',
+                    content: q.content,
+                    options: q.options || '{}',
+                    answer: q.answer,
+                    points: q.points ?? 10,
+                    hint: q.hint ?? null,
+                    level: q.level ?? null,
+                })),
+                add_to_bank: uploadPreviewAddToBank,
+            });
+            setUploadSuccess(`已匯入 ${res.data.imported} 題${res.data.duplicate > 0 ? `，${res.data.duplicate} 題重複略過` : ''}`);
+            setShowUploadPreviewModal(false);
+            fetchQuestions(selectedPlanId);
+        } catch (err) {
+            if (err instanceof AxiosError && err.response) {
+                setUploadError(String(err.response.data?.detail || '匯入失敗'));
+            } else {
+                setUploadError('匯入失敗');
+            }
+        } finally {
+            setIsImportingFromPreview(false);
         }
     };
 
@@ -334,7 +357,7 @@ const ExamStudio = () => {
                                         className={`w-full text-left p-4 transition-all duration-200 flex items-center justify-between group border-b border-gray-50 last:border-b-0 hover:bg-indigo-50/50 cursor-pointer ${
                                             selectedPlanId === plan.id 
                                                 ? 'bg-indigo-50 border-l-4 border-l-indigo-500' 
-                                                : 'border-l-4 border-l-transparent even:bg-gray-50/50'
+                                                : 'border-l-4 border-l-transparent even:bg-gray-100'
                                         }`}
                                     >
                                         <div className="min-w-0">
@@ -399,6 +422,7 @@ const ExamStudio = () => {
                                         <div className="mt-4 px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-colors duration-200">
                                             選擇檔案
                                         </div>
+                                        <p className="text-xs text-gray-500 mt-2">上傳後將先預覽題目，由您勾選要匯入的題目再寫入</p>
                                     </label>
                                     
                                     {uploadError && (
@@ -429,6 +453,7 @@ const ExamStudio = () => {
                                                 <div className="text-green-600 font-bold">ANS: Y</div>
                                                 <div>SCORE: 10</div>
                                                 <div className="text-yellow-600 font-bold mt-1">HINT: 資訊安全是保護資訊資產的重要措施</div>
+                                                <div className="text-indigo-600 font-bold mt-1">LEVEL: E</div>
                                             </div>
                                         </div>
                                         <div className="space-y-2">
@@ -441,6 +466,7 @@ const ExamStudio = () => {
                                                 <div className="text-green-600 font-bold">ANS: C</div>
                                                 <div>SCORE: 10</div>
                                                 <div className="text-yellow-600 font-bold mt-1">HINT: 資安三要素是 CIA：機密性、完整性、可用性</div>
+                                                <div className="text-indigo-600 font-bold mt-1">LEVEL: M</div>
                                             </div>
                                         </div>
                                         <div className="space-y-2">
@@ -453,13 +479,18 @@ const ExamStudio = () => {
                                                 <div className="text-green-600 font-bold">ANS: ABC</div>
                                                 <div>SCORE: 20</div>
                                                 <div className="text-yellow-600 font-bold mt-1">HINT: 記住 CIA 三要素的英文縮寫</div>
+                                                <div className="text-indigo-600 font-bold mt-1">LEVEL: H</div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="mt-4 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-                                        <div className="text-xs text-indigo-700 leading-relaxed">
+                                    <div className="mt-4 space-y-2">
+                                        <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200 text-xs text-indigo-700 leading-relaxed">
                                             <span className="font-bold">提示欄位說明：</span>
-                                            <span className="ml-1">HINT 為選填欄位，可提供給考生考試時的提示內容。格式為 <code className="bg-white px-1 py-0.5 rounded">HINT: 提示內容</code></span>
+                                            <span className="ml-1">HINT 為選填，格式 <code className="bg-white px-1 py-0.5 rounded">HINT: 提示內容</code></span>
+                                        </div>
+                                        <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200 text-xs text-indigo-700 leading-relaxed">
+                                            <span className="font-bold">難易度 LEVEL（選填）：</span>
+                                            <span className="ml-1">E / M / H 或 Easy / Medium / Hard，格式 <code className="bg-white px-1 py-0.5 rounded">LEVEL: E</code></span>
                                         </div>
                                     </div>
                                 </div>
@@ -549,7 +580,7 @@ const ExamStudio = () => {
                                             {paginatedQuestions.map((q: Question, idx: number) => {
                                                 const displayIndex = questionStartIndex + idx + 1;
                                                 return (
-                                                <div key={q.id} className="p-4 transition-all duration-200 group even:bg-gray-50/50 hover:bg-indigo-50/30 cursor-pointer">
+                                                <div key={q.id} className="p-4 transition-all duration-200 group even:bg-gray-100 hover:bg-indigo-50/30 cursor-pointer">
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div className="flex gap-2">
                                                             <span className="inline-block px-2 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded">
@@ -665,6 +696,90 @@ const ExamStudio = () => {
                     )}
                 </div>
             </div>
+
+            {/* 上傳預覽 Modal：勾選題目後再匯入 */}
+            {showUploadPreviewModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+                        <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-purple-50">
+                            <h3 className="font-bold text-lg text-gray-800">預覽題目：{uploadPreviewFileName}（共 {uploadPreviewQuestions.length} 題）</h3>
+                            <button onClick={() => setShowUploadPreviewModal(false)} className="p-2 hover:bg-white/50 rounded-full cursor-pointer">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-4 flex-wrap">
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setUploadPreviewSelected(new Set(uploadPreviewQuestions.map((_, i) => i)))}
+                                    className="text-sm font-bold text-indigo-600 hover:underline cursor-pointer"
+                                >
+                                    全選
+                                </button>
+                                <span className="text-gray-300">|</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setUploadPreviewSelected(new Set())}
+                                    className="text-sm font-bold text-indigo-600 hover:underline cursor-pointer"
+                                >
+                                    取消全選
+                                </button>
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={uploadPreviewAddToBank}
+                                    onChange={(e) => setUploadPreviewAddToBank(e.target.checked)}
+                                    className="w-4 h-4 text-indigo-600 rounded"
+                                />
+                                <span className="text-sm font-bold text-gray-700">同時匯入題庫</span>
+                            </label>
+                        </div>
+                        <div className="p-4 overflow-y-auto flex-1 min-h-0">
+                            <ul className="space-y-2">
+                                {uploadPreviewQuestions.map((q, idx) => (
+                                    <li key={idx} className={`p-3 rounded-lg border text-sm ${uploadPreviewSelected.has(idx) ? 'bg-indigo-50/50 border-indigo-200' : 'bg-gray-50/50 border-gray-200'}`}>
+                                        <label className="flex items-start gap-3 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={uploadPreviewSelected.has(idx)}
+                                                onChange={(e) => {
+                                                    const next = new Set(uploadPreviewSelected);
+                                                    if (e.target.checked) next.add(idx); else next.delete(idx);
+                                                    setUploadPreviewSelected(next);
+                                                }}
+                                                className="mt-1 w-4 h-4 text-indigo-600 rounded"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-bold text-gray-800">{idx + 1}. {q.content}</div>
+                                                <div className="text-gray-500 mt-1">答案: {q.answer} · 配分: {q.points ?? 10}{q.level ? ` · 難度: ${q.level}` : ''}</div>
+                                            </div>
+                                        </label>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowUploadPreviewModal(false)}
+                                className="px-4 py-2 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 cursor-pointer"
+                            >
+                                取消
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleImportFromPreview}
+                                disabled={uploadPreviewSelected.size === 0 || isImportingFromPreview}
+                                className="px-4 py-2 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
+                            >
+                                {isImportingFromPreview ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                                加入該訓練計畫（{uploadPreviewSelected.size} 題）
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Preview Modal */}
             {previewContent && (
