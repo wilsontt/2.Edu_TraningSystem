@@ -61,12 +61,25 @@ def get_my_exams(
     
     today = date.today()
     
-    # Admin、系統管理者：可看所有未封存計畫；一般使用者：受課對象包含自己，或「未設定受課對象」的計畫（全公司）才看得到
+    # Admin、系統管理者：可看所有未封存計畫；
+    # 一般使用者：受課對象包含自己，或「未設定受課對象」的計畫（全公司）才看得到
     role_name = (current_user.role and current_user.role.name) or ""
-    is_admin_or_system = (role_name and role_name.strip().lower() == "admin") or role_name == "系統管理者"
+    normalized_role = role_name.strip().lower()
+    is_admin_or_system = (
+        normalized_role == "admin"
+        or "admin" in normalized_role
+        or role_name == "系統管理者"
+    )
+
+    # 為了相容舊資料庫，is_archived 可能為 NULL，視同未封存
     base_query = db.query(models.TrainingPlan).options(
         joinedload(models.TrainingPlan.questions),
-    ).filter(models.TrainingPlan.is_archived == False)
+    ).filter(
+        or_(
+            models.TrainingPlan.is_archived == False,
+            models.TrainingPlan.is_archived.is_(None),
+        )
+    )
 
     if is_admin_or_system:
         plans = base_query.order_by(models.TrainingPlan.training_date.desc()).all()

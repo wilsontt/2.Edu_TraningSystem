@@ -75,7 +75,7 @@ const ExamDashboard = () => {
     };
 
     return (
-        <div className="max-w-4xl mx-auto p-6 space-y-8">
+        <div className="max-w-6xl mx-auto p-6 space-y-8">
             <header className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
                     <GraduationCap className="w-7 h-7 text-white" />
@@ -97,7 +97,8 @@ const ExamDashboard = () => {
                     <p className="text-gray-400">太棒了！您已完成所有指派的訓練。</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                // <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {exams.map((exam) => (
                         <div 
                             key={exam.plan_id} 
@@ -120,15 +121,6 @@ const ExamDashboard = () => {
                                         <h3 className="font-bold text-lg text-gray-800 mb-1 group-hover:text-indigo-600 transition-colors duration-200">
                                             {exam.title}
                                         </h3>
-                                        <div className="flex items-center gap-3 text-sm text-gray-500 font-mono">
-                                            <span>開放時間: {exam.training_date}</span>
-                                            {exam.end_date && <span>~ {exam.end_date}</span>}
-                                            {exam.attempts > 0 && (
-                                                <span className="bg-indigo-50 px-2 py-0.5 rounded text-indigo-600 font-bold ml-2">
-                                                    挑戰次數: {exam.attempts}
-                                                </span>
-                                            )}
-                                        </div>
                                     </div>
                                 </div>
                                 
@@ -136,6 +128,17 @@ const ExamDashboard = () => {
                                     {getStatusBadge(exam.status, exam.score)}
                                     {exam.status === 'active' && <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all duration-200" />}
                                 </div>
+                            </div>
+
+                            {/* 開放時間 ＋ 挑戰次數 */}
+                            <div className="flex items-center gap-3 text-sm text-gray-500 font-mono">
+                                <span>開放時間: {exam.training_date}</span>
+                                {exam.end_date && <span>~ {exam.end_date}</span>}
+                                {exam.attempts > 0 && (
+                                    <span className="bg-indigo-50 px-2 py-0.5 rounded text-indigo-600 font-bold ml-2">
+                                        挑戰次數: {exam.attempts}
+                                    </span>
+                                )}
                             </div>
                             
                             {/* 報到按鈕區域 - 僅在 active 狀態時顯示 */}
