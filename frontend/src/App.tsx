@@ -11,7 +11,6 @@ import UserManager from './components/admin/UserManager';
 import JobTitleManager from './components/admin/JobTitleManager';
 import RoleManager from './components/admin/RoleManager';
 import PermissionManager from './components/admin/PermissionManager';
-import SystemFunctionManager from './components/admin/SystemFunctionManager';
 import ReportDashboard from './components/admin/ReportDashboard';
 import ExamStudio from './components/admin/ExamStudio';
 import QRCodeManager from './components/admin/QRCodeManager';
@@ -115,7 +114,6 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     { name: '職務管理', path: '/admin/job-titles', code: 'menu:admin:user' },
     { name: '角色管理', path: '/admin/roles', code: 'menu:admin:role' },
     { name: '權限管理', path: '/admin/permissions', code: 'menu:admin:perm' },
-    { name: '功能清單管理', path: '/admin/functions', code: 'menu:admin:func' },
     { name: 'QRcode 管理', path: '/admin/qrcode', code: 'menu:admin' },
   ].filter(item => functions.includes(item.code));
 
@@ -353,7 +351,6 @@ const App = () => {
                     <Route path="/admin/job-titles" element={user.role === 'Admin' ? <JobTitleManager /> : <Navigate to="/" />} />
                     <Route path="/admin/roles" element={user.role === 'Admin' ? <RoleManager /> : <Navigate to="/" />} />
                     <Route path="/admin/permissions" element={user.role === 'Admin' ? <PermissionManager /> : <Navigate to="/" />} />
-                    <Route path="/admin/functions" element={user.role === 'Admin' ? <SystemFunctionManager /> : <Navigate to="/" />} />
                     <Route path="/admin/qrcode" element={user.role === 'Admin' ? <QRCodeManager /> : <Navigate to="/" />} />
                     <Route path="/admin/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <Navigate to="/" />} />
                     <Route path="*" element={<Navigate to="/" />} />
