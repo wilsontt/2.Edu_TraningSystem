@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body
-from sqlalchemy.orm import Session
-from typing import List, Any, Dict
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Query
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
+from typing import List, Any, Dict, Optional
 import os
 import json
 import shutil
@@ -17,6 +18,60 @@ BASE_UPLOAD_DIR = Path("data/materials")
 
 def get_upload_dir(year: str, plan_id: int) -> Path:
     return BASE_UPLOAD_DIR / str(year) / str(plan_id)
+
+@router.get("/plans", response_model=List[schemas.TrainingPlan])
+def list_plans_for_exam_studio(
+    status: Optional[str] = Query(
+        None,
+        description="狀態篩選: active, expired, archived, all (預設: 不過濾狀態，只過濾封存)",
+    ),
+    year: Optional[str] = Query(None, description="年份篩選"),
+    dept_id: Optional[int] = Query(None, description="單位篩選"),
+    category_id: Optional[int] = Query(None, description="分類篩選 (sub_category_id)"),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    """
+    考卷工坊專用：取得訓練計畫清單。
+
+    為了避免考卷工坊使用者只有 menu:exam 權限卻無法呼叫 /training/plans（需要 menu:plan），
+    這裡提供等價查詢並沿用相同的 status 篩選定義。
+    """
+    from datetime import date
+
+    query = db.query(models.TrainingPlan)
+    today = date.today()
+
+    if status == "active":
+        query = query.filter(
+            models.TrainingPlan.is_archived == False,
+            or_(models.TrainingPlan.end_date >= today, models.TrainingPlan.end_date.is_(None)),
+        )
+    elif status == "expired":
+        query = query.filter(
+            models.TrainingPlan.is_archived == False,
+            models.TrainingPlan.end_date < today,
+        )
+    elif status == "archived":
+        query = query.filter(models.TrainingPlan.is_archived == True)
+    elif status == "all":
+        # 不過濾封存狀態
+        pass
+    else:
+        query = query.filter(models.TrainingPlan.is_archived == False)
+
+    if year:
+        query = query.filter(models.TrainingPlan.year == year)
+    if dept_id:
+        query = query.filter(models.TrainingPlan.dept_id == dept_id)
+    if category_id:
+        query = query.filter(models.TrainingPlan.sub_category_id == category_id)
+
+    return (
+        query.options(joinedload(models.TrainingPlan.sub_category))
+        .order_by(models.TrainingPlan.training_date.desc())
+        .all()
+    )
 
 @router.post("/upload")
 async def upload_material(

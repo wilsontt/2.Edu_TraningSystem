@@ -11,6 +11,8 @@ interface TrainingPlan {
   id: number;
   title: string;
   training_date: string;
+  end_date?: string | null;
+  is_archived?: boolean;
   dept_id: number;
   sub_category_id: number;
   sub_category?: {
@@ -49,6 +51,7 @@ const ExamStudio = () => {
     const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
     const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [planStatusFilter, setPlanStatusFilter] = useState<'active' | 'expired' | 'archived' | 'all'>('active');
     
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
@@ -64,7 +67,8 @@ const ExamStudio = () => {
 
     useEffect(() => {
         fetchPlans();
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [planStatusFilter]);
 
     useEffect(() => {
         if (selectedPlanId) {
@@ -79,8 +83,8 @@ const ExamStudio = () => {
     const fetchPlans = async () => {
         try {
             setIsLoadingPlans(true);
-            // 取得所有未封存的計畫（包括已過期的，因為考卷工坊需要查看所有計畫的題目）
-            const res = await api.get('/training/plans');
+            // 考卷工坊需要自己的 plans API（menu:exam 權限即可），並支援狀態篩選
+            const res = await api.get(`/admin/exams/plans?status=${planStatusFilter}`);
             setPlans(res.data);
         } catch (err) {
             console.error(err);
@@ -274,6 +278,28 @@ const ExamStudio = () => {
     }, [plans, searchTerm]);
     const selectedPlan = plans.find((p: TrainingPlan) => p.id === selectedPlanId);
 
+    const todayStr = useMemo(() => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }, []);
+
+    const isSelectedPlanLocked = useMemo(() => {
+        if (!selectedPlan) return false;
+        const isArchived = Boolean(selectedPlan.is_archived);
+        const isExpired = Boolean(selectedPlan.end_date && selectedPlan.end_date < todayStr);
+        return isArchived || isExpired;
+    }, [selectedPlan, todayStr]);
+
+    const selectedPlanLockReason = useMemo(() => {
+        if (!selectedPlan) return null;
+        if (selectedPlan.is_archived) return '已封存';
+        if (selectedPlan.end_date && selectedPlan.end_date < todayStr) return '已過期';
+        return null;
+    }, [selectedPlan, todayStr]);
+
     // 題目分頁計算
     const questionTotalPages = Math.ceil(questions.length / questionPageSize);
     const questionStartIndex = (questionPage - 1) * questionPageSize;
@@ -331,6 +357,28 @@ const ExamStudio = () => {
                 {/* Left Panel: Plan Selection */}
                 <div className="col-span-4 bg-white rounded-2xl shadow-sm border border-indigo-100/50 overflow-hidden flex flex-col h-[80vh]">
                     <div className="p-4 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/50 to-purple-50/30">
+                        <div className="flex items-center gap-2 mb-3">
+                            <select
+                                value={planStatusFilter}
+                                onChange={(e) => {
+                                    setPlanStatusFilter(e.target.value as typeof planStatusFilter);
+                                }}
+                                className="flex-1 px-3 py-2 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 cursor-pointer"
+                            >
+                                <option value="active">正在進行中</option>
+                                <option value="expired">已過期</option>
+                                <option value="archived">已封存</option>
+                                <option value="all">全部</option>
+                            </select>
+                            <button
+                                type="button"
+                                onClick={fetchPlans}
+                                className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors duration-200 shadow-sm shadow-indigo-200 cursor-pointer"
+                                title="重新載入"
+                            >
+                                更新
+                            </button>
+                        </div>
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                             <input
@@ -386,19 +434,26 @@ const ExamStudio = () => {
                                     <h2 className="text-2xl font-black text-gray-800 mb-2">{selectedPlan.title}</h2>
                                     <div className="flex gap-4 text-sm text-gray-500">
                                         <span>日期: {selectedPlan.training_date}</span>
+                                        {selectedPlan.end_date ? <span>結束: {selectedPlan.end_date}</span> : null}
                                         <span>分類: {selectedPlan.sub_category?.name || '-'}</span>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="p-6 flex-1 overflow-y-auto space-y-8">
+                                {isSelectedPlanLocked && (
+                                    <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 font-bold text-sm leading-relaxed">
+                                        此訓練計畫目前為「{selectedPlanLockReason}」，為避免歷史資料被更動，已停用「上傳考卷」與「從題庫匯入」功能。<br />
+                                        若需變更，請至「訓練計劃管理」解除封存或調整訓練日期後，再回到考卷工坊調整題目。
+                                    </div>
+                                )}
                                 {/* Upload Section (Drag & Drop) */}
                                 <div 
                                     className={`rounded-xl p-8 border-2 border-dashed transition-all duration-200 text-center ${
                                         isDragOver 
                                             ? 'border-indigo-500 bg-indigo-50 scale-[1.02]' 
                                             : 'border-indigo-200 bg-indigo-50/30 hover:border-indigo-400 hover:bg-indigo-50/50'
-                                    }`}
+                                    } ${isSelectedPlanLocked ? 'opacity-50 pointer-events-none select-none' : ''}`}
                                     onDrop={onDrop}
                                     onDragOver={onDragOver}
                                     onDragLeave={onDragLeave}
@@ -409,7 +464,7 @@ const ExamStudio = () => {
                                         onChange={(e) => handleFileUpload(e.target.files)} 
                                         className="hidden" 
                                         id="file-upload" 
-                                        disabled={isUploading}
+                                        disabled={isUploading || isSelectedPlanLocked}
                                     />
                                     <label htmlFor="file-upload" className={`cursor-pointer flex flex-col items-center gap-3 ${isUploading ? 'opacity-50' : ''}`}>
                                         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white mb-2">
@@ -562,7 +617,12 @@ const ExamStudio = () => {
                                         </h3>
                                         <button 
                                             onClick={() => setShowImportModal(true)}
-                                            className="text-sm font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-all duration-200 flex items-center gap-1 border border-indigo-200 cursor-pointer"
+                                            disabled={isSelectedPlanLocked}
+                                            className={`text-sm font-bold px-3 py-1.5 rounded-lg transition-all duration-200 flex items-center gap-1 border cursor-pointer ${
+                                                isSelectedPlanLocked
+                                                    ? 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed'
+                                                    : 'text-indigo-600 hover:bg-indigo-50 border-indigo-200'
+                                            }`}
                                         >
                                             <Download className="w-4 h-4" />
                                             從題庫匯入
