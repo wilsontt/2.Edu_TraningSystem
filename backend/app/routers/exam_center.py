@@ -10,6 +10,15 @@ from .auth import get_current_user
 
 router = APIRouter(prefix="/exam", tags=["exam_center"])
 
+# --- 權限判斷工具 ---
+def is_admin_or_system_role(role_name: str) -> bool:
+    normalized_role = (role_name or "").strip().lower()
+    return (
+        normalized_role == "admin"
+        or "admin" in normalized_role
+        or (role_name or "").strip() == "系統管理者"
+    )
+
 # --- 考試中心資料結構 ---
 class ExamListItem(BaseModel):
     plan_id: int
@@ -64,12 +73,7 @@ def get_my_exams(
     # Admin、系統管理者：可看所有未封存計畫；
     # 一般使用者：受課對象包含自己，或「未設定受課對象」的計畫（全公司）才看得到
     role_name = (current_user.role and current_user.role.name) or ""
-    normalized_role = role_name.strip().lower()
-    is_admin_or_system = (
-        normalized_role == "admin"
-        or "admin" in normalized_role
-        or role_name == "系統管理者"
-    )
+    is_admin_or_system = is_admin_or_system_role(role_name)
 
     # 為了相容舊資料庫，is_archived 可能為 NULL，視同未封存
     base_query = db.query(models.TrainingPlan).options(
@@ -419,9 +423,11 @@ def get_personal_overview(
     - Admin 可查看所有使用者成績（需 emp_id 參數）
     """
     # 權限控制
-    target_emp_id = emp_id if emp_id and current_user.role and current_user.role.name == "Admin" else current_user.emp_id
+    role_name = (current_user.role and current_user.role.name) or ""
+    is_admin = is_admin_or_system_role(role_name)
+    target_emp_id = emp_id if emp_id and is_admin else current_user.emp_id
     
-    if emp_id and (not current_user.role or current_user.role.name != "Admin"):
+    if emp_id and not is_admin:
         raise HTTPException(status_code=403, detail="只有 Admin 可以查看其他使用者的成績")
     
     # 取得該使用者的所有考試記錄
@@ -490,9 +496,11 @@ def get_personal_history(
     - 支援分頁與排序
     """
     # 權限控制
-    target_emp_id = emp_id if emp_id and current_user.role and current_user.role.name == "Admin" else current_user.emp_id
+    role_name = (current_user.role and current_user.role.name) or ""
+    is_admin = is_admin_or_system_role(role_name)
+    target_emp_id = emp_id if emp_id and is_admin else current_user.emp_id
     
-    if emp_id and (not current_user.role or current_user.role.name != "Admin"):
+    if emp_id and not is_admin:
         raise HTTPException(status_code=403, detail="只有 Admin 可以查看其他使用者的成績")
     
     # 基礎查詢
@@ -575,9 +583,11 @@ def get_personal_analysis(
         raise HTTPException(status_code=400, detail="trend_period 參數必須為 3、6 或 12")
     
     # 權限控制
-    target_emp_id = emp_id if emp_id and current_user.role and current_user.role.name == "Admin" else current_user.emp_id
+    role_name = (current_user.role and current_user.role.name) or ""
+    is_admin = is_admin_or_system_role(role_name)
+    target_emp_id = emp_id if emp_id and is_admin else current_user.emp_id
     
-    if emp_id and (not current_user.role or current_user.role.name != "Admin"):
+    if emp_id and not is_admin:
         raise HTTPException(status_code=403, detail="只有 Admin 可以查看其他使用者的成績")
     
     # 取得該使用者的所有考試記錄
@@ -716,7 +726,8 @@ def get_exam_record_detail(
         raise HTTPException(status_code=404, detail="考試記錄不存在")
     
     # 權限控制
-    is_admin = current_user.role and current_user.role.name == "Admin"
+    role_name = (current_user.role and current_user.role.name) or ""
+    is_admin = is_admin_or_system_role(role_name)
     if not is_admin and record.emp_id != current_user.emp_id:
         raise HTTPException(status_code=403, detail="您只能查看自己的成績詳情")
     
@@ -826,7 +837,8 @@ def get_exam_history_detail(
         raise HTTPException(status_code=404, detail="關聯的考試紀錄不存在")
         
     # 3. 權限控制
-    is_admin = current_user.role and current_user.role.name == "Admin"
+    role_name = (current_user.role and current_user.role.name) or ""
+    is_admin = is_admin_or_system_role(role_name)
     if not is_admin and record.emp_id != current_user.emp_id:
         raise HTTPException(status_code=403, detail="您只能查看自己的成績詳情")
         

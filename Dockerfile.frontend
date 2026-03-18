@@ -1,9 +1,9 @@
 # 教育訓練前端 - 多階段建置
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm ci --include=dev
 COPY frontend/ ./
 RUN npm run build
 
