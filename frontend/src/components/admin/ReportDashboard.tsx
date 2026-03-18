@@ -201,6 +201,56 @@ export default function ReportDashboard() {
   const [deptDetails, setDeptDetails] = useState<Record<number, any>>({});
   const [planDetails, setPlanDetails] = useState<Record<number, any>>({});
 
+  const toggleExpandRow = async (itemId: number) => {
+    if (!itemId) return;
+    if (activeTab === 'department') {
+      if (expandedDept === itemId) {
+        setExpandedDept(null);
+        return;
+      }
+      setExpandedDept(itemId);
+      if (!deptDetails[itemId]) {
+        try {
+          const token = localStorage.getItem('token');
+          const baseURL = API_BASE_URL;
+          const res = await fetch(
+            `${baseURL}/admin/reports/department/${itemId}/details?page=1&page_size=10`,
+            { headers: { 'Authorization': `Bearer ${token}` } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            setDeptDetails((prev) => ({ ...prev, [itemId]: data }));
+          }
+        } catch (error) {
+          console.error('Failed to fetch department details', error);
+        }
+      }
+      return;
+    }
+
+    if (expandedPlan === itemId) {
+      setExpandedPlan(null);
+      return;
+    }
+    setExpandedPlan(itemId);
+    if (!planDetails[itemId]) {
+      try {
+        const token = localStorage.getItem('token');
+        const baseURL = API_BASE_URL;
+        const res = await fetch(
+          `${baseURL}/admin/reports/plan/${itemId}/details?page=1&page_size=10`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setPlanDetails((prev) => ({ ...prev, [itemId]: data }));
+        }
+      } catch (error) {
+        console.error('Failed to fetch plan details', error);
+      }
+    }
+  };
+
   // 初次載入資料
   useEffect(() => {
     fetchData(true); // 初次載入使用全頁 loading
@@ -920,58 +970,21 @@ export default function ReportDashboard() {
                   
                   return (
                     <>
-                      <tr key={idx} className="even:bg-gray-100 hover:bg-indigo-50/30 transition-colors duration-200">
+                      <tr
+                        key={idx}
+                        className="even:bg-gray-100 hover:bg-indigo-50/30 transition-colors duration-200 cursor-pointer"
+                        onClick={() => {
+                          if (!itemId) return;
+                          void toggleExpandRow(itemId);
+                        }}
+                      >
                         <td className="px-6 py-4">
                           {itemId && (
                             <button
-                              onClick={async () => {
-                                if (activeTab === 'department') {
-                                  if (expandedDept === itemId) {
-                                    setExpandedDept(null);
-                                  } else {
-                                    setExpandedDept(itemId);
-                                    // 載入部門詳情
-                                    if (!deptDetails[itemId]) {
-                                      try {
-                                        const token = localStorage.getItem('token');
-                                        const baseURL = API_BASE_URL;
-                                        const res = await fetch(
-                                          `${baseURL}/admin/reports/department/${itemId}/details?page=1&page_size=10`,
-                                          { headers: { 'Authorization': `Bearer ${token}` } }
-                                        );
-                                        if (res.ok) {
-                                          const data = await res.json();
-                                          setDeptDetails({ ...deptDetails, [itemId]: data });
-                                        }
-                                      } catch (error) {
-                                        console.error('Failed to fetch department details', error);
-                                      }
-                                    }
-                                  }
-                                } else {
-                                  if (expandedPlan === itemId) {
-                                    setExpandedPlan(null);
-                                  } else {
-                                    setExpandedPlan(itemId);
-                                    // 載入計畫詳情
-                                    if (!planDetails[itemId]) {
-                                      try {
-                                        const token = localStorage.getItem('token');
-                                        const baseURL = API_BASE_URL;
-                                        const res = await fetch(
-                                          `${baseURL}/admin/reports/plan/${itemId}/details?page=1&page_size=10`,
-                                          { headers: { 'Authorization': `Bearer ${token}` } }
-                                        );
-                                        if (res.ok) {
-                                          const data = await res.json();
-                                          setPlanDetails({ ...planDetails, [itemId]: data });
-                                        }
-                                      } catch (error) {
-                                        console.error('Failed to fetch plan details', error);
-                                      }
-                                    }
-                                  }
-                                }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!itemId) return;
+                                void toggleExpandRow(itemId);
                               }}
                               className="text-gray-400 hover:text-gray-600"
                             >
@@ -1098,6 +1111,7 @@ export default function ReportDashboard() {
                                                                 {record.emp_id && (
                                                                   <Link
                                                                     to={`/reports/personal?emp_id=${record.emp_id}`}
+                                                                    onClick={(e) => e.stopPropagation()}
                                                                     className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                                   >
                                                                     <Eye className="h-3 w-3 mr-1" />
@@ -1207,6 +1221,7 @@ export default function ReportDashboard() {
                                                                 {record.emp_id && (
                                                                   <Link
                                                                     to={`/reports/personal?emp_id=${record.emp_id}`}
+                                                                    onClick={(e) => e.stopPropagation()}
                                                                     className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                                   >
                                                                     <Eye className="h-3 w-3 mr-1" />

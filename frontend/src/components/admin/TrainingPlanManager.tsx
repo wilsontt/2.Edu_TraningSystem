@@ -151,6 +151,17 @@ const TrainingPlanManager = () => {
   // 使用者列表（用於個人受課對象選擇，含 dept_id 以支援受課單位勾選時自動勾選該部門人員）
   const [users, setUsers] = useState<Array<{emp_id: string; name: string; dept_name: string; dept_id: number | null}>>([]);
   const [userSearchTerm, setUserSearchTerm] = useState('');
+  const deptDerivedUserIds = useMemo(() => {
+    if (formData.target_dept_ids.length === 0) return new Set<string>();
+    const deptIdSet = new Set(formData.target_dept_ids.map((id) => Number.parseInt(id, 10)));
+    const derived = new Set<string>();
+    for (const u of users) {
+      if (u.dept_id != null && deptIdSet.has(u.dept_id)) {
+        derived.add(u.emp_id);
+      }
+    }
+    return derived;
+  }, [formData.target_dept_ids, users]);
 
   // 下拉選單資料
   const [categories, setCategories] = useState<MainCategory[]>([]);
@@ -1180,19 +1191,18 @@ const TrainingPlanManager = () => {
                                   const isAllSelected = allDeptIds.length > 0 && 
                                       allDeptIds.every(id => formData.target_dept_ids.includes(id));
                                   
-                                  if (isAllSelected) {
-                                      // 如果已經全選，則全部取消
-                                      setFormData(prev => ({
-                                          ...prev,
-                                          target_dept_ids: []
-                                      }));
-                                  } else {
-                                      // 如果沒有全選，則全選
-                                      setFormData(prev => ({
-                                          ...prev,
-                                          target_dept_ids: allDeptIds
-                                      }));
-                                  }
+                                  setFormData(prev => {
+                                    const nextDeptIds = isAllSelected ? [] : allDeptIds;
+                                    // 規則：只要有選受課單位，個人受課對象必須與受課單位完全同步
+                                    if (nextDeptIds.length === 0) {
+                                      return { ...prev, target_dept_ids: [], target_user_ids: [] };
+                                    }
+                                    const deptIdSet = new Set(nextDeptIds.map((id) => Number.parseInt(id, 10)));
+                                    const derived = users
+                                      .filter((u) => u.dept_id != null && deptIdSet.has(u.dept_id))
+                                      .map((u) => u.emp_id);
+                                    return { ...prev, target_dept_ids: nextDeptIds, target_user_ids: Array.from(new Set(derived)) };
+                                  });
                               }}
                               className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
                           >
@@ -1211,7 +1221,12 @@ const TrainingPlanManager = () => {
                                       setFormData(prev => {
                                           const newIds = new Set(prev.target_dept_ids);
                                           newIds.add(prev.dept_id);
-                                          return {...prev, target_dept_ids: Array.from(newIds)};
+                                          const nextDeptIds = Array.from(newIds);
+                                          const deptIdSet = new Set(nextDeptIds.map((id) => Number.parseInt(id, 10)));
+                                          const derived = users
+                                            .filter((u) => u.dept_id != null && deptIdSet.has(u.dept_id))
+                                            .map((u) => u.emp_id);
+                                          return { ...prev, target_dept_ids: nextDeptIds, target_user_ids: Array.from(new Set(derived)) };
                                       });
                                   }
                               }}
@@ -1237,16 +1252,15 @@ const TrainingPlanManager = () => {
                                               const nextDeptIds = checked
                                                 ? [...prev.target_dept_ids, id]
                                                 : prev.target_dept_ids.filter(tid => tid !== id);
-                                              // 受課單位變更時，同步個人受訓對象：勾選部門則加入該部門所有人；取消部門則從 target_user_ids 移除該部門所有人
-                                              let nextUserIds: string[];
-                                              if (checked) {
-                                                const toAdd = users.filter(u => u.dept_id === dept.id).map(u => u.emp_id);
-                                                nextUserIds = [...new Set([...prev.target_user_ids, ...toAdd])];
-                                              } else {
-                                                const toRemove = users.filter(u => u.dept_id === dept.id).map(u => u.emp_id);
-                                                nextUserIds = prev.target_user_ids.filter(empId => !toRemove.includes(empId));
+                                              // 規則：只要有選受課單位，個人受課對象必須與受課單位完全同步（避免不一致）
+                                              if (nextDeptIds.length === 0) {
+                                                return { ...prev, target_dept_ids: [], target_user_ids: [] };
                                               }
-                                              return { ...prev, target_dept_ids: nextDeptIds, target_user_ids: nextUserIds };
+                                              const deptIdSet = new Set(nextDeptIds.map((dId) => Number.parseInt(dId, 10)));
+                                              const derived = users
+                                                .filter((u) => u.dept_id != null && deptIdSet.has(u.dept_id))
+                                                .map((u) => u.emp_id);
+                                              return { ...prev, target_dept_ids: nextDeptIds, target_user_ids: Array.from(new Set(derived)) };
                                           });
                                       }}
                                   />
@@ -1270,6 +1284,7 @@ const TrainingPlanManager = () => {
                       <button
                           type="button"
                           onClick={() => {
+                              if (formData.target_dept_ids.length > 0) return;
                               const allUserIds = users.map(u => u.emp_id);
                               const isAllSelected = allUserIds.length > 0 && 
                                   allUserIds.every(id => formData.target_user_ids.includes(id));
@@ -1286,7 +1301,12 @@ const TrainingPlanManager = () => {
                                   }));
                               }
                           }}
-                          className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
+                          disabled={formData.target_dept_ids.length > 0}
+                          className={`text-xs font-bold cursor-pointer ${
+                            formData.target_dept_ids.length > 0
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-indigo-600 hover:underline'
+                          }`}
                       >
                           {(() => {
                               const allUserIds = users.map(u => u.emp_id);
@@ -1321,8 +1341,10 @@ const TrainingPlanManager = () => {
                                   <input
                                       type="checkbox"
                                       className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                                      checked={formData.target_user_ids.includes(user.emp_id)}
+                                      checked={deptDerivedUserIds.has(user.emp_id) || formData.target_user_ids.includes(user.emp_id)}
+                                      disabled={deptDerivedUserIds.has(user.emp_id)}
                                       onChange={e => {
+                                          if (deptDerivedUserIds.has(user.emp_id)) return;
                                           if (e.target.checked) {
                                               setFormData(prev => ({
                                                   ...prev,
