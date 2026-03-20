@@ -56,6 +56,7 @@ const UserManager = () => {
   // 刪除狀態
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showInactiveUsers, setShowInactiveUsers] = useState(false);
   
   // 排序狀態
   const [sortConfig, setSortConfig] = useState<{
@@ -261,18 +262,20 @@ const UserManager = () => {
   // 整合搜尋與排序
   const processedUsers = useMemo(() => {
     // 1. 搜尋過濾
-    const filtered = users.filter(user => 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      user.emp_id.includes(searchTerm) ||
-      user.job_title?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.department?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.role?.name.toLowerCase().includes(searchTerm.toLowerCase())
-      // user.status.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filtered = users.filter(user => {
+      const matchesSearch =
+        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.emp_id.includes(searchTerm) ||
+        user.job_title?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.department?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.role?.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = showInactiveUsers || user.status !== 'inactive';
+      return matchesSearch && matchesStatus;
+    });
     
     // 2. 排序（包含 admin 固定第一）
     return getSortedUsers(filtered);
-  }, [users, searchTerm, getSortedUsers]);
+  }, [users, searchTerm, showInactiveUsers, getSortedUsers]);
 
   // 分頁計算
   const totalPages = Math.ceil(processedUsers.length / pageSize);
@@ -295,6 +298,15 @@ const UserManager = () => {
           </h1>
           <p className="text-gray-500 mt-2 font-medium">檢視與管理系統使用者、角色及單位分配</p>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowInactiveUsers(prev => !prev)}
+          className="self-start md:self-auto px-4 py-2.5 rounded-xl font-bold text-sm 
+                    border-2 border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 
+                    transition-all duration-200 cursor-pointer"
+        >
+          {showInactiveUsers ? '隱藏停用帳號' : '顯示停用帳號'}
+        </button>
       </div>
 
       {/* Search Bar */}
