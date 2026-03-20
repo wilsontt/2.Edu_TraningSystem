@@ -43,6 +43,7 @@ const UserManager = () => {
   // 編輯狀態
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({
+    name: '',
     role_id: 0,
     dept_id: 0,
     job_title_id: 0 as number | null,
@@ -58,7 +59,7 @@ const UserManager = () => {
   
   // 排序狀態
   const [sortConfig, setSortConfig] = useState<{
-    field: 'emp_id' | 'name' | 'dept_id' | 'role_id' | 'status' | null;
+    field: 'emp_id' | 'name' | 'dept_id' | 'role_id' | 'job_title_id' | 'status' | null;
     direction: 'asc' | 'desc' | null;
   }>({
     field: 'emp_id', // 預設按員工編號
@@ -97,6 +98,7 @@ const UserManager = () => {
   const handleEdit = (user: User) => {
     setEditingUser(user);
     setEditForm({
+      name: user.name,
       role_id: user.role_id || 0,
       dept_id: user.dept_id ?? 0,
       job_title_id: user.job_title_id ?? user.job_title?.id ?? 0,
@@ -120,8 +122,16 @@ const UserManager = () => {
     try {
       setIsSubmitting(true);
       setError(null);
+
+      const trimmedName = editForm.name.trim();
+      if (!trimmedName) {
+        setError('姓名不能為空');
+        setIsSubmitting(false);
+        return;
+      }
       
       const payload = {
+        name: trimmedName,
         role_id: editForm.role_id === 0 ? null : editForm.role_id,
         dept_id: editForm.dept_id,
         job_title_id: !editForm.job_title_id ? null : editForm.job_title_id,
@@ -209,6 +219,10 @@ const UserManager = () => {
           aValue = a.role?.name || '';
           bValue = b.role?.name || '';
           break;
+        case 'job_title_id':
+          aValue = a.job_title?.name || '';
+          bValue = b.job_title?.name || '';
+          break;
         case 'status':
           aValue = a.status;
           bValue = b.status;
@@ -227,7 +241,7 @@ const UserManager = () => {
   }, [sortConfig]);
 
   // 表頭點擊處理
-  const handleSort = (field: 'emp_id' | 'name' | 'dept_id' | 'role_id' | 'status') => {
+  const handleSort = (field: 'emp_id' | 'name' | 'dept_id' | 'role_id' | 'job_title_id' | 'status') => {
     setSortConfig(prev => {
       // 如果點擊的是當前欄位，切換排序方向
       if (prev.field === field) {
@@ -249,7 +263,11 @@ const UserManager = () => {
     // 1. 搜尋過濾
     const filtered = users.filter(user => 
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      user.emp_id.includes(searchTerm)
+      user.emp_id.includes(searchTerm) ||
+      user.job_title?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.department?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.role?.name.toLowerCase().includes(searchTerm.toLowerCase())
+      // user.status.toLowerCase().includes(searchTerm.toLowerCase())
     );
     
     // 2. 排序（包含 admin 固定第一）
@@ -374,7 +392,23 @@ const UserManager = () => {
                       )}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider">職務</th>
+                  <th 
+                    onClick={() => handleSort('job_title_id')}
+                    className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-all duration-200 group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>職務</span>
+                      {sortConfig.field === 'job_title_id' ? (
+                        sortConfig.direction === 'asc' ? (
+                          <ArrowUp className="w-4 h-4 text-indigo-600" />
+                        ) : (
+                          <ArrowDown className="w-4 h-4 text-indigo-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-4 h-4 text-indigo-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                      )}
+                    </div>
+                  </th>
                   <th 
                     onClick={() => handleSort('status')}
                     className="px-6 py-4 text-left text-sm font-black text-indigo-500 uppercase tracking-wider cursor-pointer hover:bg-indigo-50 transition-all duration-200 group"
@@ -528,6 +562,18 @@ const UserManager = () => {
                     <span className="text-sm text-gray-500 font-bold">姓名</span>
                     <span className="text-sm font-black text-gray-800">{editingUser.name}</span>
                  </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">姓名</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  maxLength={20}
+                  className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 font-medium text-gray-800"
+                  placeholder="請輸入姓名"
+                />
               </div>
 
               <div>
