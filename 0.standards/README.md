@@ -1,17 +1,8 @@
 # 教育訓練教材及線上考卷系統 (Educational Training & Online Exam System)
 
-![版本](https://img.shields.io/badge/版本-v1.2.0-blue)
-![狀態](https://img.shields.io/badge/狀態-穩定版-green)
-![文件類型](https://img.shields.io/badge/文件類型-專案說明-blue)
-![文件狀態](https://img.shields.io/badge/文件-完整-blue)
+![版本](https://img.shields.io/badge/版本-v1.2.0-blue) ![狀態](https://img.shields.io/badge/狀態-穩定版-green) ![文件類型](https://img.shields.io/badge/文件類型-專案說明-blue) ![文件狀態](https://img.shields.io/badge/文件-完整-blue)
 
-![React](https://img.shields.io/badge/React-19+-61DAFB?logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?logo=typescript&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3+-3776AB?logo=python&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4+-38B2AC?logo=tailwind-css&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-7+-646CFF?logo=vite&logoColor=white)
+![React](https://img.shields.io/badge/React-19+-61DAFB?logo=react&logoColor=black) ![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?logo=typescript&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi&logoColor=white) ![Python](https://img.shields.io/badge/Python-3+-3776AB?logo=python&logoColor=white) ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4+-38B2AC?logo=tailwind-css&logoColor=white) ![Vite](https://img.shields.io/badge/Vite-7+-646CFF?logo=vite&logoColor=white)
 
 **徽章使用規範**：本專案遵循 [徽章使用規範](1.綠地專案文件/徽章使用規範.md)。
 

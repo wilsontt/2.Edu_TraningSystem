@@ -1,15 +1,8 @@
 # 教育訓練教材及線上考卷系統
 
-![版本](https://img.shields.io/badge/版本-v1.2.0-blue)
-![狀態](https://img.shields.io/badge/狀態-穩定版-green)
+![版本](https://img.shields.io/badge/版本-v1.2.0-blue) ![狀態](https://img.shields.io/badge/狀態-穩定版-green)
 
-![React](https://img.shields.io/badge/React-19+-61DAFB?logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?logo=typescript&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3+-3776AB?logo=python&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4+-38B2AC?logo=tailwind-css&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-7+-646CFF?logo=vite&logoColor=white)
+![React](https://img.shields.io/badge/React-19+-61DAFB?logo=react&logoColor=black) ![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?logo=typescript&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi&logoColor=white) ![Python](https://img.shields.io/badge/Python-3+-3776AB?logo=python&logoColor=white) ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4+-38B2AC?logo=tailwind-css&logoColor=white) ![Vite](https://img.shields.io/badge/Vite-7+-646CFF?logo=vite&logoColor=white)
 
 企業內部**教育訓練與線上考卷**系統，支援不定期訓練、新進訓後測驗、報到管理、成績統計與 RBAC 權限管理。徽章使用依 [徽章使用規範](0.standards/1.綠地專案文件/徽章使用規範.md)。
 
@@ -164,3 +157,18 @@ npm run dev
 ---
 
 **最後更新**：2026-01-28
+
+---
+
+## 九、近期更新（2026-03）
+
+### 功能修正
+
+- 系統管理新增「職務管理」獨立權限節點，權限管理可獨立勾選。
+- 權限管理切換角色的未儲存提示，新增「儲存變更」選項（先儲存再切換）。
+- 人員管理編輯功能支援修改姓名。
+- 人員管理新增「顯示/隱藏停用帳號」按鈕，且預設隱藏停用帳號。
+
+### 資料處理
+
+- 已匯入 `0.standards/倉儲人員.txt`（100 筆），排除重複 `emp_id` 4 筆後新增 96 筆。

@@ -56,6 +56,7 @@ const UserManager = () => {
   // 刪除狀態
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  // 預設隱藏停用帳號，避免管理畫面初次載入過於冗長
   const [showInactiveUsers, setShowInactiveUsers] = useState(false);
   
   // 排序狀態
@@ -269,6 +270,7 @@ const UserManager = () => {
         user.job_title?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.department?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.role?.name.toLowerCase().includes(searchTerm.toLowerCase());
+      // showInactiveUsers = false 時只顯示啟用帳號
       const matchesStatus = showInactiveUsers || user.status !== 'inactive';
       return matchesSearch && matchesStatus;
     });

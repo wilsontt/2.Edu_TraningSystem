@@ -145,6 +145,7 @@ const PermissionManager = () => {
     const targetRoleId = confirmModal.targetRoleId;
     if (!targetRoleId) return;
 
+    // 先儲存當前角色的變更，成功後才切換角色，避免使用者誤丟資料
     const ok = await saveCurrentRolePermissions();
     if (!ok) return;
 
