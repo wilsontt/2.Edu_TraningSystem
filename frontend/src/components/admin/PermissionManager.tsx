@@ -109,30 +109,47 @@ const PermissionManager = () => {
     setIsDirty(true);
   };
 
-  const handleSave = async () => {
-    if (!selectedRoleId) return;
-    
+  const saveCurrentRolePermissions = async (): Promise<boolean> => {
+    if (!selectedRoleId) return false;
+
     try {
       setIsSaving(true);
       setError(null);
       setSuccessMsg(null);
-      
+
       await api.put(`/admin/roles/${selectedRoleId}/permissions`, {
         function_ids: Array.from(rolePermissions)
       });
-      
+
       setSuccessMsg('權限設定已儲存');
       setIsDirty(false);
       setTimeout(() => setSuccessMsg(null), 3000);
+      return true;
     } catch (err) {
       if (err instanceof AxiosError && err.response) {
         setError(err.response.data.detail || '儲存失敗');
       } else {
         setError('發生未預期錯誤');
       }
+      return false;
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSave = async () => {
+    await saveCurrentRolePermissions();
+  };
+
+  const handleSaveAndSwitch = async () => {
+    const targetRoleId = confirmModal.targetRoleId;
+    if (!targetRoleId) return;
+
+    const ok = await saveCurrentRolePermissions();
+    if (!ok) return;
+
+    setSelectedRoleId(targetRoleId);
+    setConfirmModal({ isOpen: false, targetRoleId: null });
   };
 
   // Helper to render function tree
@@ -201,7 +218,7 @@ const PermissionManager = () => {
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
         {/* Roles List (Left) */}
         <div className="md:col-span-4 bg-white rounded-2xl shadow-sm border border-indigo-100/50 overflow-hidden">
-          <div className="p-4 bg-gradient-to-r from-indigo-50/50 to-purple-50/30 border-b border-indigo-100 font-black text-indigo-500 uppercase tracking-wider text-xs">
+          <div className="p-4 bg-linear-to-r from-indigo-50/50 to-purple-50/30 border-b border-indigo-100 font-black text-indigo-500 uppercase tracking-wider text-xs">
             選擇角色
           </div>
           {isLoading ? (
@@ -234,7 +251,7 @@ const PermissionManager = () => {
 
         {/* Permissions Matrix (Right) */}
         <div className="md:col-span-8 bg-white rounded-2xl shadow-sm border border-indigo-100/50 overflow-hidden flex flex-col">
-          <div className="p-4 bg-gradient-to-r from-indigo-50/50 to-purple-50/30 border-b border-indigo-100 flex items-center justify-between sticky top-0 z-10">
+          <div className="p-4 bg-linear-to-r from-indigo-50/50 to-purple-50/30 border-b border-indigo-100 flex items-center justify-between sticky top-0 z-10">
             <div className="font-black text-indigo-500 uppercase tracking-wider text-xs">
               功能存取權限
             </div>
@@ -270,6 +287,10 @@ const PermissionManager = () => {
           isOpen={confirmModal.isOpen} 
           title="未儲存的變更"
           message="您對目前角色的權限設定尚未儲存。切換角色將會遺失這些變更。您確定要繼續嗎？"
+          extraText="儲存變更"
+          onExtra={handleSaveAndSwitch}
+          extraShowSaveIcon={true}
+          isBusy={isSaving}
           confirmText="捨棄變更並切換"
           cancelText="取消"
           onConfirm={handleConfirmSwitch} 

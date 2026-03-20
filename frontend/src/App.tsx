@@ -111,7 +111,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     { name: '單位管理', path: '/admin/departments', code: 'menu:admin:dept' },
     { name: '分類管理', path: '/admin/categories', code: 'menu:admin' },
     { name: '人員管理', path: '/admin/users', code: 'menu:admin:user' },
-    { name: '職務管理', path: '/admin/job-titles', code: 'menu:admin:user' },
+    { name: '職務管理', path: '/admin/job-titles', code: 'menu:admin:jobtitle' },
     { name: '角色管理', path: '/admin/roles', code: 'menu:admin:role' },
     { name: '權限管理', path: '/admin/permissions', code: 'menu:admin:perm' },
     { name: 'QRcode 管理', path: '/admin/qrcode', code: 'menu:admin' },

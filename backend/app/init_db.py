@@ -62,6 +62,7 @@ def init_db():
         admin_sub = [
             {"name": "單位管理", "code": "menu:admin:dept", "path": "/admin/departments", "parent_id": db_functions["menu:admin"].id},
             {"name": "人員管理", "code": "menu:admin:user", "path": "/admin/users", "parent_id": db_functions["menu:admin"].id},
+            {"name": "職務管理", "code": "menu:admin:jobtitle", "path": "/admin/job-titles", "parent_id": db_functions["menu:admin"].id},
             {"name": "角色管理", "code": "menu:admin:role", "path": "/admin/roles", "parent_id": db_functions["menu:admin"].id},
             {"name": "權限管理", "code": "menu:admin:perm", "path": "/admin/permissions", "parent_id": db_functions["menu:admin"].id},
             {"name": "功能清單管理", "code": "menu:admin:func", "path": "/admin/functions", "parent_id": db_functions["menu:admin"].id},

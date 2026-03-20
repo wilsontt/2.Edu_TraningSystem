@@ -1,0 +1,101 @@
+emp_id	name	dept_id role_id	status	job_title_id
+100008	孫文德	HQ  5 7 active
+100019	蘇美華	HQ  5 2 active
+100022	陳秀錦	HQ  5 2 active
+100023	孫怡真	HQ  5 2 active
+100048	吳素芳	HQ  5 2 active
+100052	孫怡美	HQ  5 2 active
+100064	耿玉莉	HQ  5 2 active
+100103	廖敏惠	HQ  5 2 active
+100134	孫怡安	HQ  5 2 active
+100057	鄒東良	IT  3 4 active
+100086	李孟儒	IT  3 4 active
+100125	藍永豪	IT  3 4 active
+200038	黃琨峻	IT  3 4 active
+300002	謝綺瑩	KA  6 2 active
+300004	諶琍玲	KA  6 2 active
+300005	黃振麟	KA  6 2 active
+300008	林正南	KA  6 8 active
+300009	熊致偉	KA  6 7 active
+300017	翁瑞和	KA  6 2 active
+300021	黃慧嵐	KA  6 2 active
+400002	王偉國	KB  7 7 active
+400006	邱基麟	KB  7 2 active
+400011	顏漢松	KB  7 2 active
+400012	賴家成	KB  7 2 active
+400021	林志謙	KB  7 2 active
+400026	陳東偉	KB  7 2 active
+400035	虞貴林	KB  7 2 active
+400039	李博聞	KB  7 2 active
+400040	林韡政	KB  7 2 active
+400042	吳武憲	KB  7 2 active
+400043	王浩宇	KB  7 2 active
+400046	黃振義	KB  7 2 active
+400047	姚力圳	KB  7 2 active
+400049	林冠宇	KB  7 2 active
+400053	陳郁霖	KB  7 2 active
+400067	劉旨淳	KB  7 7 active
+400068	沈俊延	KB  7 2 active
+400078	許家森	KB  7 2 active
+400079	郭子平	KB  7 2 active
+400088	陳品宏	KB  7 2 active
+400094	陳鈺翔	KB  7 2 active
+400097	陳博瑞	KB  7 2 active
+400105	王怡婷	KB  7 2 active
+400106	趙信隆	KB  7 2 active
+500023	陳志堅	KB  7 2 active
+700002	趙秋鄉	KB  7 2 active
+700007	姚家財	KB  7 2 active
+700014	林宜沛	KB  7 2 active
+700034	陳郁憲	KB  7 2 active
+900004	吳惠雯	KB  7 2 active
+900026	劉忠慶	KB  7 2 active
+500001	陳謙勝	KC  8 7 active
+500007	沈淑慧	KC  8 2 active
+500028	張筑鈴	KC  8 2 active
+500032	陳育群	KC  8 7 active
+500038	許涵如	KC  8 2 active
+500040	彭秀梅	KC  8 2 active
+500041	黃亦晟	KC  8 8 active
+500045	王俊翰	KC  8 2 active
+500048	黃子叡	KC  8 2 active
+500050	許哲維	KC  8 2 active
+500051	徐浩軒	KC  8 2 active
+400008	張發財	KD  9 7 active
+700004	張玉綢	KD  9 2 active
+700013	俞永珍	KD  9 2 active
+700015	高嘉妤	KD  9 2 active
+700017	黃文彬	KD  9 8 active
+700024	吳建毅	KD  9 2 active
+700033	程韋傑	KD  9 2 active
+700038	林志賢	KD  9 2 active
+700039	袁倫浩	KD  9 8 active
+400037	陳堂坤	KE  10  active2
+900015	施秋萍	KE  10  active2
+900033	沈郁芬	KE  10  active2
+900055	胡博鈞	KE  10  active2
+900057	簡淑芬	KE  10  active2
+900058	陳祖昀	KE  10  active2
+900060	吳晉賢	KE  10  active2
+900061	李建宏	KE  10  active2
+900063	林庭維	KE  10  active2
+900064	陳亞辰	KE  10  active2
+100075	孫康鈞	KN  11  active
+120001	施芷涵	KN  11  active
+120003	陳聖文	KN  11  active
+120004	姜佳欣	KN  11  active
+120006	楊書喻	KN  11  active
+120008	蔡佳峰	KN  11  active
+120009	蔡惠婷	KN  11  active
+120012	吳宗賢	KN  11  active
+120013	陳宜芝	KN  11  active
+120014	黃苡榕	KN  11  active
+120016	吳致緯	KN  11  active
+800001	李孟霖	KY  12  active
+800003	游冠霖	KY  12  active
+800004	江菡芳	KY  12  active
+800006	高青梅	KY  12  active
+800012	龍建丞	KY  12  active
+800013	楊綵縈	KY  12  active
+100077	孫康譯	Sales 18 active
+100079	褚韋豪	Sales 18 active

@@ -186,13 +186,13 @@ def delete_sub_category(id: int, db: Session = Depends(get_db), current_user = c
 
 # --- 職務管理 (Job Titles) ---
 @router.get("/job-titles", response_model=List[schemas.JobTitle])
-def get_job_titles(db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
+def get_job_titles(db: Session = Depends(get_db), current_user=check_permission("menu:admin:jobtitle")):
     """取得所有職務（用於人員管理編輯與職務維護）"""
     return db.query(models.JobTitle).order_by(models.JobTitle.sort_order, models.JobTitle.id).all()
 
 
 @router.post("/job-titles", response_model=schemas.JobTitle)
-def create_job_title(body: schemas.JobTitleCreate, db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
+def create_job_title(body: schemas.JobTitleCreate, db: Session = Depends(get_db), current_user=check_permission("menu:admin:jobtitle")):
     """新增職務"""
     existing = db.query(models.JobTitle).filter(models.JobTitle.name == body.name.strip()).first()
     if existing:
@@ -210,7 +210,7 @@ def create_job_title(body: schemas.JobTitleCreate, db: Session = Depends(get_db)
 
 
 @router.put("/job-titles/{id}", response_model=schemas.JobTitle)
-def update_job_title(id: int, body: schemas.JobTitleUpdate, db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
+def update_job_title(id: int, body: schemas.JobTitleUpdate, db: Session = Depends(get_db), current_user=check_permission("menu:admin:jobtitle")):
     """更新職務"""
     obj = db.query(models.JobTitle).filter(models.JobTitle.id == id).first()
     if not obj:
@@ -229,7 +229,7 @@ def update_job_title(id: int, body: schemas.JobTitleUpdate, db: Session = Depend
 
 
 @router.get("/job-titles/{id}/users")
-def get_job_title_users(id: int, db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
+def get_job_title_users(id: int, db: Session = Depends(get_db), current_user=check_permission("menu:admin:jobtitle")):
     """取得綁定此職務的使用者列表（用於職務管理「查看」）"""
     obj = db.query(models.JobTitle).filter(models.JobTitle.id == id).first()
     if not obj:
@@ -255,7 +255,7 @@ def get_job_title_users(id: int, db: Session = Depends(get_db), current_user=che
 
 
 @router.delete("/job-titles/{id}")
-def delete_job_title(id: int, db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
+def delete_job_title(id: int, db: Session = Depends(get_db), current_user=check_permission("menu:admin:jobtitle")):
     """刪除職務（若尚有使用者綁定則不允許刪除）"""
     obj = db.query(models.JobTitle).filter(models.JobTitle.id == id).first()
     if not obj:
