@@ -9,7 +9,7 @@ import os
 from io import BytesIO
 from .. import models, schemas
 from ..database import get_db
-from .auth import check_permission
+from .auth import check_permission, check_any_permission
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -127,7 +127,7 @@ def get_training_plans(
     dept_id: Optional[int] = Query(None, description="單位篩選"),
     category_id: Optional[int] = Query(None, description="分類篩選 (sub_category_id)"),
     db: Session = Depends(get_db),
-    current_user = check_permission("menu:plan")
+    current_user=check_any_permission(["menu:plan", "menu:attendance-overview"]),
 ):
     """獲取訓練計畫清單，支援狀態、年份、單位、分類篩選
     
@@ -270,7 +270,7 @@ def get_archived_plans(
 def get_attendance_stats(
     plan_id: int,
     db: Session = Depends(get_db),
-    current_user = check_permission("menu:plan")
+    current_user=check_any_permission(["menu:plan", "menu:attendance-overview"]),
 ):
     """取得該計畫的報到統計"""
     # 檢查計畫是否存在
@@ -394,10 +394,18 @@ def get_attendance_stats(
     }
 
 
+def _user_has_function_code(current_user: models.User, code: str) -> bool:
+    if not current_user.role or not current_user.role.functions:
+        return False
+    return any(f.code == code for f in current_user.role.functions)
+
+
 def _can_edit_absence_reason(current_user: models.User, absent_emp_id: str, db: Session) -> bool:
-    """僅部門主管（同部門）或 Admin / 系統管理者可填寫未報到原因。"""
+    """擁有報到總覽權限、Admin／系統管理者、或部門主管（同部門未到同仁）可填寫未報到原因。"""
     role_name = current_user.role.name if current_user.role else ""
-    if role_name in ("Admin", "系統管理者"):
+    if role_name in ("Admin", "System Admin", "系統管理", "系統管理者"):
+        return True
+    if _user_has_function_code(current_user, "menu:attendance-overview"):
         return True
     if current_user.job_title and current_user.job_title.name == "主管":
         absent_user = db.query(models.User).filter(models.User.emp_id == absent_emp_id).first()
@@ -411,14 +419,16 @@ def update_absence_reason(
     plan_id: int,
     body: schemas.AbsenceReasonUpdate,
     db: Session = Depends(get_db),
-    current_user=check_permission("menu:plan"),
+    current_user=check_any_permission(["menu:plan", "menu:attendance-overview"]),
 ):
-    """填寫或更新未報到者的原因。僅部門主管（只能改自己部門）或 Admin／系統管理者可操作。"""
-    if not _can_edit_absence_reason(current_user, body.emp_id, db):
-        raise HTTPException(status_code=403, detail="僅部門主管（同部門）或 Admin、系統管理者可填寫未報到原因")
+    """填寫或更新未報到者的原因。擁有報到總覽或訓練計畫權限者，依角色規則可填寫。"""
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    if plan.is_archived:
+        raise HTTPException(status_code=400, detail="已封存的訓練計畫無法編輯未到原因")
+    if not _can_edit_absence_reason(current_user, body.emp_id, db):
+        raise HTTPException(status_code=403, detail="僅部門主管（同部門）、擁有報到總覽權限者、或 Admin、系統管理者可填寫未報到原因")
     if body.reason_code == "other" and not (body.reason_text or "").strip():
         raise HTTPException(status_code=400, detail="選擇「其他」時請填寫原因說明")
     allowed_codes = {"sick_leave", "business_trip", "official_leave", "other"}

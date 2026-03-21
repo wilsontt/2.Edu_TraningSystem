@@ -283,6 +283,29 @@ def check_permission(required_func_code: str):
             
     return Depends(permission_dependency)
 
+def check_any_permission(required_func_codes: List[str]):
+    """擁有 required_func_codes 中任一功能代碼即可通過（Admin／System Admin／系統管理 仍視為全部通過）。"""
+    async def permission_dependency(current_user: models.User = Depends(get_current_user)):
+        try:
+            if not current_user.role:
+                raise HTTPException(status_code=403, detail="使用者未分配角色")
+            role_name = current_user.role.name
+            if role_name in ["Admin", "System Admin", "系統管理"]:
+                return current_user
+            allowed = set(required_func_codes)
+            funcs = current_user.role.functions or []
+            user_codes = {f.code for f in funcs}
+            if allowed & user_codes:
+                return current_user
+            raise HTTPException(status_code=403, detail="權限不足，無法存取此功能")
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Permission Check Error: {e}")
+            raise HTTPException(status_code=500, detail="權限檢查發生錯誤")
+
+    return Depends(permission_dependency)
+
 @router.get("/me")
 async def get_me(current_user: models.User = Depends(get_current_user)):
     return {

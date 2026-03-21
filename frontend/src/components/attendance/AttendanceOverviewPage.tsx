@@ -8,6 +8,8 @@ interface PlanSummary {
   training_date: string;
   end_date: string | null;
   year?: string;
+  /** 後端 TrainingPlan 欄位；報到總覽用於禁用封存計畫之未到原因編輯 */
+  is_archived?: boolean;
 }
 
 interface AttendanceStats {
@@ -108,15 +110,19 @@ const AttendanceOverviewPage = () => {
     fetchAllStats();
   }, [plans]);
 
-  const openAttendanceModal = (planId: number) => {
+  const openAttendanceModal = async (planId: number) => {
     setModalPlanId(planId);
     const stats = statsMap[planId];
-    if (stats) setModalStats(stats);
-    else {
+    if (stats) {
+      setModalStats(stats);
+      return;
+    }
+    setModalStats(null);
+    try {
+      const res = await api.get<AttendanceStats>(`/training/plans/${planId}/attendance/stats`);
+      setModalStats(res.data);
+    } catch {
       setModalStats(null);
-      api.get<AttendanceStats>(`/training/plans/${planId}/attendance/stats`)
-        .then((res) => setModalStats(res.data))
-        .catch(() => setModalStats(null));
     }
   };
 
@@ -126,6 +132,9 @@ const AttendanceOverviewPage = () => {
   };
 
   const modalPlan = modalPlanId ? plans.find((p) => p.id === modalPlanId) : null;
+  /** 封存計畫僅能檢視統計，不可填寫／編輯未到原因 */
+  const absenceReasonReadOnly =
+    Boolean(modalPlan?.is_archived) || activeTab === 'archived';
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -238,6 +247,11 @@ const AttendanceOverviewPage = () => {
                 <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>
               ) : (
                 <>
+                  {absenceReasonReadOnly && (
+                    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
+                      此訓練計畫已封存，僅能檢視報到紀錄與未到名單，無法編輯未到原因。
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                     <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200">
                       <div className="text-sm font-bold text-indigo-600 mb-1">應到人數</div>
@@ -297,7 +311,9 @@ const AttendanceOverviewPage = () => {
                                 <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
                                 <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">部門</th>
                                 <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">未到原因</th>
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">操作</th>
+                                {!absenceReasonReadOnly && (
+                                  <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">操作</th>
+                                )}
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -314,20 +330,22 @@ const AttendanceOverviewPage = () => {
                                       </span>
                                     ) : '-'}
                                   </td>
-                                  <td className="px-4 py-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => setAbsenceReasonEdit({
-                                        empId: user.emp_id,
-                                        name: user.name,
-                                        reasonCode: user.absence_reason_code || '',
-                                        reasonText: user.absence_reason_text || '',
-                                      })}
-                                      className="px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
-                                    >
-                                      {user.absence_reason_code ? '編輯原因' : '填寫原因'}
-                                    </button>
-                                  </td>
+                                  {!absenceReasonReadOnly && (
+                                    <td className="px-4 py-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => setAbsenceReasonEdit({
+                                          empId: user.emp_id,
+                                          name: user.name,
+                                          reasonCode: user.absence_reason_code || '',
+                                          reasonText: user.absence_reason_text || '',
+                                        })}
+                                        className="px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
+                                      >
+                                        {user.absence_reason_code ? '編輯原因' : '填寫原因'}
+                                      </button>
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
@@ -349,7 +367,7 @@ const AttendanceOverviewPage = () => {
       )}
 
       {/* 未報到原因編輯 Modal */}
-      {absenceReasonEdit && modalPlanId && (
+      {absenceReasonEdit && modalPlanId && !absenceReasonReadOnly && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="p-4 border-b border-indigo-100 bg-indigo-50/50">
