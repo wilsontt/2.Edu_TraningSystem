@@ -146,6 +146,16 @@ class UserUpdate(BaseModel):
             raise ValueError('姓名最長20個字符')
         return v
 
+    @field_validator('status')
+    @classmethod
+    def validate_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        normalized = v.strip().lower()
+        if normalized not in ['active', 'inactive']:
+            raise ValueError('狀態僅支援 active 或 inactive')
+        return normalized
+
 class User(UserBase):
     dept_id: Optional[int] = None
     role_id: Optional[int] = None

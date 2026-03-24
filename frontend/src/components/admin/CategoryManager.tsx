@@ -263,19 +263,13 @@ const CategoryManager = () => {
               {/* Main Category Header */}
               <div className="p-4 bg-gradient-to-r from-indigo-50/50 to-purple-50/30 border-b border-indigo-100">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 flex-1">
-                    <button
-                      type="button"
-                      onClick={() => toggleCategory(mainCat.id)}
-                      className="p-1 hover:bg-white/70 rounded-lg transition-all duration-200 cursor-pointer"
-                    >
+                  {editingMainId === mainCat.id ? (
+                    <div className="flex items-center gap-3 flex-1">
                       {expandedCategories.has(mainCat.id) ? (
                         <ChevronDown className="w-5 h-5 text-indigo-600" />
                       ) : (
                         <ChevronRight className="w-5 h-5 text-indigo-600" />
                       )}
-                    </button>
-                    {editingMainId === mainCat.id ? (
                       <input
                         autoFocus
                         type="text"
@@ -289,13 +283,27 @@ const CategoryManager = () => {
                           }
                         }}
                       />
-                    ) : (
+                      <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">
+                        {mainCat.sub_categories.length} 項
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => toggleCategory(mainCat.id)}
+                      className="flex items-center gap-3 flex-1 p-1 rounded-lg hover:bg-white/70 transition-all duration-200 cursor-pointer text-left"
+                    >
+                      {expandedCategories.has(mainCat.id) ? (
+                        <ChevronDown className="w-5 h-5 text-indigo-600" />
+                      ) : (
+                        <ChevronRight className="w-5 h-5 text-indigo-600" />
+                      )}
                       <h3 className="text-lg font-black text-gray-800">{mainCat.name}</h3>
-                    )}
-                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">
-                      {mainCat.sub_categories.length} 項
-                    </span>
-                  </div>
+                      <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">
+                        {mainCat.sub_categories.length} 項
+                      </span>
+                    </button>
+                  )}
                   <div className="flex gap-2">
                     {editingMainId === mainCat.id ? (
                       <>
