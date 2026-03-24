@@ -20,6 +20,8 @@ interface JobTitleUser {
 interface UserForAdd {
   emp_id: string;
   name: string;
+  dept_id?: number | null;
+  role_id?: number | null;
   department?: { name: string };
   job_title?: { id: number; name: string };
 }
@@ -45,6 +47,10 @@ const JobTitleManager = () => {
   const [allUsers, setAllUsers] = useState<UserForAdd[]>([]);
   const [loadingAllUsers, setLoadingAllUsers] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [userDepartmentFilter, setUserDepartmentFilter] = useState<number | ''>('');
+  const [userRoleFilter, setUserRoleFilter] = useState<number | ''>('');
+  const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
+  const [roles, setRoles] = useState<Array<{ id: number; name: string }>>([]);
   const [editingMember, setEditingMember] = useState<JobTitleUser | null>(null);
   const [editingMemberNewJobTitleId, setEditingMemberNewJobTitleId] = useState<number | ''>('');
   const [removingMember, setRemovingMember] = useState<JobTitleUser | null>(null);
@@ -149,6 +155,24 @@ const JobTitleManager = () => {
     }
   };
 
+  const fetchFilterOptions = async () => {
+    try {
+      const [deptRes, roleRes] = await Promise.all([
+        api
+          .get<Array<{ id: number; name: string }>>('/admin/departments')
+          .catch(() => ({ data: [] as Array<{ id: number; name: string }> })),
+        api
+          .get<Array<{ id: number; name: string }>>('/admin/roles')
+          .catch(() => ({ data: [] as Array<{ id: number; name: string }> })),
+      ]);
+      setDepartments(deptRes.data ?? []);
+      setRoles(roleRes.data ?? []);
+    } catch {
+      setDepartments([]);
+      setRoles([]);
+    }
+  };
+
   const handleAddMemberToJobTitle = async (empId: string) => {
     if (!viewTarget) return;
     try {
@@ -159,6 +183,8 @@ const JobTitleManager = () => {
       await fetchList();
       setIsAddingMember(false);
       setUserSearchTerm('');
+      setUserDepartmentFilter('');
+      setUserRoleFilter('');
     } catch (err) {
       if (err instanceof AxiosError && err.response?.data?.detail) {
         setError(String(err.response.data.detail));
@@ -360,13 +386,31 @@ const JobTitleManager = () => {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => { setIsAddingMember(true); fetchAllUsers(); }}
+                  onClick={async () => {
+                    setUserSearchTerm('');
+                    setUserDepartmentFilter('');
+                    setUserRoleFilter('');
+                    setIsAddingMember(true);
+                    await Promise.all([fetchAllUsers(), fetchFilterOptions()]);
+                  }}
                   className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 text-sm cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   新增成員
                 </button>
-                <button type="button" onClick={() => { setViewTarget(null); setIsAddingMember(false); setEditingMember(null); setRemovingMember(null); }} className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-xl cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewTarget(null);
+                    setIsAddingMember(false);
+                    setEditingMember(null);
+                    setRemovingMember(null);
+                    setUserSearchTerm('');
+                    setUserDepartmentFilter('');
+                    setUserRoleFilter('');
+                  }}
+                  className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-xl cursor-pointer"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -422,7 +466,21 @@ const JobTitleManager = () => {
               )}
             </div>
             <div className="p-4 bg-gray-50 border-t border-gray-100">
-              <button type="button" onClick={() => { setViewTarget(null); setIsAddingMember(false); setEditingMember(null); setRemovingMember(null); }} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 cursor-pointer">關閉</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewTarget(null);
+                  setIsAddingMember(false);
+                  setEditingMember(null);
+                  setRemovingMember(null);
+                  setUserSearchTerm('');
+                  setUserDepartmentFilter('');
+                  setUserRoleFilter('');
+                }}
+                className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 cursor-pointer"
+              >
+                關閉
+              </button>
             </div>
           </div>
         </div>
@@ -437,13 +495,63 @@ const JobTitleManager = () => {
                 <Plus className="w-5 h-5 text-green-600" />
                 新增成員到 職務「{viewTarget.name}」
               </h3>
-              <button type="button" onClick={() => setIsAddingMember(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer" disabled={isSubmittingMember}><X className="w-5 h-5" /></button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingMember(false);
+                  setUserSearchTerm('');
+                  setUserDepartmentFilter('');
+                  setUserRoleFilter('');
+                }}
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                disabled={isSubmittingMember}
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <div className="p-6 flex-1 overflow-y-auto">
-              <div className="mb-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input type="text" placeholder="搜尋用戶姓名或員工編號..." className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 font-bold" value={userSearchTerm} onChange={(e) => setUserSearchTerm(e.target.value)} />
+              <div className="mb-4 space-y-3">
+                <div className="flex flex-wrap gap-3 items-center">
+                  <div className="flex-1 min-w-[200px] relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="搜尋用戶姓名或員工編號..."
+                      className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-2 border-indigo-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 font-bold"
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-600">單位</span>
+                    <select
+                      value={userDepartmentFilter === '' ? '' : userDepartmentFilter}
+                      onChange={(e) => setUserDepartmentFilter(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    >
+                      <option value="">全部</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-600">角色</span>
+                    <select
+                      value={userRoleFilter === '' ? '' : userRoleFilter}
+                      onChange={(e) => setUserRoleFilter(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    >
+                      <option value="">全部</option>
+                      {roles.map((role) => (
+                        <option key={role.id} value={role.id}>
+                          {role.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
               {loadingAllUsers ? (
@@ -454,6 +562,12 @@ const JobTitleManager = () => {
                     .filter((u) => {
                       const alreadyIn = viewUsers.some((v) => v.emp_id === u.emp_id);
                       if (alreadyIn) return false;
+                      if (userDepartmentFilter !== '' && (u.dept_id ?? null) !== userDepartmentFilter) {
+                        return false;
+                      }
+                      if (userRoleFilter !== '' && (u.role_id ?? null) !== userRoleFilter) {
+                        return false;
+                      }
                       if (userSearchTerm) {
                         const q = userSearchTerm.toLowerCase();
                         return u.name.toLowerCase().includes(q) || u.emp_id.toLowerCase().includes(q);
@@ -461,31 +575,75 @@ const JobTitleManager = () => {
                       return true;
                     })
                     .map((user) => (
-                      <button key={user.emp_id} type="button" onClick={() => handleAddMemberToJobTitle(user.emp_id)} disabled={isSubmittingMember} className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-green-50 rounded-xl text-left cursor-pointer disabled:opacity-50">
+                      <button
+                        key={user.emp_id}
+                        type="button"
+                        onClick={() => handleAddMemberToJobTitle(user.emp_id)}
+                        disabled={isSubmittingMember}
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-green-50 rounded-xl text-left group cursor-pointer disabled:opacity-50 transition-all duration-200"
+                      >
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">{user.name.charAt(0)}</div>
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-sm">
+                            {user.name.charAt(0)}
+                          </div>
                           <div>
                             <p className="font-bold text-gray-900">{user.name}</p>
-                            <p className="text-xs text-gray-500">員工編號：{user.emp_id}</p>
-                            {user.department && <p className="text-xs text-gray-400">部門：{user.department.name}</p>}
+                            <p className="text-xs text-gray-500 font-medium">員工編號：{user.emp_id}</p>
+                            {user.department && (
+                              <p className="text-xs text-gray-400 font-medium">部門：{user.department.name}</p>
+                            )}
+                            {user.job_title && (
+                              <p className="text-xs text-indigo-600 font-medium">職務：{user.job_title.name}</p>
+                            )}
                           </div>
                         </div>
-                        {isSubmittingMember ? <Loader2 className="w-4 h-4 animate-spin text-green-600" /> : <Plus className="w-5 h-5 text-green-600" />}
+                        {isSubmittingMember ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-green-600" />
+                        ) : (
+                          <Plus className="w-5 h-5 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                        )}
                       </button>
                     ))}
                   {allUsers.filter((u) => {
                     const alreadyIn = viewUsers.some((v) => v.emp_id === u.emp_id);
                     if (alreadyIn) return false;
-                    if (userSearchTerm) { const q = userSearchTerm.toLowerCase(); return u.name.toLowerCase().includes(q) || u.emp_id.toLowerCase().includes(q); }
+                    if (userDepartmentFilter !== '' && (u.dept_id ?? null) !== userDepartmentFilter) {
+                      return false;
+                    }
+                    if (userRoleFilter !== '' && (u.role_id ?? null) !== userRoleFilter) {
+                      return false;
+                    }
+                    if (userSearchTerm) {
+                      const q = userSearchTerm.toLowerCase();
+                      return u.name.toLowerCase().includes(q) || u.emp_id.toLowerCase().includes(q);
+                    }
                     return true;
                   }).length === 0 && (
-                    <div className="text-center py-12 text-gray-400 font-bold">{userSearchTerm ? '找不到符合的用戶' : '所有用戶都已在此職務中'}</div>
+                    <div className="text-center py-12 text-gray-400 font-bold">
+                      {userSearchTerm || userDepartmentFilter !== '' || userRoleFilter !== ''
+                        ? '找不到符合條件的用戶'
+                        : '所有用戶都已在此職務中'}
+                    </div>
                   )}
                 </div>
               )}
               {error && <div className="mt-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm font-bold flex items-center gap-2"><AlertCircle className="w-4 h-4" />{error}</div>}
             </div>
-            <div className="p-4 bg-gray-50 border-t"><button type="button" onClick={() => setIsAddingMember(false)} className="w-full py-2.5 bg-gray-600 text-white rounded-xl font-bold hover:bg-gray-700 cursor-pointer" disabled={isSubmittingMember}>取消</button></div>
+            <div className="p-4 bg-gray-50 border-t">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingMember(false);
+                  setUserSearchTerm('');
+                  setUserDepartmentFilter('');
+                  setUserRoleFilter('');
+                }}
+                className="w-full py-2.5 bg-gray-600 text-white rounded-xl font-bold hover:bg-gray-700 cursor-pointer"
+                disabled={isSubmittingMember}
+              >
+                取消
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -40,10 +40,12 @@ const RoleManager = () => {
   // 成員管理狀態
   const [isAddingMemberToRole, setIsAddingMemberToRole] = useState(false);
   const [removingMemberFromRole, setRemovingMemberFromRole] = useState<{emp_id: string; name: string} | null>(null);
-  const [allUsers, setAllUsers] = useState<Array<{emp_id: string; name: string; role_id: number | null; department?: {name: string}; job_title?: {id: number; name: string}}>>([]);
+  const [allUsers, setAllUsers] = useState<Array<{emp_id: string; name: string; role_id: number | null; dept_id?: number | null; department?: {name: string}; job_title?: {id: number; name: string}}>>([]);
   const [loadingAllUsers, _setLoadingAllUsers] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [userDepartmentFilter, setUserDepartmentFilter] = useState<number | ''>('');
   const [userJobTitleFilter, setUserJobTitleFilter] = useState<number | ''>('');
+  const [departments, setDepartments] = useState<Array<{id: number; name: string}>>([]);
   const [jobTitles, setJobTitles] = useState<Array<{id: number; name: string}>>([]);
   const [targetRoleId, setTargetRoleId] = useState<number | null>(null);
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);
@@ -179,13 +181,17 @@ const RoleManager = () => {
             setRoleUsers(users);
             // 預載入所有用戶列表（用於新增成員）
             setAllUsers(res.data);
-            // 一併載入職務清單（用於新增成員時依職務篩選）
-            try {
-              const jtRes = await api.get<Array<{id: number; name: string}>>('/admin/job-titles');
-              setJobTitles(jtRes.data || []);
-            } catch {
-              setJobTitles([]);
-            }
+            // 一併載入部門/職務清單（用於新增成員時篩選）
+            const [deptRes, jtRes] = await Promise.all([
+              api
+                .get<Array<{id: number; name: string}>>('/admin/departments')
+                .catch(() => ({ data: [] as Array<{id: number; name: string}> })),
+              api
+                .get<Array<{id: number; name: string}>>('/admin/job-titles')
+                .catch(() => ({ data: [] as Array<{id: number; name: string}> })),
+            ]);
+            setDepartments(deptRes.data || []);
+            setJobTitles(jtRes.data || []);
         } else {
             // 取得權限列表，需將 ID 轉換為功能名稱
             const [permRes, funcRes] = await Promise.all([
@@ -249,6 +255,8 @@ const RoleManager = () => {
       }
       setIsAddingMemberToRole(false);
       setUserSearchTerm('');
+      setUserDepartmentFilter('');
+      setUserJobTitleFilter('');
     } catch (err) {
       if (err instanceof AxiosError && err.response) {
         setError(err.response.data.detail || '新增成員失敗');
@@ -397,6 +405,9 @@ const RoleManager = () => {
                 {detailModal.type === 'user' && detailModal.roleId && (
                   <button
                     onClick={() => {
+                      setUserSearchTerm('');
+                      setUserDepartmentFilter('');
+                      setUserJobTitleFilter('');
                       setIsAddingMemberToRole(true);
                       if (allUsers.length === 0) {
                         api.get('/admin/users').then(res => setAllUsers(res.data));
@@ -413,6 +424,9 @@ const RoleManager = () => {
                     setDetailModal({ ...detailModal, isOpen: false });
                     setIsAddingMemberToRole(false);
                     setRemovingMemberFromRole(null);
+                    setUserSearchTerm('');
+                    setUserDepartmentFilter('');
+                    setUserJobTitleFilter('');
                   }}
                   className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 >
@@ -481,6 +495,9 @@ const RoleManager = () => {
                   setDetailModal({ ...detailModal, isOpen: false });
                   setIsAddingMemberToRole(false);
                   setRemovingMemberFromRole(null);
+                  setUserSearchTerm('');
+                  setUserDepartmentFilter('');
+                  setUserJobTitleFilter('');
                 }}
                 className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
@@ -502,7 +519,12 @@ const RoleManager = () => {
               </h3>
               <button
                 type="button"
-                onClick={() => setIsAddingMemberToRole(false)}
+                onClick={() => {
+                  setIsAddingMemberToRole(false);
+                  setUserSearchTerm('');
+                  setUserDepartmentFilter('');
+                  setUserJobTitleFilter('');
+                }}
                 className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 disabled={isSubmittingMember}
               >
@@ -522,6 +544,19 @@ const RoleManager = () => {
                       value={userSearchTerm}
                       onChange={(e) => setUserSearchTerm(e.target.value)}
                     />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-600">單位</span>
+                    <select
+                      value={userDepartmentFilter === '' ? '' : userDepartmentFilter}
+                      onChange={(e) => setUserDepartmentFilter(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    >
+                      <option value="">全部</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>{dept.name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-gray-600">職務</span>
@@ -549,6 +584,7 @@ const RoleManager = () => {
                   {allUsers
                     .filter(user => {
                       if (user.role_id === detailModal.roleId) return false;
+                      if (userDepartmentFilter !== '' && (user.dept_id ?? null) !== userDepartmentFilter) return false;
                       if (userJobTitleFilter !== '' && (user.job_title?.id ?? null) !== userJobTitleFilter) return false;
                       if (userSearchTerm) {
                         const searchLower = userSearchTerm.toLowerCase();
@@ -589,6 +625,7 @@ const RoleManager = () => {
                     ))}
                   {allUsers.filter(user => {
                     if (user.role_id === detailModal.roleId) return false;
+                    if (userDepartmentFilter !== '' && (user.dept_id ?? null) !== userDepartmentFilter) return false;
                     if (userJobTitleFilter !== '' && (user.job_title?.id ?? null) !== userJobTitleFilter) return false;
                     if (userSearchTerm) {
                       const searchLower = userSearchTerm.toLowerCase();
@@ -598,7 +635,9 @@ const RoleManager = () => {
                     return true;
                   }).length === 0 && (
                     <div className="text-center py-12 text-gray-400 font-bold">
-                      {userSearchTerm ? '找不到符合條件的用戶' : '所有用戶都已擁有此角色'}
+                      {userSearchTerm || userDepartmentFilter !== '' || userJobTitleFilter !== ''
+                        ? '找不到符合條件的用戶'
+                        : '所有用戶都已擁有此角色'}
                     </div>
                   )}
                 </div>
@@ -619,6 +658,7 @@ const RoleManager = () => {
                   setIsAddingMemberToRole(false);
                   setError(null);
                   setUserSearchTerm('');
+                  setUserDepartmentFilter('');
                   setUserJobTitleFilter('');
                 }}
                 className="w-full py-2.5 bg-gray-600 text-white rounded-xl font-bold hover:bg-gray-700 transition-all duration-200 active:scale-95 cursor-pointer"

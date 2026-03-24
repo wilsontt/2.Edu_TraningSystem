@@ -50,9 +50,22 @@ const DepartmentManager = () => {
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [editingMember, setEditingMember] = useState<DepartmentUser | null>(null);
   const [removingMember, setRemovingMember] = useState<DepartmentUser | null>(null);
-  const [allUsers, setAllUsers] = useState<Array<{emp_id: string; name: string; dept_id: number; department?: {name: string}}>>([]);
+  const [allUsers, setAllUsers] = useState<
+    Array<{
+      emp_id: string;
+      name: string;
+      dept_id: number;
+      role_id?: number | null;
+      department?: { name: string };
+      job_title?: { id: number; name: string };
+    }>
+  >([]);
   const [loadingAllUsers, setLoadingAllUsers] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState<number | ''>('');
+  const [userJobTitleFilter, setUserJobTitleFilter] = useState<number | ''>('');
+  const [roles, setRoles] = useState<Array<{ id: number; name: string }>>([]);
+  const [jobTitles, setJobTitles] = useState<Array<{ id: number; name: string }>>([]);
   const [targetDeptId, setTargetDeptId] = useState<number | null>(null);
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);
 
@@ -123,8 +136,18 @@ const DepartmentManager = () => {
   const handleViewUsers = async (deptId: number) => {
     setLoadingUsers(true);
     try {
-      const res = await api.get<DepartmentUsersData>(`/admin/departments/${deptId}/users`);
+      const [res, roleRes, jtRes] = await Promise.all([
+        api.get<DepartmentUsersData>(`/admin/departments/${deptId}/users`),
+        api
+          .get<Array<{ id: number; name: string }>>('/admin/roles')
+          .catch(() => ({ data: [] as Array<{ id: number; name: string }> })),
+        api
+          .get<Array<{ id: number; name: string }>>('/admin/job-titles')
+          .catch(() => ({ data: [] as Array<{ id: number; name: string }> })),
+      ]);
       setViewingDeptUsers(res.data);
+      setRoles(roleRes.data ?? []);
+      setJobTitles(jtRes.data ?? []);
       // 預載入所有用戶列表（用於新增成員）
       await fetchAllUsers();
     } catch (err: unknown) {
@@ -165,6 +188,8 @@ const DepartmentManager = () => {
       await handleViewUsers(viewingDeptUsers.department_id);
       setIsAddingMember(false);
       setUserSearchTerm('');
+      setUserRoleFilter('');
+      setUserJobTitleFilter('');
     } catch (err: unknown) {
       if (err instanceof AxiosError && err.response?.data?.detail) {
         setErrorMessage(err.response.data.detail);
@@ -301,6 +326,9 @@ const DepartmentManager = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    setUserSearchTerm('');
+                    setUserRoleFilter('');
+                    setUserJobTitleFilter('');
                     setIsAddingMember(true);
                     fetchAllUsers();
                   }}
@@ -316,6 +344,9 @@ const DepartmentManager = () => {
                     setIsAddingMember(false);
                     setEditingMember(null);
                     setRemovingMember(null);
+                    setUserSearchTerm('');
+                    setUserRoleFilter('');
+                    setUserJobTitleFilter('');
                   }}
                   className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-xl transition-all duration-200 cursor-pointer"
                 >
@@ -403,6 +434,9 @@ const DepartmentManager = () => {
                   setIsAddingMember(false);
                   setEditingMember(null);
                   setRemovingMember(null);
+                  setUserSearchTerm('');
+                  setUserRoleFilter('');
+                  setUserJobTitleFilter('');
                 }}
                 className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
@@ -424,7 +458,12 @@ const DepartmentManager = () => {
               </h3>
               <button
                 type="button"
-                onClick={() => setIsAddingMember(false)}
+                onClick={() => {
+                  setIsAddingMember(false);
+                  setUserSearchTerm('');
+                  setUserRoleFilter('');
+                  setUserJobTitleFilter('');
+                }}
                 className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 disabled={isSubmittingMember}
               >
@@ -433,16 +472,48 @@ const DepartmentManager = () => {
             </div>
             
             <div className="p-6 flex-1 overflow-y-auto">
-              <div className="mb-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="搜尋用戶姓名或員工編號..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200 font-bold"
-                    value={userSearchTerm}
-                    onChange={(e) => setUserSearchTerm(e.target.value)}
-                  />
+              <div className="mb-4 space-y-3">
+                <div className="flex flex-wrap gap-3 items-center">
+                  <div className="flex-1 min-w-[200px] relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="搜尋用戶姓名或員工編號..."
+                      className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-2 border-indigo-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200 font-bold"
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-600">角色</span>
+                    <select
+                      value={userRoleFilter === '' ? '' : userRoleFilter}
+                      onChange={(e) => setUserRoleFilter(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    >
+                      <option value="">全部</option>
+                      {roles.map((role) => (
+                        <option key={role.id} value={role.id}>
+                          {role.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-600">職務</span>
+                    <select
+                      value={userJobTitleFilter === '' ? '' : userJobTitleFilter}
+                      onChange={(e) => setUserJobTitleFilter(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    >
+                      <option value="">全部</option>
+                      {jobTitles.map((jt) => (
+                        <option key={jt.id} value={jt.id}>
+                          {jt.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
               
@@ -454,16 +525,21 @@ const DepartmentManager = () => {
               ) : (
                 <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                   {allUsers
-                    .filter(user => {
-                      // 排除已在當前部門的用戶
-                      const isInCurrentDept = viewingDeptUsers.users.some(u => u.emp_id === user.emp_id);
+                    .filter((user) => {
+                      const isInCurrentDept = viewingDeptUsers.users.some((u) => u.emp_id === user.emp_id);
                       if (isInCurrentDept) return false;
-                      
-                      // 搜尋過濾
+                      if (userRoleFilter !== '' && (user.role_id ?? null) !== userRoleFilter) {
+                        return false;
+                      }
+                      if (userJobTitleFilter !== '' && (user.job_title?.id ?? null) !== userJobTitleFilter) {
+                        return false;
+                      }
                       if (userSearchTerm) {
                         const searchLower = userSearchTerm.toLowerCase();
-                        return user.name.toLowerCase().includes(searchLower) || 
-                               user.emp_id.toLowerCase().includes(searchLower);
+                        return (
+                          user.name.toLowerCase().includes(searchLower) ||
+                          user.emp_id.toLowerCase().includes(searchLower)
+                        );
                       }
                       return true;
                     })
@@ -476,7 +552,7 @@ const DepartmentManager = () => {
                         className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-green-50 rounded-xl transition-all duration-200 text-left group disabled:opacity-50 cursor-pointer"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-sm">
                             {user.name.charAt(0)}
                           </div>
                           <div>
@@ -484,6 +560,9 @@ const DepartmentManager = () => {
                             <p className="text-xs text-gray-500 font-medium">員工編號：{user.emp_id}</p>
                             {user.department && (
                               <p className="text-xs text-gray-400 font-medium">目前部門：{user.department.name}</p>
+                            )}
+                            {user.job_title && (
+                              <p className="text-xs text-indigo-600 font-medium">職務：{user.job_title.name}</p>
                             )}
                           </div>
                         </div>
@@ -494,18 +573,28 @@ const DepartmentManager = () => {
                         )}
                       </button>
                     ))}
-                  {allUsers.filter(user => {
-                    const isInCurrentDept = viewingDeptUsers.users.some(u => u.emp_id === user.emp_id);
+                  {allUsers.filter((user) => {
+                    const isInCurrentDept = viewingDeptUsers.users.some((u) => u.emp_id === user.emp_id);
                     if (isInCurrentDept) return false;
+                    if (userRoleFilter !== '' && (user.role_id ?? null) !== userRoleFilter) {
+                      return false;
+                    }
+                    if (userJobTitleFilter !== '' && (user.job_title?.id ?? null) !== userJobTitleFilter) {
+                      return false;
+                    }
                     if (userSearchTerm) {
                       const searchLower = userSearchTerm.toLowerCase();
-                      return user.name.toLowerCase().includes(searchLower) || 
-                             user.emp_id.toLowerCase().includes(searchLower);
+                      return (
+                        user.name.toLowerCase().includes(searchLower) ||
+                        user.emp_id.toLowerCase().includes(searchLower)
+                      );
                     }
                     return true;
                   }).length === 0 && (
                     <div className="text-center py-12 text-gray-400 font-bold">
-                      {userSearchTerm ? '找不到符合條件的用戶' : '所有用戶都已在此部門中'}
+                      {userSearchTerm || userRoleFilter !== '' || userJobTitleFilter !== ''
+                        ? '找不到符合條件的用戶'
+                        : '所有用戶都已在此部門中'}
                     </div>
                   )}
                 </div>
@@ -515,7 +604,12 @@ const DepartmentManager = () => {
             <div className="p-4 bg-gray-50 border-t border-gray-100">
               <button
                 type="button"
-                onClick={() => setIsAddingMember(false)}
+                onClick={() => {
+                  setIsAddingMember(false);
+                  setUserSearchTerm('');
+                  setUserRoleFilter('');
+                  setUserJobTitleFilter('');
+                }}
                 className="w-full py-2.5 bg-gray-600 text-white rounded-xl font-bold hover:bg-gray-700 transition-all duration-200 active:scale-95 cursor-pointer"
                 disabled={isSubmittingMember}
               >
