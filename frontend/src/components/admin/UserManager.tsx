@@ -317,7 +317,7 @@ const UserManager = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"
-            placeholder="搜尋姓名或員工編號..."
+            placeholder="搜尋姓名、員工編號、部門、角色、職務..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl transition-all duration-200 outline-none font-bold text-gray-700 placeholder:text-gray-400"
