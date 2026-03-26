@@ -293,10 +293,9 @@ def update_user(emp_id: str, user_update: schemas.UserUpdate, db: Session = Depe
     if user_update.job_title_id is not None:
         db_user.job_title_id = user_update.job_title_id if user_update.job_title_id else None
     if user_update.status is not None:
-        normalized_status = user_update.status.strip().lower()
-        if emp_id.lower() == 'admin' and normalized_status != 'active':
+        if emp_id.lower() == 'admin' and user_update.status != 'active':
             raise HTTPException(status_code=400, detail="系統預設管理員不能被停用")
-        db_user.status = normalized_status
+        db_user.status = user_update.status
 
     # 保護 Admin 帳號的角色與單位不被變更
     if emp_id.lower() == 'admin':

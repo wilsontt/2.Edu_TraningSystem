@@ -17,6 +17,8 @@ interface AttendanceStats {
   expected_count: number;
   actual_count: number;
   attendance_rate: number;
+  leave_count?: number;
+  absent_without_reason_count?: number;
   checked_in_users: Array<{ emp_id: string; name: string; dept_name: string; checkin_time: string }>;
   not_checked_in_users: Array<{
     emp_id: string;
@@ -36,17 +38,11 @@ const ABSENCE_REASON_OPTIONS: Array<{ code: string; label: string }> = [
 
 type TabStatus = 'active' | 'expired' | 'archived';
 
-const TAB_MAP: Record<TabStatus, string> = {
-  active: '正在進行中',
-  expired: '已過期',
-  archived: '已封存',
-};
-
 /**
  * 報到總覽：與訓練計畫管理相同分頁（正在進行中／已過期／已封存），表格含操作欄可查看報到統計。
  */
 const AttendanceOverviewPage = () => {
-  const [activeTab, setActiveTab] = useState<TabStatus>('active');
+  const [activeTab] = useState<TabStatus>('active');
   const [plans, setPlans] = useState<PlanSummary[]>([]);
   const [statsMap, setStatsMap] = useState<Record<number, AttendanceStats>>({});
   const [loading, setLoading] = useState(true);
@@ -60,13 +56,53 @@ const AttendanceOverviewPage = () => {
     reasonText: string;
   } | null>(null);
   const [savingAbsenceReason, setSavingAbsenceReason] = useState(false);
+  const [selectedAttendanceFilter, setSelectedAttendanceFilter] = useState<'expected' | 'actual' | 'absent' | 'leave'>('expected');
+
+  const handlePrintCurrentList = async () => {
+    if (!modalStats) return;
+    const expectedList = [
+      ...modalStats.checked_in_users.map((u) => ({ emp_id: u.emp_id, isLeave: false })),
+      ...modalStats.not_checked_in_users.map((u) => ({ emp_id: u.emp_id, isLeave: !!u.absence_reason_code })),
+    ];
+    const targetList =
+      selectedAttendanceFilter === 'expected'
+        ? expectedList
+        : selectedAttendanceFilter === 'actual'
+          ? modalStats.checked_in_users.map((u) => ({ emp_id: u.emp_id, isLeave: false }))
+          : selectedAttendanceFilter === 'absent'
+            ? modalStats.not_checked_in_users.filter((u) => !u.absence_reason_code).map((u) => ({ emp_id: u.emp_id, isLeave: false }))
+            : modalStats.not_checked_in_users.filter((u) => !!u.absence_reason_code).map((u) => ({ emp_id: u.emp_id, isLeave: true }));
+    if (targetList.length === 0) {
+      alert('目前清單無資料可列印');
+      return;
+    }
+    try {
+      const res = await api.post('/admin/reports/print/pdf', {
+        scope: 'plan',
+        plan_ids: [modalStats.plan_id],
+        emp_ids: targetList.map((x) => x.emp_id),
+        include_employee_signature: false,
+        include_exam_history: false,
+      }, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance-print-${modalStats.plan_id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: unknown) {
+      alert('列印失敗');
+    }
+  };
 
   useEffect(() => {
     const fetchPlans = async () => {
       try {
         setLoading(true);
         const res = await api.get('/training/plans', {
-          params: { status: activeTab },
+          params: { status: 'active' },
         });
         setPlans(res.data || []);
         setStatsMap({});
@@ -129,6 +165,7 @@ const AttendanceOverviewPage = () => {
   const closeModal = () => {
     setModalPlanId(null);
     setModalStats(null);
+    setSelectedAttendanceFilter('expected');
   };
 
   const modalPlan = modalPlanId ? plans.find((p) => p.id === modalPlanId) : null;
@@ -148,21 +185,8 @@ const AttendanceOverviewPage = () => {
         </div>
       </header>
 
-      {/* 分頁：與訓練計畫管理一致 */}
-      <div className="flex gap-1 p-1 bg-indigo-50/50 rounded-xl border border-indigo-100 w-fit">
-        {(Object.keys(TAB_MAP) as TabStatus[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 cursor-pointer ${
-              activeTab === tab
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-gray-600 hover:bg-white hover:text-indigo-700'
-            }`}
-          >
-            {TAB_MAP[tab]}
-          </button>
-        ))}
+      <div className="inline-flex gap-2 p-2 bg-green-50 border border-green-100 rounded-xl text-sm font-bold text-green-700">
+        目前僅顯示：正在進行中
       </div>
 
       {loading ? (
@@ -171,7 +195,7 @@ const AttendanceOverviewPage = () => {
         </div>
       ) : plans.length === 0 ? (
         <div className="bg-indigo-50/50 rounded-2xl border border-indigo-100 p-8 text-center text-gray-600">
-          {TAB_MAP[activeTab]}尚無訓練計畫。
+          目前尚無正在進行中的訓練計畫。
         </div>
       ) : (
         <>
@@ -238,9 +262,18 @@ const AttendanceOverviewPage = () => {
                 <BarChart3 className="w-5 h-5 text-indigo-600" />
                 報到統計 - {modalPlan.title}
               </h3>
-              <button type="button" onClick={closeModal} className="p-2 hover:bg-white/50 rounded-xl cursor-pointer">
-                <X className="w-5 h-5 text-gray-400" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintCurrentList}
+                  className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 cursor-pointer"
+                >
+                  列印目前清單
+                </button>
+                <button type="button" onClick={closeModal} className="p-2 hover:bg-white/50 rounded-xl cursor-pointer">
+                  <X className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
             </div>
             <div className="p-6 overflow-y-auto flex-1">
               {!modalStats ? (
@@ -253,106 +286,123 @@ const AttendanceOverviewPage = () => {
                     </div>
                   )}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAttendanceFilter('expected')}
+                      className={`p-4 rounded-xl border text-left cursor-pointer ${selectedAttendanceFilter === 'expected' ? 'bg-indigo-100 border-indigo-300' : 'bg-indigo-50 border-indigo-200'}`}
+                    >
                       <div className="text-sm font-bold text-indigo-600 mb-1">應到人數</div>
                       <div className="text-2xl font-black text-indigo-800">{modalStats.expected_count}</div>
-                    </div>
-                    <div className="bg-green-50 p-4 rounded-xl border border-green-200">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAttendanceFilter('actual')}
+                      className={`p-4 rounded-xl border text-left cursor-pointer ${selectedAttendanceFilter === 'actual' ? 'bg-green-100 border-green-300' : 'bg-green-50 border-green-200'}`}
+                    >
                       <div className="text-sm font-bold text-green-600 mb-1">實到人數</div>
                       <div className="text-2xl font-black text-green-800">{modalStats.actual_count}</div>
-                    </div>
-                    <div className="bg-orange-50 p-4 rounded-xl border border-orange-200">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAttendanceFilter('absent')}
+                      className={`p-4 rounded-xl border text-left cursor-pointer ${selectedAttendanceFilter === 'absent' ? 'bg-orange-100 border-orange-300' : 'bg-orange-50 border-orange-200'}`}
+                    >
                       <div className="text-sm font-bold text-orange-600 mb-1">未到人數</div>
-                      <div className="text-2xl font-black text-orange-800">{Math.max(0, modalStats.expected_count - modalStats.actual_count)}</div>
-                    </div>
-                    <div className="bg-purple-50 p-4 rounded-xl border border-purple-200">
-                      <div className="text-sm font-bold text-purple-600 mb-1">出席率</div>
-                      <div className="text-2xl font-black text-purple-800">{modalStats.attendance_rate.toFixed(1)}%</div>
-                    </div>
+                      <div className="text-2xl font-black text-orange-800">{modalStats.absent_without_reason_count ?? Math.max(0, modalStats.expected_count - modalStats.actual_count)}</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAttendanceFilter('leave')}
+                      className={`p-4 rounded-xl border text-left cursor-pointer ${selectedAttendanceFilter === 'leave' ? 'bg-purple-100 border-purple-300' : 'bg-purple-50 border-purple-200'}`}
+                    >
+                      <div className="text-sm font-bold text-purple-600 mb-1">請假人數</div>
+                      <div className="text-2xl font-black text-purple-800">{modalStats.leave_count ?? 0}</div>
+                    </button>
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <h4 className="text-sm font-bold text-gray-700 mb-2">已報到用戶 ({modalStats.checked_in_users.length})</h4>
+                      <h4 className="text-sm font-bold text-gray-700 mb-2">
+                        {selectedAttendanceFilter === 'expected' && `應到清單 (${modalStats.expected_count})`}
+                        {selectedAttendanceFilter === 'actual' && `實到清單 (${modalStats.checked_in_users.length})`}
+                        {selectedAttendanceFilter === 'absent' && `未到清單 (${modalStats.not_checked_in_users.filter(u => !u.absence_reason_code).length})`}
+                        {selectedAttendanceFilter === 'leave' && `請假清單 (${modalStats.not_checked_in_users.filter(u => u.absence_reason_code).length})`}
+                      </h4>
                       <div className="border border-gray-200 rounded-xl overflow-hidden">
                         <table className="w-full text-sm">
                           <thead className="bg-gray-50">
                             <tr>
+                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">ITEM</th>
                               <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">員工編號</th>
                               <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
                               <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">部門</th>
-                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">報到時間</th>
+                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">
+                                {selectedAttendanceFilter === 'actual' ? '報到時間' : '未到原因'}
+                              </th>
+                              {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && (
+                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">操作</th>
+                              )}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {modalStats.checked_in_users.length === 0 ? (
-                              <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-400 text-xs">尚無報到記錄</td></tr>
-                            ) : (
-                              modalStats.checked_in_users.map((user, idx) => (
-                                <tr key={idx} className="even:bg-gray-100">
+                            {(() => {
+                              const expectedList = [
+                                ...modalStats.checked_in_users.map((u) => ({ ...u, kind: 'actual' as const })),
+                                ...modalStats.not_checked_in_users.map((u) => ({ ...u, kind: 'absent' as const })),
+                              ];
+                              const currentList =
+                                selectedAttendanceFilter === 'expected'
+                                  ? expectedList
+                                  : selectedAttendanceFilter === 'actual'
+                                    ? modalStats.checked_in_users.map((u) => ({ ...u, kind: 'actual' as const }))
+                                    : selectedAttendanceFilter === 'absent'
+                                      ? modalStats.not_checked_in_users.filter((u) => !u.absence_reason_code).map((u) => ({ ...u, kind: 'absent' as const }))
+                                      : modalStats.not_checked_in_users.filter((u) => !!u.absence_reason_code).map((u) => ({ ...u, kind: 'absent' as const }));
+
+                              if (currentList.length === 0) {
+                                return (
+                                  <tr>
+                                    <td colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 6 : 5} className="px-4 py-4 text-center text-gray-400 text-xs">
+                                      查無資料
+                                    </td>
+                                  </tr>
+                                );
+                              }
+                              return currentList.map((user, idx) => (
+                                <tr key={`${user.emp_id}-${idx}`} className="even:bg-gray-100">
+                                  <td className="px-4 py-2 font-mono text-xs">{idx + 1}</td>
                                   <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
                                   <td className="px-4 py-2 font-bold">{user.name}</td>
                                   <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
-                                  <td className="px-4 py-2 text-gray-500 text-xs">{new Date(user.checkin_time).toLocaleString('zh-TW')}</td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    {modalStats.not_checked_in_users.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-bold text-gray-700 mb-2">未報到用戶 ({modalStats.not_checked_in_users.length})</h4>
-                        <div className="border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50 sticky top-0">
-                              <tr>
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">員工編號</th>
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">部門</th>
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">未到原因</th>
-                                {!absenceReasonReadOnly && (
-                                  <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">操作</th>
-                                )}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {modalStats.not_checked_in_users.map((user, idx) => (
-                                <tr key={idx} className="even:bg-gray-100">
-                                  <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
-                                  <td className="px-4 py-2 font-bold">{user.name}</td>
-                                  <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
-                                  <td className="px-4 py-2 text-gray-600 text-xs">
-                                    {user.absence_reason_code ? (
-                                      <span title={user.absence_reason_text || ''}>
-                                        {ABSENCE_REASON_OPTIONS.find(o => o.code === user.absence_reason_code)?.label || user.absence_reason_code}
-                                        {user.absence_reason_text && user.absence_reason_code === 'other' ? `：${user.absence_reason_text}` : ''}
-                                      </span>
-                                    ) : '-'}
+                                  <td className="px-4 py-2 text-gray-500 text-xs">
+                                    {user.kind === 'actual' && 'checkin_time' in user && user.checkin_time
+                                      ? new Date(user.checkin_time).toLocaleString('zh-TW')
+                                      : ('absence_reason_code' in user && user.absence_reason_code
+                                          ? `${ABSENCE_REASON_OPTIONS.find(o => o.code === user.absence_reason_code)?.label || user.absence_reason_code}${user.absence_reason_code === 'other' && user.absence_reason_text ? `：${user.absence_reason_text}` : ''}`
+                                          : '-')}
                                   </td>
-                                  {!absenceReasonReadOnly && (
+                                  {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && user.kind !== 'actual' && (
                                     <td className="px-4 py-2">
                                       <button
                                         type="button"
                                         onClick={() => setAbsenceReasonEdit({
                                           empId: user.emp_id,
                                           name: user.name,
-                                          reasonCode: user.absence_reason_code || '',
-                                          reasonText: user.absence_reason_text || '',
+                                          reasonCode: 'absence_reason_code' in user ? (user.absence_reason_code || '') : '',
+                                          reasonText: 'absence_reason_text' in user ? (user.absence_reason_text || '') : '',
                                         })}
                                         className="px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
                                       >
-                                        {user.absence_reason_code ? '編輯原因' : '填寫原因'}
+                                        {'absence_reason_code' in user && user.absence_reason_code ? '編輯原因' : '填寫原因'}
                                       </button>
                                     </td>
                                   )}
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                              ));
+                            })()}
+                          </tbody>
+                        </table>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </>
               )}

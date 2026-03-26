@@ -36,6 +36,7 @@ const QuestionBankManager = () => {
     // 編輯狀態
     const [editingQuestion, setEditingQuestion] = useState<QuestionBankItem | null>(null);
     const [fetchError, setFetchError] = useState<string | null>(null);
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
     const fetchQuestions = useCallback(async () => {
         try {
@@ -84,6 +85,21 @@ const QuestionBankManager = () => {
             fetchQuestions();
         } catch {
             alert("刪除失敗");
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        const ids = Array.from(selectedIds);
+        if (ids.length === 0) return;
+        if (!window.confirm(`確定要批次刪除 ${ids.length} 題嗎？`)) return;
+        try {
+            await api.delete('/admin/question-bank/bulk-delete', {
+                data: { question_ids: ids }
+            });
+            setSelectedIds(new Set());
+            fetchQuestions();
+        } catch {
+            alert('批次刪除失敗');
         }
     };
 
@@ -145,6 +161,30 @@ const QuestionBankManager = () => {
                 <div className="text-sm text-indigo-600 font-bold bg-indigo-50 px-3 py-1.5 rounded-full">
                     共 {total} 筆題目
                 </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setSelectedIds(new Set(questions.map((q) => q.id)))}
+                        className="px-2 py-1 text-xs font-bold rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50 cursor-pointer"
+                    >
+                        全選
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSelectedIds(new Set())}
+                        className="px-2 py-1 text-xs font-bold rounded border border-gray-200 text-gray-600 hover:bg-gray-100 cursor-pointer"
+                    >
+                        不全選
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleBulkDelete}
+                        disabled={selectedIds.size === 0}
+                        className="px-2 py-1 text-xs font-bold rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                        批次刪除 ({selectedIds.size})
+                    </button>
+                </div>
             </div>
 
             {/* Table */}
@@ -152,6 +192,7 @@ const QuestionBankManager = () => {
                 <table className="w-full text-left">
                     <thead className="bg-gradient-to-r from-indigo-50 to-indigo-100/50 sticky top-0 z-10 backdrop-blur-sm">
                         <tr>
+                            <th className="px-6 py-3 text-xs font-black text-indigo-600 uppercase w-12"></th>
                             <th className="px-6 py-3 text-xs font-black text-indigo-600 uppercase w-16">No.</th>
                             <th className="px-6 py-3 text-xs font-black text-indigo-600 uppercase w-24">題型</th>
                             <th className="px-6 py-3 text-xs font-black text-indigo-600 uppercase">題目內容</th>
@@ -161,14 +202,27 @@ const QuestionBankManager = () => {
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                         {loading ? (
-                            <tr><td colSpan={5} className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600"/></td></tr>
+                            <tr><td colSpan={6} className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600"/></td></tr>
                         ) : fetchError ? (
-                            <tr><td colSpan={5} className="p-8 text-center"><span className="text-red-600 font-bold">{fetchError}</span></td></tr>
+                            <tr><td colSpan={6} className="p-8 text-center"><span className="text-red-600 font-bold">{fetchError}</span></td></tr>
                         ) : questions.length === 0 ? (
-                            <tr><td colSpan={5} className="p-8 text-center text-gray-400 italic font-bold">查無資料</td></tr>
+                            <tr><td colSpan={6} className="p-8 text-center text-gray-400 italic font-bold">查無資料</td></tr>
                         ) : (
                             questions.map((q, idx) => (
                                 <tr key={q.id} className="group transition-all duration-200 border-b border-gray-50 last:border-0 even:bg-gray-100 hover:bg-indigo-50/80">
+                                    <td className="px-6 py-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.has(q.id)}
+                                            onChange={(e) => {
+                                                const next = new Set(selectedIds);
+                                                if (e.target.checked) next.add(q.id);
+                                                else next.delete(q.id);
+                                                setSelectedIds(next);
+                                            }}
+                                            className="w-4 h-4"
+                                        />
+                                    </td>
                                     <td className="px-6 py-3 text-xs font-mono text-gray-400">
                                         {(page - 1) * pageSize + idx + 1}
                                     </td>

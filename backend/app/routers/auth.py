@@ -235,8 +235,7 @@ async def login(req: LoginRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="員工編號不存在，請先註冊")
     
-    user_status = (user.status or "").strip().lower()
-    if user_status != "active":
+    if user.status != "active":
         raise HTTPException(status_code=403, detail="此帳號已被停用")
     
     # 3. 簽發 JWT Token
@@ -396,8 +395,7 @@ async def login_with_qrcode(
     if not user:
         raise HTTPException(status_code=404, detail="員工編號不存在，請先註冊")
     
-    user_status = (user.status or "").strip().lower()
-    if user_status != "active":
+    if user.status != "active":
         raise HTTPException(status_code=403, detail="此帳號已被停用")
     
     # 4. 不再標記 token 為已使用，允許多人使用

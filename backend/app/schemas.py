@@ -146,16 +146,6 @@ class UserUpdate(BaseModel):
             raise ValueError('姓名最長20個字符')
         return v
 
-    @field_validator('status')
-    @classmethod
-    def validate_status(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        normalized = v.strip().lower()
-        if normalized not in ['active', 'inactive']:
-            raise ValueError('狀態僅支援 active 或 inactive')
-        return normalized
-
 class User(UserBase):
     dept_id: Optional[int] = None
     role_id: Optional[int] = None
@@ -233,6 +223,11 @@ class Question(QuestionBase):
     
     class Config:
         from_attributes = True
+
+
+class BulkDeleteQuestionsRequest(BaseModel):
+    """批次刪除題目請求"""
+    question_ids: List[int]
 
 # 更新遞迴模型的向前參照
 class QuestionBankBase(BaseModel):

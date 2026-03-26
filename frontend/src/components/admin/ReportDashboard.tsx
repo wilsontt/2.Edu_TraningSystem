@@ -165,6 +165,17 @@ interface RetakeUser {
   }>;
 }
 
+interface PrintPreviewItem {
+  emp_id: string;
+  name: string;
+  dept_name: string;
+  plan_id: number;
+  plan_title: string;
+  total_score: number;
+  is_passed: boolean;
+  submit_time: string | null;
+}
+
 export default function ReportDashboard() {
   const [overview, setOverview] = useState<OverviewStats>({
     total_exams: 0,
@@ -188,7 +199,7 @@ export default function ReportDashboard() {
   const [retakeUsers, setRetakeUsers] = useState<{ count: number; users: RetakeUser[] }>({ count: 0, users: [] });
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false); // 表格區域局部載入狀態
-  const [activeTab, setActiveTab] = useState<'department' | 'plan'>('department');
+  const [activeTab, setActiveTab] = useState<'department' | 'plan' | 'print'>('department');
   
   // 部門/計畫績效表分頁狀態
   const [statsPage, setStatsPage] = useState(1);
@@ -200,6 +211,11 @@ export default function ReportDashboard() {
   const [expandedPlan, setExpandedPlan] = useState<number | null>(null);
   const [deptDetails, setDeptDetails] = useState<Record<number, any>>({});
   const [planDetails, setPlanDetails] = useState<Record<number, any>>({});
+  const [printPreview, setPrintPreview] = useState<PrintPreviewItem[]>([]);
+  const [selectedPrintEmpIds, setSelectedPrintEmpIds] = useState<Set<string>>(new Set());
+  const [includeEmployeeSignature, setIncludeEmployeeSignature] = useState(false);
+  const [includeExamHistory, setIncludeExamHistory] = useState(false);
+  const [printLoading, setPrintLoading] = useState(false);
 
   const toggleExpandRow = async (itemId: number) => {
     if (!itemId) return;
@@ -437,6 +453,76 @@ export default function ReportDashboard() {
       }
     };
     return details[kpiType] || { description: "無詳細資訊", value: "-", unit: "" };
+  };
+
+  const loadPrintPreview = async () => {
+    try {
+      setPrintLoading(true);
+      const token = localStorage.getItem('token');
+      const baseURL = API_BASE_URL;
+      const res = await fetch(`${baseURL}/admin/reports/print/preview`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          scope: 'plan',
+          include_employee_signature: includeEmployeeSignature,
+          include_exam_history: includeExamHistory
+        })
+      });
+      if (!res.ok) throw new Error('preview failed');
+      const data = await res.json();
+      const items = (data.items || []) as PrintPreviewItem[];
+      setPrintPreview(items);
+      setSelectedPrintEmpIds(new Set(items.map((i) => i.emp_id)));
+    } catch (error) {
+      console.error('load print preview failed', error);
+      alert('載入列印預覽失敗');
+    } finally {
+      setPrintLoading(false);
+    }
+  };
+
+  const exportPrintPdf = async () => {
+    try {
+      if (selectedPrintEmpIds.size === 0) {
+        alert('請至少選擇一位人員');
+        return;
+      }
+      setPrintLoading(true);
+      const token = localStorage.getItem('token');
+      const baseURL = API_BASE_URL;
+      const response = await fetch(`${baseURL}/admin/reports/print/pdf`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          scope: 'plan',
+          emp_ids: Array.from(selectedPrintEmpIds),
+          include_employee_signature: includeEmployeeSignature,
+          include_exam_history: includeExamHistory
+        })
+      });
+      if (!response.ok) throw new Error('print failed');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `score-print-${format(new Date(), 'yyyyMMdd')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('print export failed', error);
+      alert('成績列印失敗');
+    } finally {
+      setPrintLoading(false);
+    }
   };
 
   // 部門/計畫績效表分頁計算
@@ -814,6 +900,17 @@ export default function ReportDashboard() {
             >
               計畫統計
             </button>
+            <button
+              onClick={() => setActiveTab('print')}
+              className={clsx(
+                "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
+                activeTab === 'print'
+                  ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
+                  : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+              )}
+            >
+              成績列印
+            </button>
           </div>
 
           {/* 時間篩選器 */}
@@ -914,6 +1011,7 @@ export default function ReportDashboard() {
           </div>
         </div>
 
+        {activeTab !== 'print' && (
         <div className="bg-white rounded-xl shadow-sm border border-indigo-100/50 overflow-hidden relative">
           {/* 表格局部載入覆蓋層 */}
           {tableLoading && (
@@ -1263,6 +1361,103 @@ export default function ReportDashboard() {
             />
           )}
         </div>
+        )}
+        {activeTab === 'print' && (
+          <div className="bg-white rounded-xl shadow-sm border border-indigo-100/50 overflow-hidden p-6 space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={includeEmployeeSignature}
+                  onChange={(e) => setIncludeEmployeeSignature(e.target.checked)}
+                />
+                列印員工簽名
+              </label>
+              <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={includeExamHistory}
+                  onChange={(e) => setIncludeExamHistory(e.target.checked)}
+                />
+                列印考試歷程
+              </label>
+              <button
+                type="button"
+                onClick={loadPrintPreview}
+                disabled={printLoading}
+                className="px-4 py-2 text-sm font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {printLoading ? '載入中...' : '載入預覽'}
+              </button>
+              <button
+                type="button"
+                onClick={exportPrintPdf}
+                disabled={printLoading || selectedPrintEmpIds.size === 0}
+                className="px-4 py-2 text-sm font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed cursor-pointer"
+              >
+                列印 PDF ({selectedPrintEmpIds.size})
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedPrintEmpIds(new Set(printPreview.map((i) => i.emp_id)))}
+                className="px-3 py-1.5 text-xs font-bold border border-indigo-200 text-indigo-600 rounded-lg hover:bg-indigo-50 cursor-pointer"
+              >
+                全選
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedPrintEmpIds(new Set())}
+                className="px-3 py-1.5 text-xs font-bold border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
+                不全選
+              </button>
+            </div>
+            <div className="overflow-x-auto border border-indigo-100 rounded-xl">
+              <table className="w-full text-sm">
+                <thead className="bg-indigo-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left"></th>
+                    <th className="px-4 py-2 text-left">員工編號</th>
+                    <th className="px-4 py-2 text-left">姓名</th>
+                    <th className="px-4 py-2 text-left">部門</th>
+                    <th className="px-4 py-2 text-left">計畫</th>
+                    <th className="px-4 py-2 text-right">分數</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {printPreview.map((item, idx) => (
+                    <tr key={`${item.emp_id}-${item.plan_id}-${idx}`} className="border-t even:bg-gray-100">
+                      <td className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedPrintEmpIds.has(item.emp_id)}
+                          onChange={(e) => {
+                            const next = new Set(selectedPrintEmpIds);
+                            if (e.target.checked) next.add(item.emp_id);
+                            else next.delete(item.emp_id);
+                            setSelectedPrintEmpIds(next);
+                          }}
+                        />
+                      </td>
+                      <td className="px-4 py-2">{item.emp_id}</td>
+                      <td className="px-4 py-2">{item.name}</td>
+                      <td className="px-4 py-2">{item.dept_name}</td>
+                      <td className="px-4 py-2">{item.plan_title}</td>
+                      <td className="px-4 py-2 text-right">{item.total_score}</td>
+                    </tr>
+                  ))}
+                  {printPreview.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-400">尚未載入預覽資料</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* KPI 詳細資訊 Modal */}

@@ -82,6 +82,37 @@ def update_question_bank(
         
     return db_q
 
+@router.delete("/bulk-delete")
+def bulk_delete_question_bank(
+    question_ids: List[int] = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam")
+):
+    """題庫批次刪除"""
+    ids = list({qid for qid in question_ids if isinstance(qid, int)})
+    if not ids:
+        raise HTTPException(status_code=400, detail="question_ids 不可為空")
+
+    existing = db.query(models.QuestionBank).filter(models.QuestionBank.id.in_(ids)).all()
+    existing_map = {q.id: q for q in existing}
+    missing_ids = [qid for qid in ids if qid not in existing_map]
+    deleted_count = 0
+
+    try:
+        for qid in ids:
+            q = existing_map.get(qid)
+            if not q:
+                continue
+            db.delete(q)
+            deleted_count += 1
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"批次刪除失敗: {str(e)}")
+
+    return {"deleted_count": deleted_count, "missing_ids": missing_ids}
+
+
 @router.delete("/{id}")
 def delete_question_bank(
     id: int,

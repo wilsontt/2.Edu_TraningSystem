@@ -64,6 +64,7 @@ const ExamStudio = () => {
     // 題目清單分頁狀態
     const [questionPage, setQuestionPage] = useState(1);
     const [questionPageSize, setQuestionPageSize] = useState(10);
+    const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<number>>(new Set());
 
     useEffect(() => {
         fetchPlans();
@@ -248,6 +249,22 @@ const ExamStudio = () => {
         }
     };
 
+    const handleBulkDeleteQuestions = async () => {
+        const ids = Array.from(selectedQuestionIds);
+        if (ids.length === 0) return;
+        if (!window.confirm(`確定要刪除已選取的 ${ids.length} 題嗎？`)) return;
+        try {
+            await api.delete('/admin/exams/questions/bulk-delete', {
+                data: { question_ids: ids }
+            });
+            setSelectedQuestionIds(new Set());
+            if (selectedPlanId) fetchQuestions(selectedPlanId);
+        } catch (err) {
+            console.error(err);
+            alert('批次刪除失敗');
+        }
+    };
+
     const onDrop = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -308,6 +325,7 @@ const ExamStudio = () => {
     // 當選擇不同計畫時，重置題目分頁
     useEffect(() => {
         setQuestionPage(1);
+        setSelectedQuestionIds(new Set());
     }, [selectedPlanId, questionPageSize]);
 
     if (mode === 'bank') {
@@ -615,18 +633,42 @@ const ExamStudio = () => {
                                             <Check className="w-5 h-5 text-green-500" />
                                             已匯入題庫 ({questions.length})
                                         </h3>
-                                        <button 
-                                            onClick={() => setShowImportModal(true)}
-                                            disabled={isSelectedPlanLocked}
-                                            className={`text-sm font-bold px-3 py-1.5 rounded-lg transition-all duration-200 flex items-center gap-1 border cursor-pointer ${
-                                                isSelectedPlanLocked
-                                                    ? 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed'
-                                                    : 'text-indigo-600 hover:bg-indigo-50 border-indigo-200'
-                                            }`}
-                                        >
-                                            <Download className="w-4 h-4" />
-                                            從題庫匯入
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedQuestionIds(new Set(questions.map(q => q.id)))}
+                                                className="text-xs font-bold px-2 py-1 rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50 cursor-pointer"
+                                            >
+                                                全選
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedQuestionIds(new Set())}
+                                                className="text-xs font-bold px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 cursor-pointer"
+                                            >
+                                                不全選
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleBulkDeleteQuestions}
+                                                disabled={selectedQuestionIds.size === 0 || isSelectedPlanLocked}
+                                                className="text-xs font-bold px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                            >
+                                                批次刪除 ({selectedQuestionIds.size})
+                                            </button>
+                                            <button
+                                                onClick={() => setShowImportModal(true)}
+                                                disabled={isSelectedPlanLocked}
+                                                className={`text-sm font-bold px-3 py-1.5 rounded-lg transition-all duration-200 flex items-center gap-1 border cursor-pointer ${
+                                                    isSelectedPlanLocked
+                                                        ? 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed'
+                                                        : 'text-indigo-600 hover:bg-indigo-50 border-indigo-200'
+                                                }`}
+                                            >
+                                                <Download className="w-4 h-4" />
+                                                從題庫匯入
+                                            </button>
+                                        </div>
                                     </div>
                                     {isLoadingQuestions ? (
                                         <div className="text-center py-8 text-gray-400"><Loader2 className="w-5 h-5 animate-spin mx-auto text-indigo-600"/></div>
@@ -642,7 +684,18 @@ const ExamStudio = () => {
                                                 return (
                                                 <div key={q.id} className="p-4 transition-all duration-200 group even:bg-gray-100 hover:bg-indigo-50/30 cursor-pointer">
                                                     <div className="flex justify-between items-start mb-2">
-                                                        <div className="flex gap-2">
+                                                        <div className="flex gap-2 items-center">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedQuestionIds.has(q.id)}
+                                                                onChange={(e) => {
+                                                                    const next = new Set(selectedQuestionIds);
+                                                                    if (e.target.checked) next.add(q.id);
+                                                                    else next.delete(q.id);
+                                                                    setSelectedQuestionIds(next);
+                                                                }}
+                                                                className="w-4 h-4"
+                                                            />
                                                             <span className="inline-block px-2 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded">
                                                                 {q.question_type === 'true_false' ? '是非題' : q.question_type === 'multiple' ? '多選題' : '單選題'}
                                                             </span>

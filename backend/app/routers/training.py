@@ -383,12 +383,17 @@ def get_attendance_stats(
                 item["absence_reason_code"] = absence_reasons[user.emp_id]["reason_code"]
                 item["absence_reason_text"] = absence_reasons[user.emp_id]["reason_text"]
             not_checked_in_users.append(item)
+
+    leave_count = sum(1 for u in not_checked_in_users if u.get("absence_reason_code"))
+    absent_without_reason_count = len(not_checked_in_users) - leave_count
     
     return {
         "plan_id": plan_id,
         "expected_count": expected_count,
         "actual_count": actual_count,
         "attendance_rate": round(attendance_rate, 2),
+        "leave_count": leave_count,
+        "absent_without_reason_count": absent_without_reason_count,
         "checked_in_users": checked_in_users,
         "not_checked_in_users": not_checked_in_users
     }

@@ -377,6 +377,42 @@ def update_question(
         raise HTTPException(status_code=400, detail="更新失敗")
     return db_q
 
+@router.delete("/questions/bulk-delete")
+def bulk_delete_questions(
+    body: schemas.BulkDeleteQuestionsRequest,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam")
+):
+    """
+    批次刪除指定題目（考卷工坊）
+    """
+    ids = list({qid for qid in body.question_ids if isinstance(qid, int)})
+    if not ids:
+        raise HTTPException(status_code=400, detail="question_ids 不可為空")
+
+    existing_questions = db.query(models.Question).filter(models.Question.id.in_(ids)).all()
+    existing_map = {q.id: q for q in existing_questions}
+    missing_ids = [qid for qid in ids if qid not in existing_map]
+
+    deleted_count = 0
+    try:
+        for qid in ids:
+            q = existing_map.get(qid)
+            if not q:
+                continue
+            db.delete(q)
+            deleted_count += 1
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"批次刪除失敗: {str(e)}")
+
+    return {
+        "deleted_count": deleted_count,
+        "missing_ids": missing_ids
+    }
+
+
 @router.delete("/questions/{question_id}")
 def delete_question(
     question_id: int,

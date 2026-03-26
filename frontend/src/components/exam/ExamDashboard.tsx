@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BookOpen, Clock, CheckCircle, AlertCircle, ChevronRight, Loader2, GraduationCap } from 'lucide-react';
+import { BookOpen, Clock, CheckCircle, AlertCircle, ChevronRight, Loader2, GraduationCap, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api';
 import CheckInButton from './CheckInButton';
@@ -19,6 +19,9 @@ const ExamDashboard = () => {
     const navigate = useNavigate();
     const [exams, setExams] = useState<ExamItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [pendingStartExamId, setPendingStartExamId] = useState<number | null>(null);
+    const [showNotCheckedInModal, setShowNotCheckedInModal] = useState(false);
+    const [quickCheckInLoading, setQuickCheckInLoading] = useState(false);
 
     useEffect(() => {
         fetchExams();
@@ -74,7 +77,37 @@ const ExamDashboard = () => {
         }
     };
 
+    const handleStartExam = async (planId: number) => {
+        try {
+            const res = await api.get(`/exam/plan/${planId}/attendance/status`);
+            if (res.data?.is_checked_in) {
+                navigate(`/exam/run/${planId}`);
+                return;
+            }
+            setPendingStartExamId(planId);
+            setShowNotCheckedInModal(true);
+        } catch {
+            // 若檢查失敗，仍交由 ExamRunner 防呆
+            navigate(`/exam/run/${planId}`);
+        }
+    };
+
+    const handleQuickCheckIn = async () => {
+        if (!pendingStartExamId) return;
+        try {
+            setQuickCheckInLoading(true);
+            await api.post(`/exam/plan/${pendingStartExamId}/attendance/checkin`);
+            setShowNotCheckedInModal(false);
+            navigate(`/exam/run/${pendingStartExamId}`);
+        } catch (err: any) {
+            alert(err?.response?.data?.detail || '報到失敗，請稍後再試');
+        } finally {
+            setQuickCheckInLoading(false);
+        }
+    };
+
     return (
+        <>
         <div className="max-w-6xl mx-auto p-6 space-y-8">
             <header className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
@@ -158,7 +191,7 @@ const ExamDashboard = () => {
                             {(exam.status === 'active' || (exam.status === 'completed' && (exam.score !== null && exam.score < 60))) && (
                                 <div 
                                     onClick={() => {
-                                        navigate(`/exam/run/${exam.plan_id}`);
+                                        void handleStartExam(exam.plan_id);
                                     }}
                                     className="mt-4 pt-4 border-t border-indigo-100/50 cursor-pointer text-center font-bold text-sm transition-all duration-200 py-2 rounded-lg hover:bg-green-50 text-green-600 hover:text-green-700"
                                 >
@@ -170,6 +203,43 @@ const ExamDashboard = () => {
                 </div>
             )}
         </div>
+        {showNotCheckedInModal && (
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                    <div className="px-5 py-4 border-b border-indigo-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
+                        <h3 className="font-black text-gray-900">尚未完成報到</h3>
+                        <button
+                            type="button"
+                            onClick={() => setShowNotCheckedInModal(false)}
+                            className="p-1.5 rounded-lg hover:bg-white/80 cursor-pointer"
+                        >
+                            <X className="w-4 h-4 text-gray-500" />
+                        </button>
+                    </div>
+                    <div className="px-5 py-4 text-sm text-gray-700 leading-relaxed">
+                        此訓練尚未報到，請先完成報到再開始考試。是否立即報到？
+                    </div>
+                    <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setShowNotCheckedInModal(false)}
+                            className="px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer"
+                        >
+                            取消
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleQuickCheckIn}
+                            disabled={quickCheckInLoading}
+                            className="px-3 py-2 text-sm rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                            {quickCheckInLoading ? '報到中...' : '立即報到'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 };
 

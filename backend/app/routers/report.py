@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_, or_, extract, select, text, Integer
 from typing import List, Optional
@@ -8,6 +8,43 @@ from ..database import get_db
 from .auth import check_permission
 
 router = APIRouter(prefix="/admin/reports", tags=["reports"])
+
+DEPT_SCOPED_JOB_TITLES = {"主管", "稽核"}
+GLOBAL_ACCESS_JOB_TITLES = {"總稽核"}
+GLOBAL_ACCESS_ROLES = {"Admin", "ADMIN", "System Admin", "系統管理", "系統管理者", "業務"}
+
+
+def _is_global_report_user(current_user: models.User) -> bool:
+    role_name = current_user.role.name if current_user and current_user.role else ""
+    if role_name in GLOBAL_ACCESS_ROLES:
+        return True
+    job_title_name = current_user.job_title.name if current_user and current_user.job_title else ""
+    return job_title_name in GLOBAL_ACCESS_JOB_TITLES
+
+
+def _is_dept_scoped_report_user(current_user: models.User) -> bool:
+    job_title_name = current_user.job_title.name if current_user and current_user.job_title else ""
+    return job_title_name in DEPT_SCOPED_JOB_TITLES
+
+
+def _get_report_scope_emp_ids(db: Session, current_user: models.User):
+    if _is_global_report_user(current_user):
+        return None
+    if _is_dept_scoped_report_user(current_user):
+        if current_user.dept_id is None:
+            return []
+        rows = db.query(models.User.emp_id).filter(models.User.dept_id == current_user.dept_id).all()
+        return [r[0] for r in rows]
+    # 其餘角色採最小權限：僅本人
+    return [current_user.emp_id]
+
+
+def _apply_emp_scope(query, emp_ids):
+    if emp_ids is None:
+        return query
+    if not emp_ids:
+        return query.filter(text("1=0"))
+    return query.filter(models.ExamRecord.emp_id.in_(emp_ids))
 
 # --- 總覽統計 ---
 @router.get("/overview")
@@ -84,6 +121,8 @@ def get_overview_statistics(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"時間篩選參數錯誤: {str(e)}")
     
+    emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
+
     # 本月時間範圍
     month_start_dt = datetime(current_year, current_month, 1, 0, 0, 0)
     if current_month == 12:
@@ -94,6 +133,7 @@ def get_overview_statistics(
     # 基礎查詢（套用時間篩選，只查詢有 submit_time 的記錄）
     try:
         base_query = db.query(models.ExamRecord).filter(models.ExamRecord.submit_time.isnot(None))
+        base_query = _apply_emp_scope(base_query, emp_scope_ids)
         if time_filter:
             base_query = base_query.filter(time_filter)
         
@@ -144,7 +184,7 @@ def get_overview_statistics(
     ).count()
     
     # 本月應考人次
-    monthly_records = db.query(models.ExamRecord).filter(
+    monthly_records = _apply_emp_scope(db.query(models.ExamRecord), emp_scope_ids).filter(
         and_(
             models.ExamRecord.submit_time >= month_start_dt,
             models.ExamRecord.submit_time <= month_end_dt
@@ -177,7 +217,7 @@ def get_overview_statistics(
     # 找出已完成考試的人員（有 ExamRecord 且 is_passed=True）
     completed_user_ids = set()
     for plan in active_plans:
-        records = db.query(models.ExamRecord).filter(
+        records = _apply_emp_scope(db.query(models.ExamRecord), emp_scope_ids).filter(
             models.ExamRecord.plan_id == plan.id,
             models.ExamRecord.is_passed == True
         ).all()
@@ -251,6 +291,7 @@ def get_department_statistics(
       - 部門成長率（與上期相比）
     """
     try:
+        emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
         # 計算時間篩選條件
         time_filter = None
         if year and month:
@@ -298,6 +339,10 @@ def get_department_statistics(
         ).join(models.User, models.Department.id == models.User.dept_id)\
          .join(models.ExamRecord, models.User.emp_id == models.ExamRecord.emp_id)\
          .filter(models.ExamRecord.submit_time.isnot(None))
+        if emp_scope_ids is not None:
+            if not emp_scope_ids:
+                return []
+            base_query = base_query.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
         
         if time_filter:
             base_query = base_query.filter(time_filter)
@@ -315,6 +360,8 @@ def get_department_statistics(
                 models.User.dept_id == r.id,
                 models.ExamRecord.submit_time.isnot(None)
             )
+            if emp_scope_ids is not None:
+                dept_records_query = dept_records_query.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
             if time_filter:
                 dept_records_query = dept_records_query.filter(time_filter)
             
@@ -333,7 +380,10 @@ def get_department_statistics(
             # 進階分析
             if include_advanced:
                 # 計算完成率
-                dept_users = db.query(models.User).filter(models.User.dept_id == r.id).count()
+                dept_users_query = db.query(models.User).filter(models.User.dept_id == r.id)
+                if emp_scope_ids is not None:
+                    dept_users_query = dept_users_query.filter(models.User.emp_id.in_(emp_scope_ids))
+                dept_users = dept_users_query.count()
                 completed_users = len(set(record.emp_id for record in dept_records if record.is_passed == True))
                 completion_rate = (completed_users / dept_users * 100) if dept_users > 0 else 0
                 stat["completion_rate"] = round(completion_rate, 1)
@@ -448,6 +498,8 @@ def get_department_statistics(
                         models.ExamRecord.submit_time.isnot(None),
                         prev_filter
                     ).all()
+                    if emp_scope_ids is not None:
+                        prev_records = [pr for pr in prev_records if pr.emp_id in emp_scope_ids]
                     
                     if prev_records:
                         prev_avg = sum(r.total_score for r in prev_records) / len(prev_records)
@@ -485,14 +537,19 @@ def get_plan_statistics(db: Session = Depends(get_db), current_user = check_perm
     各訓練計畫統計列表
     """
     try:
+        emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
         results = db.query(
             models.TrainingPlan.title,
             models.TrainingPlan.training_date,
             func.count(models.ExamRecord.id).label("count"),
             func.avg(models.ExamRecord.total_score).label("avg_score"),
             func.sum(case((models.ExamRecord.is_passed == True, 1), else_=0)).label("passed_count")
-        ).join(models.ExamRecord, models.TrainingPlan.id == models.ExamRecord.plan_id)\
-         .group_by(models.TrainingPlan.id).all()
+        ).join(models.ExamRecord, models.TrainingPlan.id == models.ExamRecord.plan_id)
+        if emp_scope_ids is not None:
+            if not emp_scope_ids:
+                return []
+            results = results.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
+        results = results.group_by(models.TrainingPlan.id).all()
 
         stats = []
         for r in results:
@@ -526,6 +583,7 @@ def get_trends_data(
     - 應考人次趨勢
     """
     now = datetime.now()
+    emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
     results = []
     
     for i in range(months - 1, -1, -1):
@@ -541,12 +599,14 @@ def get_trends_data(
         month_end_dt = datetime.combine(month_end, datetime.max.time())
         
         # 查詢該月的考試記錄
-        month_records = db.query(models.ExamRecord).filter(
+        month_query = db.query(models.ExamRecord)
+        month_query = _apply_emp_scope(month_query, emp_scope_ids).filter(
             and_(
                 models.ExamRecord.submit_time >= month_start_dt,
                 models.ExamRecord.submit_time <= month_end_dt
             )
-        ).all()
+        )
+        month_records = month_query.all()
         
         if month_records:
             total_count = len(month_records)
@@ -581,6 +641,7 @@ def get_department_comparison(
     - 各部門完成率對比
     """
     try:
+        emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
         # 取得各部門統計（不使用 case()，改用 Python 邏輯計算）
         dept_stats = db.query(
             models.Department.id,
@@ -588,8 +649,12 @@ def get_department_comparison(
             func.count(models.ExamRecord.id).label("count"),
             func.avg(models.ExamRecord.total_score).label("avg_score")
         ).join(models.User, models.Department.id == models.User.dept_id)\
-         .join(models.ExamRecord, models.User.emp_id == models.ExamRecord.emp_id)\
-         .group_by(models.Department.id).all()
+         .join(models.ExamRecord, models.User.emp_id == models.ExamRecord.emp_id)
+        if emp_scope_ids is not None:
+            if not emp_scope_ids:
+                return []
+            dept_stats = dept_stats.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
+        dept_stats = dept_stats.group_by(models.Department.id).all()
         
         results = []
         for r in dept_stats:
@@ -601,18 +666,26 @@ def get_department_comparison(
             ).filter(
                 models.User.dept_id == r.id
             ).all()
+            if emp_scope_ids is not None:
+                dept_records = [dr for dr in dept_records if dr.emp_id in emp_scope_ids]
             
             passed = sum(1 for record in dept_records if record.is_passed == True)
             pass_rate = (passed / total * 100) if total > 0 else 0
             
             # 計算完成率（該部門已完成考試的人數 / 應考人數）
-            dept_users = db.query(models.User).filter(models.User.dept_id == r.id).count()
+            dept_users_query = db.query(models.User).filter(models.User.dept_id == r.id)
+            if emp_scope_ids is not None:
+                dept_users_query = dept_users_query.filter(models.User.emp_id.in_(emp_scope_ids))
+            dept_users = dept_users_query.count()
             completed_users = db.query(models.ExamRecord).join(
                 models.User, models.ExamRecord.emp_id == models.User.emp_id
             ).filter(
                 models.User.dept_id == r.id,
                 models.ExamRecord.is_passed == True
-            ).distinct(models.ExamRecord.emp_id).count()
+            )
+            if emp_scope_ids is not None:
+                completed_users = completed_users.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
+            completed_users = completed_users.distinct(models.ExamRecord.emp_id).count()
             
             completion_rate = (completed_users / dept_users * 100) if dept_users > 0 else 0
             
@@ -649,6 +722,7 @@ def get_department_details(
     - 支援分頁
     """
     try:
+        emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
         # 檢查部門是否存在
         dept = db.query(models.Department).filter(models.Department.id == dept_id).first()
         if not dept:
@@ -673,6 +747,10 @@ def get_department_details(
             models.User.dept_id == dept_id,
             models.ExamRecord.submit_time.isnot(None)
         )
+        if emp_scope_ids is not None:
+            if not emp_scope_ids:
+                return {"dept_id": dept_id, "dept_name": dept.name, "total": 0, "page": page, "page_size": page_size, "total_pages": 0, "records": []}
+            base_query = base_query.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
         
         # 排序
         if sort_by == "score":
@@ -733,6 +811,7 @@ def get_plan_popularity(
     - 各計畫平均分數排行
     """
     try:
+        emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
         # 取得各計畫統計（不包括已封存的計畫）
         plan_stats = db.query(
             models.TrainingPlan.id,
@@ -740,8 +819,12 @@ def get_plan_popularity(
             func.count(models.ExamRecord.id).label("count"),
             func.avg(models.ExamRecord.total_score).label("avg_score")
         ).join(models.ExamRecord, models.TrainingPlan.id == models.ExamRecord.plan_id)\
-         .filter(models.TrainingPlan.is_archived == False)\
-         .group_by(models.TrainingPlan.id)\
+         .filter(models.TrainingPlan.is_archived == False)
+        if emp_scope_ids is not None:
+            if not emp_scope_ids:
+                return {"popularity_ranking": [], "score_ranking": []}
+            plan_stats = plan_stats.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
+        plan_stats = plan_stats.group_by(models.TrainingPlan.id)\
          .order_by(func.count(models.ExamRecord.id).desc())\
          .limit(limit).all()
         
@@ -788,6 +871,7 @@ def get_plan_details(
     - 支援分頁
     """
     try:
+        emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
         # 檢查計畫是否存在
         plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
         if not plan:
@@ -811,6 +895,10 @@ def get_plan_details(
             models.ExamRecord.plan_id == plan_id,
             models.ExamRecord.submit_time.isnot(None)
         )
+        if emp_scope_ids is not None:
+            if not emp_scope_ids:
+                return {"plan_id": plan_id, "plan_title": plan.title, "total": 0, "page": page, "page_size": page_size, "total_pages": 0, "records": []}
+            base_query = base_query.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
         
         # 排序
         if sort_by == "score":
@@ -869,6 +957,7 @@ def get_active_exams(
     - 進行中考試列表（含到期時間）
     """
     today = date.today()
+    emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
     
     # 找出所有有效的訓練計畫（今天在 training_date 和 end_date 之間，不包括已封存的）
     active_plans = db.query(models.TrainingPlan).filter(
@@ -893,7 +982,12 @@ def get_active_exams(
         completed_count = db.query(models.ExamRecord).filter(
             models.ExamRecord.plan_id == plan.id,
             models.ExamRecord.is_passed == True
-        ).distinct(models.ExamRecord.emp_id).count()
+        )
+        if emp_scope_ids is not None:
+            completed_count = completed_count.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
+        completed_count = completed_count.distinct(models.ExamRecord.emp_id).count()
+        if emp_scope_ids is not None:
+            target_user_count = len([u for dept in plan.target_departments for u in dept.users if u.emp_id in emp_scope_ids])
         
         results.append({
             "plan_id": plan.id,
@@ -922,6 +1016,7 @@ def get_expiring_soon(
     - 即將到期考試列表
     """
     today = date.today()
+    emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
     expiry_date = today + timedelta(days=days)
     
     # 找出即將到期的訓練計畫（不包括已封存的）
@@ -945,7 +1040,12 @@ def get_expiring_soon(
         completed_count = db.query(models.ExamRecord).filter(
             models.ExamRecord.plan_id == plan.id,
             models.ExamRecord.is_passed == True
-        ).distinct(models.ExamRecord.emp_id).count()
+        )
+        if emp_scope_ids is not None:
+            completed_count = completed_count.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
+        completed_count = completed_count.distinct(models.ExamRecord.emp_id).count()
+        if emp_scope_ids is not None:
+            target_user_count = len([u for dept in plan.target_departments for u in dept.users if u.emp_id in emp_scope_ids])
         
         remaining_days = (plan.end_date - today).days
         
@@ -978,9 +1078,11 @@ def get_retake_needed(
     - 補考提醒資訊
     """
     # 找出所有未通過的考試記錄
-    failed_records = db.query(models.ExamRecord).filter(
+    emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
+    failed_query = db.query(models.ExamRecord).filter(
         models.ExamRecord.is_passed == False
-    ).all()
+    )
+    failed_records = _apply_emp_scope(failed_query, emp_scope_ids).all()
     
     # 按人員分組，找出每個人員需要補考的計畫
     retake_map = {}
@@ -1230,7 +1332,11 @@ def register_chinese_fonts():
         return _registered_chinese_font
 
 @router.get("/export/pdf")
-def export_pdf(plan_id: Optional[int] = None, db: Session = Depends(get_db)): # current_user removed for easy browser testing
+def export_pdf(
+    plan_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report")
+):
     """
     導出成績單 PDF（支援中文顯示，跨平台）
     內容從上往下排列，不置中
@@ -1251,17 +1357,20 @@ def export_pdf(plan_id: Optional[int] = None, db: Session = Depends(get_db)): # 
     y -= 40
 
     # 查詢資料
+    emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
+
     if plan_id:
         plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
         if plan:
             title = f"訓練計畫：{plan.title}"
-            records = db.query(models.ExamRecord).filter(models.ExamRecord.plan_id == plan_id).order_by(models.ExamRecord.submit_time.desc()).all()
+            records_query = db.query(models.ExamRecord).filter(models.ExamRecord.plan_id == plan_id)
+            records = _apply_emp_scope(records_query, emp_scope_ids).order_by(models.ExamRecord.submit_time.desc()).all()
         else:
             title = "未知計畫"
             records = []
     else:
         title = "全部計畫總覽"
-        records = db.query(models.ExamRecord).order_by(models.ExamRecord.submit_time.desc()).all()
+        records = _apply_emp_scope(db.query(models.ExamRecord), emp_scope_ids).order_by(models.ExamRecord.submit_time.desc()).all()
 
     # 計畫標題
     p.setFont(chinese_font, 12)
@@ -1333,4 +1442,152 @@ def export_pdf(plan_id: Optional[int] = None, db: Session = Depends(get_db)): # 
         buffer, 
         media_type="application/pdf", 
         headers={"Content-Disposition": "attachment; filename=report.pdf"}
+    )
+
+
+@router.post("/print/preview")
+def report_print_preview(
+    scope: str = Body("plan"),
+    dept_ids: List[int] = Body(default=[]),
+    plan_ids: List[int] = Body(default=[]),
+    emp_ids: List[str] = Body(default=[]),
+    include_employee_signature: bool = Body(False),
+    include_exam_history: bool = Body(False),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report")
+):
+    allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
+    base_query = db.query(
+        models.ExamRecord.emp_id,
+        models.User.name,
+        models.Department.name.label("dept_name"),
+        models.ExamRecord.plan_id,
+        models.TrainingPlan.title.label("plan_title"),
+        models.ExamRecord.total_score,
+        models.ExamRecord.is_passed,
+        models.ExamRecord.submit_time
+    ).join(models.User, models.ExamRecord.emp_id == models.User.emp_id)\
+     .join(models.Department, models.User.dept_id == models.Department.id)\
+     .join(models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id)
+
+    if allowed_emp_ids is not None:
+        if not allowed_emp_ids:
+            return {"total": 0, "items": [], "options": {"include_employee_signature": include_employee_signature, "include_exam_history": include_exam_history}}
+        base_query = base_query.filter(models.ExamRecord.emp_id.in_(allowed_emp_ids))
+
+    if scope == "department" and dept_ids:
+        base_query = base_query.filter(models.User.dept_id.in_(dept_ids))
+    if scope == "plan" and plan_ids:
+        base_query = base_query.filter(models.ExamRecord.plan_id.in_(plan_ids))
+    if emp_ids:
+        base_query = base_query.filter(models.ExamRecord.emp_id.in_(emp_ids))
+
+    rows = base_query.order_by(models.ExamRecord.submit_time.desc()).all()
+    items = [{
+        "emp_id": r.emp_id,
+        "name": r.name,
+        "dept_name": r.dept_name,
+        "plan_id": r.plan_id,
+        "plan_title": r.plan_title,
+        "total_score": r.total_score,
+        "is_passed": r.is_passed,
+        "submit_time": r.submit_time.isoformat() if r.submit_time else None
+    } for r in rows]
+    return {
+        "total": len(items),
+        "items": items,
+        "options": {
+            "include_employee_signature": include_employee_signature,
+            "include_exam_history": include_exam_history
+        }
+    }
+
+
+@router.post("/print/pdf")
+def report_print_pdf(
+    scope: str = Body("plan"),
+    dept_ids: List[int] = Body(default=[]),
+    plan_ids: List[int] = Body(default=[]),
+    emp_ids: List[str] = Body(default=[]),
+    include_employee_signature: bool = Body(False),
+    include_exam_history: bool = Body(False),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report")
+):
+    preview = report_print_preview(
+        scope=scope,
+        dept_ids=dept_ids,
+        plan_ids=plan_ids,
+        emp_ids=emp_ids,
+        include_employee_signature=include_employee_signature,
+        include_exam_history=include_exam_history,
+        db=db,
+        current_user=current_user
+    )
+
+    chinese_font = register_chinese_fonts()
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    y = height - 40
+    p.setFont(chinese_font, 16)
+    p.drawString(40, y, "教育訓練成績列印")
+    y -= 24
+    p.setFont(chinese_font, 10)
+    p.drawString(40, y, f"筆數：{preview['total']}  簽名欄：{'是' if include_employee_signature else '否'}  歷程：{'是' if include_exam_history else '否'}")
+    y -= 20
+
+    headers = ["員工編號", "姓名", "部門", "計畫", "分數", "結果", "時間"]
+    x_positions = [40, 95, 150, 230, 370, 410, 450]
+    p.setFont(chinese_font, 9)
+    for i, h in enumerate(headers):
+        p.drawString(x_positions[i], y, h)
+    y -= 14
+    p.line(40, y + 8, width - 40, y + 8)
+    y -= 8
+
+    for row in preview["items"]:
+        if y < 50:
+            p.showPage()
+            y = height - 40
+            p.setFont(chinese_font, 9)
+            for i, h in enumerate(headers):
+                p.drawString(x_positions[i], y, h)
+            y -= 14
+            p.line(40, y + 8, width - 40, y + 8)
+            y -= 8
+
+        submit_time = row["submit_time"][:16].replace("T", " ") if row["submit_time"] else "-"
+        p.drawString(x_positions[0], y, str(row["emp_id"])[:8])
+        p.drawString(x_positions[1], y, str(row["name"])[:6])
+        p.drawString(x_positions[2], y, str(row["dept_name"])[:6])
+        p.drawString(x_positions[3], y, str(row["plan_title"])[:18])
+        p.drawString(x_positions[4], y, str(row["total_score"]))
+        p.drawString(x_positions[5], y, "通過" if row["is_passed"] else "未通過")
+        p.drawString(x_positions[6], y, submit_time)
+        y -= 14
+        if include_employee_signature:
+            p.drawString(80, y, "簽名：________________")
+            y -= 14
+
+        if include_exam_history:
+            history_rows = db.query(models.ExamHistory).join(models.ExamRecord, models.ExamHistory.record_id == models.ExamRecord.id).filter(
+                models.ExamRecord.emp_id == row["emp_id"],
+                models.ExamRecord.plan_id == row["plan_id"]
+            ).order_by(models.ExamHistory.submit_time.asc()).all()
+            for h in history_rows[:5]:
+                if y < 50:
+                    p.showPage()
+                    y = height - 40
+                    p.setFont(chinese_font, 9)
+                htime = h.submit_time.strftime("%Y-%m-%d %H:%M") if h.submit_time else "-"
+                p.drawString(95, y, f"歷程 {htime} / {h.total_score} / {'通過' if h.is_passed else '未通過'}")
+                y -= 12
+
+    p.save()
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=report_print.pdf"}
     )
