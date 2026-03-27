@@ -296,6 +296,8 @@ class AttendanceStats(BaseModel):
     expected_count: int  # 應到人數
     actual_count: int    # 實到人數
     attendance_rate: float  # 出席率
+    leave_count: int = 0  # 請假人數
+    absent_without_reason_count: int = 0  # 未到（未填原因）
     checked_in_users: List[dict] = []  # 已報到用戶列表
     not_checked_in_users: List[dict] = []  # 未報到用戶列表
 
@@ -309,6 +311,13 @@ class CalculatedAttendance(BaseModel):
 class AbsenceReasonUpdate(BaseModel):
     """未報到原因：填寫/更新"""
     emp_id: str
+    reason_code: str  # sick_leave, business_trip, official_leave, other
+    reason_text: Optional[str] = None  # 選 other 時必填
+
+
+class AbsenceReasonBulkUpdate(BaseModel):
+    """未報到原因：批次填寫/更新"""
+    emp_ids: List[str]
     reason_code: str  # sick_leave, business_trip, official_leave, other
     reason_text: Optional[str] = None  # 選 other 時必填
 

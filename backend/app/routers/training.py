@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Request, Query
+from fastapi import APIRouter, HTTPException, Depends, Request, Query, Body
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_, and_
 from typing import List, Optional
@@ -7,9 +7,13 @@ import qrcode
 import base64
 import os
 from io import BytesIO
+from fastapi.responses import StreamingResponse
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission, check_any_permission
+from ..access_scope import get_scope_emp_ids, intersect_emp_ids
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -278,53 +282,63 @@ def get_attendance_stats(
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
     
-    # 計算實到人數
-    actual_count = db.query(func.count(models.AttendanceRecord.id)).filter(
+    # 依 Hybrid 規則取得可視名單（None=all）
+    visible_emp_ids = get_scope_emp_ids(db, current_user, active_only=True)
+
+    # 收集該計畫應到名單（部門 + 個人受課對象）
+    all_target_user_ids = set()
+    if plan.target_departments:
+        dept_ids = [dept.id for dept in plan.target_departments]
+        dept_users = db.query(models.User).filter(
+            models.User.dept_id.in_(dept_ids),
+            models.User.status == "active"
+        ).all()
+        for user in dept_users:
+            all_target_user_ids.add(user.emp_id)
+    if plan.target_users:
+        for user in plan.target_users:
+            if user.status == "active":
+                all_target_user_ids.add(user.emp_id)
+
+    # 套用可視範圍
+    scoped_target_user_ids = intersect_emp_ids(all_target_user_ids, visible_emp_ids)
+
+    # 計算實到人數（依可視範圍）
+    checked_in_count_query = db.query(func.count(models.AttendanceRecord.id)).filter(
         models.AttendanceRecord.plan_id == plan_id
-    ).scalar() or 0
-    
-    # 取得應到人數（如果未設定則計算）
-    if plan.expected_attendance is not None:
+    )
+    if visible_emp_ids is not None:
+        if not visible_emp_ids:
+            actual_count = 0
+        else:
+            checked_in_count_query = checked_in_count_query.filter(models.AttendanceRecord.emp_id.in_(visible_emp_ids))
+            actual_count = checked_in_count_query.scalar() or 0
+    else:
+        actual_count = checked_in_count_query.scalar() or 0
+
+    # 應到人數：
+    # - 全域可視且有手動設定時，沿用 expected_attendance
+    # - 其餘情境（部門/個人範圍）用可視名單計算，避免卡片統計口徑不一致
+    if visible_emp_ids is None and plan.expected_attendance is not None:
         expected_count = plan.expected_attendance
     else:
-        # 根據受課對象部門和個人自動計算
-        expected_count = 0
-        
-        # 計算部門人數
-        if plan.target_departments:
-            dept_ids = [dept.id for dept in plan.target_departments]
-            dept_user_count = db.query(func.count(models.User.emp_id)).filter(
-                models.User.dept_id.in_(dept_ids),
-                models.User.status == "active"
-            ).scalar() or 0
-            expected_count += dept_user_count
-        
-        # 計算個人受課對象人數（排除已在部門中的）
-        if plan.target_users:
-            # 如果沒有部門，直接計算個人數量
-            if not plan.target_departments:
-                expected_count = len([u for u in plan.target_users if u.status == "active"])
-            else:
-                # 如果有部門，只計算不在部門中的個人
-                dept_ids = [dept.id for dept in plan.target_departments]
-                dept_user_ids = set(
-                    db.query(models.User.emp_id).filter(
-                        models.User.dept_id.in_(dept_ids),
-                        models.User.status == "active"
-                    ).all()
-                )
-                dept_user_ids = {uid[0] for uid in dept_user_ids}
-                # 計算個人受課對象中不在部門的
-                personal_count = len([u for u in plan.target_users if u.status == "active" and u.emp_id not in dept_user_ids])
-                expected_count += personal_count
+        expected_count = len(scoped_target_user_ids)
     
     # 計算出席率
     attendance_rate = (actual_count / expected_count * 100) if expected_count > 0 else 0.0
     
     # 取得已報到用戶列表
-    checked_in_records = db.query(models.AttendanceRecord).filter(
+    checked_in_records_query = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.plan_id == plan_id
-    ).join(models.User, models.AttendanceRecord.emp_id == models.User.emp_id).all()
+    )
+    if visible_emp_ids is not None:
+        if visible_emp_ids:
+            checked_in_records_query = checked_in_records_query.filter(models.AttendanceRecord.emp_id.in_(visible_emp_ids))
+        else:
+            checked_in_records_query = checked_in_records_query.filter(False)
+    checked_in_records = checked_in_records_query.join(
+        models.User, models.AttendanceRecord.emp_id == models.User.emp_id
+    ).all()
     
     checked_in_users = []
     checked_in_emp_ids = set()
@@ -340,27 +354,10 @@ def get_attendance_stats(
     
     # 取得未報到用戶列表
     not_checked_in_users = []
-    all_target_user_ids = set()
-    
-    # 從部門取得用戶
-    if plan.target_departments:
-        dept_ids = [dept.id for dept in plan.target_departments]
-        dept_users = db.query(models.User).filter(
-            models.User.dept_id.in_(dept_ids),
-            models.User.status == "active"
-        ).all()
-        for user in dept_users:
-            all_target_user_ids.add(user.emp_id)
-    
-    # 從個人受課對象取得用戶
-    if plan.target_users:
-        for user in plan.target_users:
-            if user.status == "active":
-                all_target_user_ids.add(user.emp_id)
-    
+
     # 取得所有目標用戶
     all_target_users = db.query(models.User).filter(
-        models.User.emp_id.in_(list(all_target_user_ids)),
+        models.User.emp_id.in_(list(scoped_target_user_ids)),
         models.User.status == "active"
     ).all()
     
@@ -436,9 +433,23 @@ def update_absence_reason(
         raise HTTPException(status_code=403, detail="僅部門主管（同部門）、擁有報到總覽權限者、或 Admin、系統管理者可填寫未報到原因")
     if body.reason_code == "other" and not (body.reason_text or "").strip():
         raise HTTPException(status_code=400, detail="選擇「其他」時請填寫原因說明")
-    allowed_codes = {"sick_leave", "business_trip", "official_leave", "other"}
+    allowed_codes = {"sick_leave", "business_trip", "official_leave", "other", "cancel_leave"}
     if body.reason_code not in allowed_codes:
         raise HTTPException(status_code=400, detail="無效的未到原因代碼")
+    if body.reason_code == "cancel_leave":
+        existing = db.query(models.AttendanceAbsenceReason).filter(
+            models.AttendanceAbsenceReason.plan_id == plan_id,
+            models.AttendanceAbsenceReason.emp_id == body.emp_id
+        ).first()
+        if existing:
+            db.delete(existing)
+            try:
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                raise HTTPException(status_code=500, detail=f"取消請假失敗：{str(e)}")
+        refreshed_stats = get_attendance_stats(plan_id=plan_id, db=db, current_user=current_user)
+        return {"success": True, "stats": refreshed_stats}
     existing = db.query(models.AttendanceAbsenceReason).filter(
         models.AttendanceAbsenceReason.plan_id == plan_id,
         models.AttendanceAbsenceReason.emp_id == body.emp_id
@@ -462,7 +473,231 @@ def update_absence_reason(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"儲存未到原因失敗：{str(e)}")
-    return {"success": True}
+    refreshed_stats = get_attendance_stats(plan_id=plan_id, db=db, current_user=current_user)
+    return {"success": True, "stats": refreshed_stats}
+
+
+@router.put("/plans/{plan_id}/attendance/absence-reason/bulk")
+def update_absence_reason_bulk(
+    plan_id: int,
+    body: schemas.AbsenceReasonBulkUpdate,
+    db: Session = Depends(get_db),
+    current_user=check_any_permission(["menu:plan", "menu:attendance-overview"]),
+):
+    """批次填寫/更新未報到原因。"""
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    if plan.is_archived:
+        raise HTTPException(status_code=400, detail="已封存的訓練計畫無法編輯未到原因")
+
+    allowed_codes = {"sick_leave", "business_trip", "official_leave", "other", "cancel_leave"}
+    if body.reason_code not in allowed_codes:
+        raise HTTPException(status_code=400, detail="無效的未到原因代碼")
+    if body.reason_code == "other" and not (body.reason_text or "").strip():
+        raise HTTPException(status_code=400, detail="選擇「其他」時請填寫原因說明")
+    if not body.emp_ids:
+        raise HTTPException(status_code=400, detail="請至少提供一位未報到人員")
+
+    # 取得可編輯範圍內且確實未報到的人員
+    valid_emp_ids = []
+    for emp_id in set(body.emp_ids):
+        if not _can_edit_absence_reason(current_user, emp_id, db):
+            continue
+        checked_in = db.query(models.AttendanceRecord.id).filter(
+            models.AttendanceRecord.plan_id == plan_id,
+            models.AttendanceRecord.emp_id == emp_id
+        ).first()
+        if checked_in:
+            continue
+        target_user = db.query(models.User).filter(models.User.emp_id == emp_id).first()
+        if not target_user or target_user.status != "active":
+            continue
+        valid_emp_ids.append(emp_id)
+
+    if not valid_emp_ids:
+        raise HTTPException(status_code=400, detail="沒有可更新的未報到人員（可能已報到或無權限）")
+
+    try:
+        now = datetime.utcnow()
+        updated_count = 0
+        for emp_id in valid_emp_ids:
+            existing = db.query(models.AttendanceAbsenceReason).filter(
+                models.AttendanceAbsenceReason.plan_id == plan_id,
+                models.AttendanceAbsenceReason.emp_id == emp_id
+            ).first()
+            if body.reason_code == "cancel_leave":
+                if existing:
+                    db.delete(existing)
+            elif existing:
+                existing.reason_code = body.reason_code
+                existing.reason_text = body.reason_text
+                existing.recorded_by = current_user.emp_id
+                existing.recorded_at = now
+            else:
+                db.add(models.AttendanceAbsenceReason(
+                    plan_id=plan_id,
+                    emp_id=emp_id,
+                    reason_code=body.reason_code,
+                    reason_text=body.reason_text,
+                    recorded_by=current_user.emp_id
+                ))
+            updated_count += 1
+        db.commit()
+        refreshed_stats = get_attendance_stats(plan_id=plan_id, db=db, current_user=current_user)
+        return {"success": True, "updated_count": updated_count, "stats": refreshed_stats}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"批次儲存未到原因失敗：{str(e)}")
+
+
+@router.post("/plans/{plan_id}/attendance/print/pdf")
+def print_attendance_list_pdf(
+    plan_id: int,
+    attendance_filter: str = Body("expected"),  # expected | actual | absent | leave
+    include_signature: bool = Body(False),
+    db: Session = Depends(get_db),
+    current_user=check_any_permission(["menu:plan", "menu:attendance-overview"]),
+):
+    """
+    依目前報到卡片篩選輸出「報到清單」，統計與名單口徑直接使用 get_attendance_stats。
+    """
+    if attendance_filter not in {"expected", "actual", "absent", "leave"}:
+        raise HTTPException(status_code=400, detail="無效的清單篩選條件")
+
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+
+    stats = get_attendance_stats(plan_id=plan_id, db=db, current_user=current_user)
+    checked_in_users = stats["checked_in_users"]
+    not_checked_in_users = stats["not_checked_in_users"]
+    leave_count = stats["leave_count"]
+    absent_without_reason_count = stats["absent_without_reason_count"]
+
+    if attendance_filter == "expected":
+        rows = [
+            *[{"kind": "actual", **u} for u in checked_in_users],
+            *[{"kind": "absent", **u} for u in not_checked_in_users],
+        ]
+    elif attendance_filter == "actual":
+        rows = [{"kind": "actual", **u} for u in checked_in_users]
+    elif attendance_filter == "absent":
+        rows = [{"kind": "absent", **u} for u in not_checked_in_users if not u.get("absence_reason_code")]
+    else:
+        rows = [{"kind": "absent", **u} for u in not_checked_in_users if u.get("absence_reason_code")]
+
+    # 共用報表字體註冊
+    from .report import register_chinese_fonts
+    chinese_font = register_chinese_fonts()
+
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    y = height - 36
+
+    # Title
+    p.setFont(chinese_font, 16)
+    p.drawString(36, y, f"{plan.title} 教育訓練 報到清單")
+    y -= 20
+
+    p.setFont(chinese_font, 10)
+    p.drawString(
+        36, y,
+        f"應到 {stats['expected_count']} 人   實到 {stats['actual_count']} 人   "
+        f"未到 {absent_without_reason_count} 人   請假 {leave_count} 人"
+    )
+    y -= 18
+    filter_label_map = {
+        "expected": "應到清單",
+        "actual": "實到清單",
+        "absent": "未到清單",
+        "leave": "請假清單",
+    }
+    filter_label = filter_label_map.get(attendance_filter, "目前清單")
+    p.drawString(36, y, f"清單篩選：")
+    # 篩選條件高亮
+    p.setFillColorRGB(0.93, 0.95, 1.0)
+    p.roundRect(86, y - 3, 84, 14, 3, stroke=0, fill=1)
+    p.setFillColorRGB(0.20, 0.24, 0.73)
+    p.drawString(92, y, filter_label)
+    p.setFillColorRGB(0, 0, 0)
+    p.drawString(180, y, f"筆數：{len(rows)}")
+    y -= 14
+    p.line(36, y, width - 36, y)
+    y -= 12
+
+    headers = ["ITEM", "員工編號", "姓名", "部門", "授課計劃", "報到時間", "未報到原因"]
+    x_positions = [36, 70, 130, 190, 250, 355, 455]
+    p.setFont(chinese_font, 9)
+    for i, h in enumerate(headers):
+        p.drawString(x_positions[i], y, h)
+    y -= 12
+    p.line(36, y + 6, width - 36, y + 6)
+    y -= 8
+
+    for idx, row in enumerate(rows, start=1):
+        if y < 48:
+            # 每頁底部顯示頁碼
+            p.setFont(chinese_font, 9)
+            p.drawRightString(width - 36, 24, f"第 {p.getPageNumber()} 頁")
+            p.showPage()
+            y = height - 36
+            p.setFont(chinese_font, 9)
+            for i, h in enumerate(headers):
+                p.drawString(x_positions[i], y, h)
+            y -= 12
+            p.line(36, y + 6, width - 36, y + 6)
+            y -= 8
+
+        reason_text = "-"
+        checkin_time_text = "-"
+        if row["kind"] == "actual":
+            checkin_time_text = (row.get("checkin_time") or "")[:16].replace("T", " ") or "-"
+        else:
+            code = row.get("absence_reason_code")
+            text = row.get("absence_reason_text") or ""
+            reason_map = {
+                "sick_leave": "病假",
+                "business_trip": "出差",
+                "official_leave": "公假",
+                "other": "其他",
+            }
+            if code:
+                reason_text = reason_map.get(code, code)
+                if code == "other" and text:
+                    reason_text = f"{reason_text}:{text}"
+
+        # 隔列 Highlight
+        if idx % 2 == 0:
+            p.setFillColorRGB(0.97, 0.97, 0.99)
+            p.rect(34, y - 3, width - 68, 14, stroke=0, fill=1)
+            p.setFillColorRGB(0, 0, 0)
+
+        p.drawString(x_positions[0], y, str(idx))
+        p.drawString(x_positions[1], y, str(row.get("emp_id", ""))[:10])
+        p.drawString(x_positions[2], y, str(row.get("name", ""))[:8])
+        p.drawString(x_positions[3], y, str(row.get("dept_name", ""))[:8])
+        p.drawString(x_positions[4], y, str(plan.title)[:14])
+        p.drawString(x_positions[5], y, checkin_time_text)
+        p.drawString(x_positions[6], y, reason_text[:18])
+        y -= 14
+
+        if include_signature:
+            p.drawString(90, y, "簽名：________________")
+            y -= 14
+
+    # 最末頁頁碼
+    p.setFont(chinese_font, 9)
+    p.drawRightString(width - 36, 24, f"第 {p.getPageNumber()} 頁")
+
+    p.save()
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=attendance_{plan_id}.pdf"}
+    )
 
 
 @router.put("/plans/{plan_id}/expected-attendance")

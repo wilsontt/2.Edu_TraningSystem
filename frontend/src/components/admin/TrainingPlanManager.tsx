@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import { Plus, Calendar, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Archive, MoreVertical } from 'lucide-react';
 import api from '../../api';
 import Pagination from '../common/Pagination';
+import BulkAbsenceReasonModal from '../attendance/BulkAbsenceReasonModal';
 
 interface SubCategory {
   id: number;
@@ -50,6 +51,8 @@ interface AttendanceStats {
   expected_count: number;
   actual_count: number;
   attendance_rate: number;
+  leave_count?: number;
+  absent_without_reason_count?: number;
   checked_in_users: Array<{
     emp_id: string;
     name: string;
@@ -65,7 +68,34 @@ interface AttendanceStats {
   }>;
 }
 
+interface AbsenceReasonUpdateResponse {
+  success: boolean;
+  updated_count?: number;
+  stats?: AttendanceStats;
+}
+
 type AttendanceListFilter = 'expected' | 'actual' | 'absent' | 'leave';
+
+const getCardClass = (isActive: boolean, palette: 'indigo' | 'green' | 'orange' | 'purple') => {
+  if (palette === 'indigo') {
+    return isActive
+      ? 'bg-indigo-100 border-2 border-indigo-500 ring-2 ring-indigo-300 shadow-md shadow-indigo-200'
+      : 'bg-indigo-50 border border-indigo-200';
+  }
+  if (palette === 'green') {
+    return isActive
+      ? 'bg-green-100 border-2 border-green-500 ring-2 ring-green-300 shadow-md shadow-green-200'
+      : 'bg-green-50 border border-green-200';
+  }
+  if (palette === 'orange') {
+    return isActive
+      ? 'bg-orange-100 border-2 border-orange-500 ring-2 ring-orange-300 shadow-md shadow-orange-200'
+      : 'bg-orange-50 border border-orange-200';
+  }
+  return isActive
+    ? 'bg-purple-100 border-2 border-purple-500 ring-2 ring-purple-300 shadow-md shadow-purple-200'
+    : 'bg-purple-50 border border-purple-200';
+};
 
 type AttendanceListItem =
   | (AttendanceStats['checked_in_users'][number] & { kind: 'actual' })
@@ -76,6 +106,7 @@ const ABSENCE_REASON_OPTIONS: Array<{ code: string; label: string }> = [
   { code: 'business_trip', label: '出差' },
   { code: 'official_leave', label: '公假' },
   { code: 'other', label: '其他' },
+  { code: 'cancel_leave', label: '取消請假' },
 ];
 
 const TrainingPlanManager = () => {
@@ -133,6 +164,7 @@ const TrainingPlanManager = () => {
     reasonCode: string;
     reasonText: string;
   } | null>(null);
+  const [bulkAbsenceReasonOpen, setBulkAbsenceReasonOpen] = useState(false);
   const [savingAbsenceReason, setSavingAbsenceReason] = useState(false);
 
   // 排序狀態
@@ -890,10 +922,10 @@ const TrainingPlanManager = () => {
                           {openActionMenu === plan.id && (
                             <>
                               <div 
-                                className="fixed inset-0 z-[90]" 
+                                className="fixed inset-0 z-90" 
                                 onClick={() => setOpenActionMenu(null)}
                               />
-                              <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border-2 border-gray-300 z-[100] py-1">
+                              <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border-2 border-gray-300 z-100 py-1">
                                 {!plan.is_archived && (
                                   <button
                                     onClick={(e) => {
@@ -1468,8 +1500,8 @@ const TrainingPlanManager = () => {
                 const stats = attendanceStats[selectedPlanId];
                 const modalPlan = plans.find(p => p.id === selectedPlanId) ?? null;
                 const absenceReasonReadOnly = Boolean(modalPlan?.is_archived) || activeTab === 'archived';
-                const absentWithoutReasonCount = stats.not_checked_in_users.filter((u) => !u.absence_reason_code).length;
-                const leaveCount = stats.not_checked_in_users.filter((u) => !!u.absence_reason_code).length;
+                const absentWithoutReasonCount = stats.absent_without_reason_count ?? stats.not_checked_in_users.filter((u) => !u.absence_reason_code).length;
+                const leaveCount = stats.leave_count ?? stats.not_checked_in_users.filter((u) => !!u.absence_reason_code).length;
                 
                 return (
                   <>
@@ -1478,11 +1510,7 @@ const TrainingPlanManager = () => {
                       <button
                         type="button"
                         onClick={() => setSelectedAttendanceFilter('expected')}
-                        className={`p-4 rounded-xl border text-left cursor-pointer ${
-                          selectedAttendanceFilter === 'expected'
-                            ? 'bg-indigo-100 border-indigo-300'
-                            : 'bg-indigo-50 border-indigo-200'
-                        }`}
+                        className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'expected', 'indigo')}`}
                       >
                         <div className="text-sm font-bold text-indigo-600 mb-1">應到人數</div>
                         <div className="text-2xl font-black text-indigo-800">{stats.expected_count}</div>
@@ -1491,11 +1519,7 @@ const TrainingPlanManager = () => {
                       <button
                         type="button"
                         onClick={() => setSelectedAttendanceFilter('actual')}
-                        className={`p-4 rounded-xl border text-left cursor-pointer ${
-                          selectedAttendanceFilter === 'actual'
-                            ? 'bg-green-100 border-green-300'
-                            : 'bg-green-50 border-green-200'
-                        }`}
+                        className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'actual', 'green')}`}
                       >
                         <div className="text-sm font-bold text-green-600 mb-1">實到人數</div>
                         <div className="text-2xl font-black text-green-800">{stats.actual_count}</div>
@@ -1504,11 +1528,7 @@ const TrainingPlanManager = () => {
                       <button
                         type="button"
                         onClick={() => setSelectedAttendanceFilter('absent')}
-                        className={`p-4 rounded-xl border text-left cursor-pointer ${
-                          selectedAttendanceFilter === 'absent'
-                            ? 'bg-orange-100 border-orange-300'
-                            : 'bg-orange-50 border-orange-200'
-                        }`}
+                        className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'absent', 'orange')}`}
                       >
                         <div className="text-sm font-bold text-orange-600 mb-1">未到人數</div>
                         <div className="text-2xl font-black text-orange-800">{absentWithoutReasonCount}</div>
@@ -1517,11 +1537,7 @@ const TrainingPlanManager = () => {
                       <button
                         type="button"
                         onClick={() => setSelectedAttendanceFilter('leave')}
-                        className={`p-4 rounded-xl border text-left cursor-pointer ${
-                          selectedAttendanceFilter === 'leave'
-                            ? 'bg-purple-100 border-purple-300'
-                            : 'bg-purple-50 border-purple-200'
-                        }`}
+                        className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'leave', 'purple')}`}
                       >
                         <div className="text-sm font-bold text-purple-600 mb-1">請假人數</div>
                         <div className="text-2xl font-black text-purple-800">{leaveCount}</div>
@@ -1714,6 +1730,17 @@ const TrainingPlanManager = () => {
                           {selectedAttendanceFilter === 'absent' && `未到清單 (${absentWithoutReasonCount})`}
                           {selectedAttendanceFilter === 'leave' && `請假清單 (${leaveCount})`}
                         </h4>
+                        {!absenceReasonReadOnly && (selectedAttendanceFilter === 'absent' || selectedAttendanceFilter === 'leave') && (
+                          <div className="mb-3 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setBulkAbsenceReasonOpen(true)}
+                              className="px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 cursor-pointer"
+                            >
+                              一鍵填寫多人請假原因
+                            </button>
+                          </div>
+                        )}
 
                         <div className="border border-gray-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
                           <table className="w-full text-sm">
@@ -1834,7 +1861,7 @@ const TrainingPlanManager = () => {
 
       {/* 未報到原因編輯 Modal */}
       {absenceReasonEdit && selectedPlanId && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="p-4 border-b border-indigo-100 bg-indigo-50/50">
               <h3 className="text-lg font-black text-gray-900">填寫未報到原因 - {absenceReasonEdit.name}</h3>
@@ -1881,12 +1908,16 @@ const TrainingPlanManager = () => {
                   if (!absenceReasonEdit || !selectedPlanId) return;
                   setSavingAbsenceReason(true);
                   try {
-                    await api.put(`/training/plans/${selectedPlanId}/attendance/absence-reason`, {
+                    const updateRes = await api.put<AbsenceReasonUpdateResponse>(`/training/plans/${selectedPlanId}/attendance/absence-reason`, {
                       emp_id: absenceReasonEdit.empId,
                       reason_code: absenceReasonEdit.reasonCode,
                       reason_text: absenceReasonEdit.reasonCode === 'other' ? absenceReasonEdit.reasonText : undefined,
                     });
-                    await fetchAttendanceStats(selectedPlanId);
+                    if (updateRes.data.stats) {
+                      setAttendanceStats(prev => ({ ...prev, [selectedPlanId]: updateRes.data.stats as AttendanceStats }));
+                    } else {
+                      await fetchAttendanceStats(selectedPlanId);
+                    }
                     setAbsenceReasonEdit(null);
                   } catch (err: unknown) {
                     if (err instanceof AxiosError) {
@@ -1905,6 +1936,38 @@ const TrainingPlanManager = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {bulkAbsenceReasonOpen && selectedPlanId && attendanceStats[selectedPlanId] && (
+        <BulkAbsenceReasonModal
+          users={
+            selectedAttendanceFilter === 'leave'
+              ? attendanceStats[selectedPlanId].not_checked_in_users.filter((u) => !!u.absence_reason_code)
+              : attendanceStats[selectedPlanId].not_checked_in_users.filter((u) => !u.absence_reason_code)
+          }
+          busy={savingAbsenceReason}
+          onClose={() => setBulkAbsenceReasonOpen(false)}
+          onSubmit={async (payload) => {
+            setSavingAbsenceReason(true);
+            try {
+              const updateRes = await api.put<AbsenceReasonUpdateResponse>(`/training/plans/${selectedPlanId}/attendance/absence-reason/bulk`, payload);
+              if (updateRes.data.stats) {
+                setAttendanceStats(prev => ({ ...prev, [selectedPlanId]: updateRes.data.stats as AttendanceStats }));
+              } else {
+                await fetchAttendanceStats(selectedPlanId);
+              }
+              setBulkAbsenceReasonOpen(false);
+            } catch (err: unknown) {
+              if (err instanceof AxiosError) {
+                alert(err.response?.data?.detail || '批次儲存失敗');
+              } else {
+                alert('批次儲存失敗');
+              }
+            } finally {
+              setSavingAbsenceReason(false);
+            }
+          }}
+        />
       )}
 
       {/* Delete Confirmation Modal */}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart3, Loader2, X } from 'lucide-react';
 import api from '../../api';
+import BulkAbsenceReasonModal from './BulkAbsenceReasonModal';
 
 interface PlanSummary {
   id: number;
@@ -29,14 +30,42 @@ interface AttendanceStats {
   }>;
 }
 
+interface AbsenceReasonUpdateResponse {
+  success: boolean;
+  updated_count?: number;
+  stats?: AttendanceStats;
+}
+
 const ABSENCE_REASON_OPTIONS: Array<{ code: string; label: string }> = [
   { code: 'sick_leave', label: '病假' },
   { code: 'business_trip', label: '出差' },
   { code: 'official_leave', label: '公假' },
   { code: 'other', label: '其他' },
+  { code: 'cancel_leave', label: '取消請假' },
 ];
 
 type TabStatus = 'active' | 'expired' | 'archived';
+
+const getCardClass = (isActive: boolean, palette: 'indigo' | 'green' | 'orange' | 'purple') => {
+  if (palette === 'indigo') {
+    return isActive
+      ? 'bg-indigo-100 border-2 border-indigo-500 ring-2 ring-indigo-300 shadow-md shadow-indigo-200'
+      : 'bg-indigo-50 border border-indigo-200';
+  }
+  if (palette === 'green') {
+    return isActive
+      ? 'bg-green-100 border-2 border-green-500 ring-2 ring-green-300 shadow-md shadow-green-200'
+      : 'bg-green-50 border border-green-200';
+  }
+  if (palette === 'orange') {
+    return isActive
+      ? 'bg-orange-100 border-2 border-orange-500 ring-2 ring-orange-300 shadow-md shadow-orange-200'
+      : 'bg-orange-50 border border-orange-200';
+  }
+  return isActive
+    ? 'bg-purple-100 border-2 border-purple-500 ring-2 ring-purple-300 shadow-md shadow-purple-200'
+    : 'bg-purple-50 border border-purple-200';
+};
 
 /**
  * 報到總覽：與訓練計畫管理相同分頁（正在進行中／已過期／已封存），表格含操作欄可查看報到統計。
@@ -52,6 +81,10 @@ const AttendanceOverviewPage = () => {
   const [absenceReasonEdit, setAbsenceReasonEdit] = useState<{
     empId: string;
     name: string;
+    reasonCode: string;
+    reasonText: string;
+  } | null>(null);
+  const [bulkAbsenceReasonEdit, setBulkAbsenceReasonEdit] = useState<{
     reasonCode: string;
     reasonText: string;
   } | null>(null);
@@ -77,12 +110,9 @@ const AttendanceOverviewPage = () => {
       return;
     }
     try {
-      const res = await api.post('/admin/reports/print/pdf', {
-        scope: 'plan',
-        plan_ids: [modalStats.plan_id],
-        emp_ids: targetList.map((x) => x.emp_id),
-        include_employee_signature: false,
-        include_exam_history: false,
+      const res = await api.post(`/training/plans/${modalStats.plan_id}/attendance/print/pdf`, {
+        attendance_filter: selectedAttendanceFilter,
+        include_signature: false,
       }, { responseType: 'blob' });
       const url = window.URL.createObjectURL(res.data);
       const a = document.createElement('a');
@@ -92,7 +122,7 @@ const AttendanceOverviewPage = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (err: unknown) {
+    } catch {
       alert('列印失敗');
     }
   };
@@ -176,7 +206,7 @@ const AttendanceOverviewPage = () => {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <header className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+        <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
           <BarChart3 className="w-7 h-7 text-white" />
         </div>
         <div>
@@ -257,7 +287,7 @@ const AttendanceOverviewPage = () => {
       {modalPlanId && modalPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-purple-50">
+            <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-linear-to-r from-indigo-50 to-purple-50">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-indigo-600" />
                 報到統計 - {modalPlan.title}
@@ -289,7 +319,7 @@ const AttendanceOverviewPage = () => {
                     <button
                       type="button"
                       onClick={() => setSelectedAttendanceFilter('expected')}
-                      className={`p-4 rounded-xl border text-left cursor-pointer ${selectedAttendanceFilter === 'expected' ? 'bg-indigo-100 border-indigo-300' : 'bg-indigo-50 border-indigo-200'}`}
+                      className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'expected', 'indigo')}`}
                     >
                       <div className="text-sm font-bold text-indigo-600 mb-1">應到人數</div>
                       <div className="text-2xl font-black text-indigo-800">{modalStats.expected_count}</div>
@@ -297,7 +327,7 @@ const AttendanceOverviewPage = () => {
                     <button
                       type="button"
                       onClick={() => setSelectedAttendanceFilter('actual')}
-                      className={`p-4 rounded-xl border text-left cursor-pointer ${selectedAttendanceFilter === 'actual' ? 'bg-green-100 border-green-300' : 'bg-green-50 border-green-200'}`}
+                      className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'actual', 'green')}`}
                     >
                       <div className="text-sm font-bold text-green-600 mb-1">實到人數</div>
                       <div className="text-2xl font-black text-green-800">{modalStats.actual_count}</div>
@@ -305,7 +335,7 @@ const AttendanceOverviewPage = () => {
                     <button
                       type="button"
                       onClick={() => setSelectedAttendanceFilter('absent')}
-                      className={`p-4 rounded-xl border text-left cursor-pointer ${selectedAttendanceFilter === 'absent' ? 'bg-orange-100 border-orange-300' : 'bg-orange-50 border-orange-200'}`}
+                      className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'absent', 'orange')}`}
                     >
                       <div className="text-sm font-bold text-orange-600 mb-1">未到人數</div>
                       <div className="text-2xl font-black text-orange-800">{modalStats.absent_without_reason_count ?? Math.max(0, modalStats.expected_count - modalStats.actual_count)}</div>
@@ -313,7 +343,7 @@ const AttendanceOverviewPage = () => {
                     <button
                       type="button"
                       onClick={() => setSelectedAttendanceFilter('leave')}
-                      className={`p-4 rounded-xl border text-left cursor-pointer ${selectedAttendanceFilter === 'leave' ? 'bg-purple-100 border-purple-300' : 'bg-purple-50 border-purple-200'}`}
+                      className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'leave', 'purple')}`}
                     >
                       <div className="text-sm font-bold text-purple-600 mb-1">請假人數</div>
                       <div className="text-2xl font-black text-purple-800">{modalStats.leave_count ?? 0}</div>
@@ -321,12 +351,23 @@ const AttendanceOverviewPage = () => {
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <h4 className="text-sm font-bold text-gray-700 mb-2">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <h4 className="text-sm font-bold text-gray-700">
                         {selectedAttendanceFilter === 'expected' && `應到清單 (${modalStats.expected_count})`}
                         {selectedAttendanceFilter === 'actual' && `實到清單 (${modalStats.checked_in_users.length})`}
-                        {selectedAttendanceFilter === 'absent' && `未到清單 (${modalStats.not_checked_in_users.filter(u => !u.absence_reason_code).length})`}
-                        {selectedAttendanceFilter === 'leave' && `請假清單 (${modalStats.not_checked_in_users.filter(u => u.absence_reason_code).length})`}
-                      </h4>
+                        {selectedAttendanceFilter === 'absent' && `未到清單 (${modalStats.absent_without_reason_count ?? modalStats.not_checked_in_users.filter(u => !u.absence_reason_code).length})`}
+                        {selectedAttendanceFilter === 'leave' && `請假清單 (${modalStats.leave_count ?? modalStats.not_checked_in_users.filter(u => u.absence_reason_code).length})`}
+                        </h4>
+                        {!absenceReasonReadOnly && (selectedAttendanceFilter === 'absent' || selectedAttendanceFilter === 'leave') && (
+                          <button
+                            type="button"
+                            onClick={() => setBulkAbsenceReasonEdit({ reasonCode: '', reasonText: '' })}
+                            className="px-2.5 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 cursor-pointer"
+                          >
+                            一鍵填寫多人請假原因
+                          </button>
+                        )}
+                      </div>
                       <div className="border border-gray-200 rounded-xl overflow-hidden">
                         <table className="w-full text-sm">
                           <thead className="bg-gray-50">
@@ -418,7 +459,7 @@ const AttendanceOverviewPage = () => {
 
       {/* 未報到原因編輯 Modal */}
       {absenceReasonEdit && modalPlanId && !absenceReasonReadOnly && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="p-4 border-b border-indigo-100 bg-indigo-50/50">
               <h3 className="text-lg font-black text-gray-900">填寫未報到原因 - {absenceReasonEdit.name}</h3>
@@ -461,13 +502,20 @@ const AttendanceOverviewPage = () => {
                   if (!absenceReasonEdit || !modalPlanId) return;
                   setSavingAbsenceReason(true);
                   try {
-                    await api.put(`/training/plans/${modalPlanId}/attendance/absence-reason`, {
+                    const updateRes = await api.put<AbsenceReasonUpdateResponse>(`/training/plans/${modalPlanId}/attendance/absence-reason`, {
                       emp_id: absenceReasonEdit.empId,
                       reason_code: absenceReasonEdit.reasonCode,
                       reason_text: absenceReasonEdit.reasonCode === 'other' ? absenceReasonEdit.reasonText : undefined,
                     });
-                    const res = await api.get<AttendanceStats>(`/training/plans/${modalPlanId}/attendance/stats`);
-                    setModalStats(res.data);
+                    const latestStats = updateRes.data.stats;
+                    if (latestStats) {
+                      setModalStats(latestStats);
+                      setStatsMap(prev => ({ ...prev, [modalPlanId]: latestStats }));
+                    } else {
+                      const res = await api.get<AttendanceStats>(`/training/plans/${modalPlanId}/attendance/stats`);
+                      setModalStats(res.data);
+                      setStatsMap(prev => ({ ...prev, [modalPlanId]: res.data }));
+                    }
                     setAbsenceReasonEdit(null);
                   } catch (err: unknown) {
                     alert(err && typeof err === 'object' && 'response' in err ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail : '儲存失敗');
@@ -482,6 +530,39 @@ const AttendanceOverviewPage = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 批次未報到原因編輯 Modal */}
+      {bulkAbsenceReasonEdit && modalPlanId && modalStats && !absenceReasonReadOnly && (
+        <BulkAbsenceReasonModal
+          users={
+            selectedAttendanceFilter === 'leave'
+              ? modalStats.not_checked_in_users.filter((u) => !!u.absence_reason_code)
+              : modalStats.not_checked_in_users.filter((u) => !u.absence_reason_code)
+          }
+          busy={savingAbsenceReason}
+          onClose={() => setBulkAbsenceReasonEdit(null)}
+          onSubmit={async (payload) => {
+            setSavingAbsenceReason(true);
+            try {
+              const updateRes = await api.put<AbsenceReasonUpdateResponse>(`/training/plans/${modalPlanId}/attendance/absence-reason/bulk`, payload);
+              const latestStats = updateRes.data.stats;
+              if (latestStats) {
+                setModalStats(latestStats);
+                setStatsMap(prev => ({ ...prev, [modalPlanId]: latestStats }));
+              } else {
+                const res = await api.get<AttendanceStats>(`/training/plans/${modalPlanId}/attendance/stats`);
+                setModalStats(res.data);
+                setStatsMap(prev => ({ ...prev, [modalPlanId]: res.data }));
+              }
+              setBulkAbsenceReasonEdit(null);
+            } catch (err: unknown) {
+              alert(err && typeof err === 'object' && 'response' in err ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail : '批次儲存失敗');
+            } finally {
+              setSavingAbsenceReason(false);
+            }
+          }}
+        />
       )}
     </div>
   );

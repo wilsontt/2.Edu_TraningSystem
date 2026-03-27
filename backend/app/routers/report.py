@@ -1,50 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case, and_, or_, extract, select, text, Integer
+from sqlalchemy import func, case, and_, or_, extract, select, Integer
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission
+from ..access_scope import get_scope_emp_ids, apply_emp_scope as apply_emp_scope_field
 
 router = APIRouter(prefix="/admin/reports", tags=["reports"])
 
-DEPT_SCOPED_JOB_TITLES = {"主管", "稽核"}
-GLOBAL_ACCESS_JOB_TITLES = {"總稽核"}
-GLOBAL_ACCESS_ROLES = {"Admin", "ADMIN", "System Admin", "系統管理", "系統管理者", "業務"}
-
-
-def _is_global_report_user(current_user: models.User) -> bool:
-    role_name = current_user.role.name if current_user and current_user.role else ""
-    if role_name in GLOBAL_ACCESS_ROLES:
-        return True
-    job_title_name = current_user.job_title.name if current_user and current_user.job_title else ""
-    return job_title_name in GLOBAL_ACCESS_JOB_TITLES
-
-
-def _is_dept_scoped_report_user(current_user: models.User) -> bool:
-    job_title_name = current_user.job_title.name if current_user and current_user.job_title else ""
-    return job_title_name in DEPT_SCOPED_JOB_TITLES
-
-
 def _get_report_scope_emp_ids(db: Session, current_user: models.User):
-    if _is_global_report_user(current_user):
-        return None
-    if _is_dept_scoped_report_user(current_user):
-        if current_user.dept_id is None:
-            return []
-        rows = db.query(models.User.emp_id).filter(models.User.dept_id == current_user.dept_id).all()
-        return [r[0] for r in rows]
-    # 其餘角色採最小權限：僅本人
-    return [current_user.emp_id]
+    return get_scope_emp_ids(db, current_user, active_only=False)
 
 
 def _apply_emp_scope(query, emp_ids):
-    if emp_ids is None:
-        return query
-    if not emp_ids:
-        return query.filter(text("1=0"))
-    return query.filter(models.ExamRecord.emp_id.in_(emp_ids))
+    return apply_emp_scope_field(query, models.ExamRecord.emp_id, emp_ids)
 
 # --- 總覽統計 ---
 @router.get("/overview")
