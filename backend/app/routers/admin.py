@@ -552,3 +552,96 @@ def update_role_permissions(role_id: int, update: schemas.RolePermissionUpdate, 
         raise HTTPException(status_code=400, detail="權限更新失敗")
     
     return {"message": "權限更新成功"}
+
+
+@router.get("/roles/{role_id}/department-scope", response_model=schemas.RoleDepartmentScopeResponse)
+def get_role_department_scope(
+    role_id: int,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:admin:perm"),
+):
+    """
+    取得角色資料可視範圍（角色部門權限）。
+    """
+    role = db.query(models.Role).filter(models.Role.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="角色不存在")
+
+    # Admin 永遠是所有部門（避免尚未插入 row 時 UI/Response 顯示不正確）
+    if role.name == "Admin":
+        return {
+            "role_id": role_id,
+            "scope_type": "all",
+            "dept_ids": [],
+        }
+
+    row = db.query(models.RoleDepartmentScope).filter(models.RoleDepartmentScope.role_id == role_id).first()
+    scope_depts = db.query(models.RoleDepartmentScopeDept).filter(
+        models.RoleDepartmentScopeDept.role_id == role_id
+    ).all()
+    return {
+        "role_id": role_id,
+        "scope_type": row.scope_type if row else "self",
+        "dept_ids": [r.dept_id for r in scope_depts],
+    }
+
+
+@router.put("/roles/{role_id}/department-scope", response_model=schemas.RoleDepartmentScopeResponse)
+def update_role_department_scope(
+    role_id: int,
+    update: schemas.RoleDepartmentScopeUpdate,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:admin:perm"),
+):
+    """
+    更新角色資料可視範圍（all | department | self）。
+    """
+    role = db.query(models.Role).filter(models.Role.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="角色不存在")
+
+    valid_scopes = {"all", "department", "self"}
+    scope_type = (update.scope_type or "").strip().lower()
+    if scope_type not in valid_scopes:
+        raise HTTPException(status_code=400, detail="scope_type 只能是 all / department / self")
+
+    # 保護 Admin 預設全域
+    if role.name == "Admin":
+        scope_type = "all"
+
+    # 驗證部門 ID
+    dept_ids = sorted(set(update.dept_ids or []))
+    if dept_ids:
+        existed = db.query(models.Department.id).filter(models.Department.id.in_(dept_ids)).all()
+        existed_set = {r[0] for r in existed}
+        invalid = [d for d in dept_ids if d not in existed_set]
+        if invalid:
+            raise HTTPException(status_code=400, detail=f"部門不存在: {invalid}")
+
+    row = db.query(models.RoleDepartmentScope).filter(models.RoleDepartmentScope.role_id == role_id).first()
+    if row:
+        row.scope_type = scope_type
+    else:
+        row = models.RoleDepartmentScope(role_id=role_id, scope_type=scope_type)
+        db.add(row)
+
+    # 更新角色額外可視部門
+    db.query(models.RoleDepartmentScopeDept).filter(
+        models.RoleDepartmentScopeDept.role_id == role_id
+    ).delete(synchronize_session=False)
+    if scope_type == "department" and dept_ids:
+        db.add_all(
+            [models.RoleDepartmentScopeDept(role_id=role_id, dept_id=dept_id) for dept_id in dept_ids]
+        )
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="角色部門權限更新失敗")
+
+    return {
+        "role_id": role_id,
+        "scope_type": scope_type,
+        "dept_ids": dept_ids if scope_type == "department" else [],
+    }

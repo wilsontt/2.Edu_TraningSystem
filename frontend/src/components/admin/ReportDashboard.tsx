@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Download, Users, FileText, CheckCircle, TrendingUp, AlertCircle, RefreshCw, Calendar, Timer, Target, Repeat, X, ChevronDown, ChevronRight, Filter, TrendingDown, Eye, BarChart3, Search } from "lucide-react";
 import Pagination from '../common/Pagination';
+import ScorePrintFlow from '../common/ScorePrintFlow';
 import { API_BASE_URL } from '../../api';
 import clsx from 'clsx';
 import { format } from "date-fns";
@@ -176,6 +177,12 @@ interface PrintPreviewItem {
   submit_time: string | null;
 }
 
+interface PrintPlanOption {
+  plan_id: number;
+  plan_title: string;
+  training_date: string | null;
+}
+
 export default function ReportDashboard() {
   const [overview, setOverview] = useState<OverviewStats>({
     total_exams: 0,
@@ -213,9 +220,19 @@ export default function ReportDashboard() {
   const [planDetails, setPlanDetails] = useState<Record<number, any>>({});
   const [printPreview, setPrintPreview] = useState<PrintPreviewItem[]>([]);
   const [selectedPrintEmpIds, setSelectedPrintEmpIds] = useState<Set<string>>(new Set());
+  const [printPlanOptions, setPrintPlanOptions] = useState<PrintPlanOption[]>([]);
+  const [selectedPrintPlanIds, setSelectedPrintPlanIds] = useState<Set<number>>(new Set());
+  const [printMode, setPrintMode] = useState<'list' | 'individual'>('list');
   const [includeEmployeeSignature, setIncludeEmployeeSignature] = useState(false);
   const [includeExamHistory, setIncludeExamHistory] = useState(false);
   const [printLoading, setPrintLoading] = useState(false);
+  const [printKeyword, setPrintKeyword] = useState('');
+  const [printSortKey, setPrintSortKey] = useState<
+    'emp_id' | 'name' | 'dept_name' | 'plan_title' | 'total_score'
+  >('emp_id');
+  const [printSortDir, setPrintSortDir] = useState<'asc' | 'desc'>('asc');
+  const [printPreviewPage, setPrintPreviewPage] = useState(1);
+  const [printPreviewPageSize, setPrintPreviewPageSize] = useState(10);
 
   const toggleExpandRow = async (itemId: number) => {
     if (!itemId) return;
@@ -457,6 +474,10 @@ export default function ReportDashboard() {
 
   const loadPrintPreview = async () => {
     try {
+      if (selectedPrintPlanIds.size === 0) {
+        alert('請至少選擇一個訓練計畫');
+        return;
+      }
       setPrintLoading(true);
       const token = localStorage.getItem('token');
       const baseURL = API_BASE_URL;
@@ -468,6 +489,8 @@ export default function ReportDashboard() {
         },
         body: JSON.stringify({
           scope: 'plan',
+          print_mode: printMode,
+          plan_ids: Array.from(selectedPrintPlanIds),
           include_employee_signature: includeEmployeeSignature,
           include_exam_history: includeExamHistory
         })
@@ -477,6 +500,7 @@ export default function ReportDashboard() {
       const items = (data.items || []) as PrintPreviewItem[];
       setPrintPreview(items);
       setSelectedPrintEmpIds(new Set(items.map((i) => i.emp_id)));
+      setPrintPreviewPage(1);
     } catch (error) {
       console.error('load print preview failed', error);
       alert('載入列印預覽失敗');
@@ -487,6 +511,10 @@ export default function ReportDashboard() {
 
   const exportPrintPdf = async () => {
     try {
+      if (selectedPrintPlanIds.size === 0) {
+        alert('請至少選擇一個訓練計畫');
+        return;
+      }
       if (selectedPrintEmpIds.size === 0) {
         alert('請至少選擇一位人員');
         return;
@@ -502,6 +530,8 @@ export default function ReportDashboard() {
         },
         body: JSON.stringify({
           scope: 'plan',
+          print_mode: printMode,
+          plan_ids: Array.from(selectedPrintPlanIds),
           emp_ids: Array.from(selectedPrintEmpIds),
           include_employee_signature: includeEmployeeSignature,
           include_exam_history: includeExamHistory
@@ -522,6 +552,85 @@ export default function ReportDashboard() {
       alert('成績列印失敗');
     } finally {
       setPrintLoading(false);
+    }
+  };
+
+  const fetchPrintPlanOptions = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const baseURL = API_BASE_URL;
+      const res = await fetch(`${baseURL}/admin/reports/print/plan-options`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error('load plan options failed');
+      const data = await res.json();
+      const options = (data || []) as PrintPlanOption[];
+      setPrintPlanOptions(options);
+      setSelectedPrintPlanIds(new Set(options.map((p) => p.plan_id)));
+    } catch (error) {
+      console.error('load print plan options failed', error);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'print' && printPlanOptions.length === 0) {
+      fetchPrintPlanOptions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const printProcessedRows = useMemo(() => {
+    const k = printKeyword.trim().toLowerCase();
+    let rows = [...printPreview];
+    if (k) {
+      rows = rows.filter(
+        (r) =>
+          r.emp_id.toLowerCase().includes(k) ||
+          (r.name || '').toLowerCase().includes(k) ||
+          (r.dept_name || '').toLowerCase().includes(k) ||
+          (r.plan_title || '').toLowerCase().includes(k)
+      );
+    }
+    rows.sort((a, b) => {
+      const dir = printSortDir === 'asc' ? 1 : -1;
+      if (printSortKey === 'total_score') {
+        return (a.total_score - b.total_score) * dir;
+      }
+      const va = String(a[printSortKey] ?? '');
+      const vb = String(b[printSortKey] ?? '');
+      return va.localeCompare(vb, 'zh-Hant') * dir;
+    });
+    return rows;
+  }, [printPreview, printKeyword, printSortKey, printSortDir]);
+
+  const printPreviewTotalPages = Math.max(
+    1,
+    Math.ceil(printProcessedRows.length / printPreviewPageSize) || 1
+  );
+
+  const printPaginatedRows = useMemo(() => {
+    const start = (printPreviewPage - 1) * printPreviewPageSize;
+    return printProcessedRows.slice(start, start + printPreviewPageSize);
+  }, [printProcessedRows, printPreviewPage, printPreviewPageSize]);
+
+  useEffect(() => {
+    setPrintPreviewPage(1);
+  }, [printKeyword, printSortKey, printSortDir]);
+
+  useEffect(() => {
+    if (printPreviewPage > printPreviewTotalPages) {
+      setPrintPreviewPage(printPreviewTotalPages);
+    }
+  }, [printPreviewPage, printPreviewTotalPages]);
+
+  const togglePrintSort = (key: typeof printSortKey) => {
+    if (printSortKey === key) {
+      setPrintSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setPrintSortKey(key);
+      setPrintSortDir('asc');
     }
   };
 
@@ -546,7 +655,7 @@ export default function ReportDashboard() {
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+          <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
             <BarChart3 className="w-7 h-7 text-white" />
           </div>
           <div>
@@ -1023,7 +1132,7 @@ export default function ReportDashboard() {
             </div>
           )}
           
-          <div className="p-6 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/30 to-purple-50/20">
+          <div className="p-6 border-b border-indigo-100 bg-linear-to-r from-indigo-50/30 to-purple-50/20">
             <h3 className="text-lg font-bold text-gray-900">
               {activeTab === 'department' ? '部門績效表現' : '訓練計畫成效'}
             </h3>
@@ -1031,7 +1140,7 @@ export default function ReportDashboard() {
           
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
+              <thead className="bg-linear-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
                 <tr>
                   <th className="px-6 py-4 text-left text-sm font-bold text-gray-500 w-12"></th>
                   {activeTab === 'department' && includeAdvanced && (
@@ -1364,98 +1473,140 @@ export default function ReportDashboard() {
         )}
         {activeTab === 'print' && (
           <div className="bg-white rounded-xl shadow-sm border border-indigo-100/50 overflow-hidden p-6 space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
+            <ScorePrintFlow
+              planOptions={printPlanOptions}
+              selectedPlanIds={selectedPrintPlanIds}
+              onSelectedPlanIdsChange={setSelectedPrintPlanIds}
+              printMode={printMode}
+              onPrintModeChange={setPrintMode}
+              includeEmployeeSignature={includeEmployeeSignature}
+              onIncludeEmployeeSignatureChange={setIncludeEmployeeSignature}
+              includeExamHistory={includeExamHistory}
+              onIncludeExamHistoryChange={setIncludeExamHistory}
+              onLoadPreview={loadPrintPreview}
+              onPrintPdf={exportPrintPdf}
+              printLoading={printLoading}
+              selectedEmployeeCount={selectedPrintEmpIds.size}
+              requireEmployeeSelectionForPrint
+            />
+            <p className="text-xs text-gray-500">
+              預覽表可依關鍵字篩選與排序；「列印 PDF（已選 N 人）」的 N 為勾選要列印的<strong>員工人數（去重）</strong>，與下方列數不同。
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
-                  type="checkbox"
-                  checked={includeEmployeeSignature}
-                  onChange={(e) => setIncludeEmployeeSignature(e.target.checked)}
+                  type="search"
+                  placeholder="搜尋部門、員工編號、姓名、計畫…"
+                  value={printKeyword}
+                  onChange={(e) => setPrintKeyword(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg"
                 />
-                列印員工簽名
-              </label>
-              <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={includeExamHistory}
-                  onChange={(e) => setIncludeExamHistory(e.target.checked)}
-                />
-                列印考試歷程
-              </label>
-              <button
-                type="button"
-                onClick={loadPrintPreview}
-                disabled={printLoading}
-                className="px-4 py-2 text-sm font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {printLoading ? '載入中...' : '載入預覽'}
-              </button>
-              <button
-                type="button"
-                onClick={exportPrintPdf}
-                disabled={printLoading || selectedPrintEmpIds.size === 0}
-                className="px-4 py-2 text-sm font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed cursor-pointer"
-              >
-                列印 PDF ({selectedPrintEmpIds.size})
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedPrintEmpIds(new Set(printPreview.map((i) => i.emp_id)))}
-                className="px-3 py-1.5 text-xs font-bold border border-indigo-200 text-indigo-600 rounded-lg hover:bg-indigo-50 cursor-pointer"
-              >
-                全選
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedPrintEmpIds(new Set())}
-                className="px-3 py-1.5 text-xs font-bold border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer"
-              >
-                不全選
-              </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPrintEmpIds(new Set(printPreview.map((i) => i.emp_id)))}
+                  className="px-3 py-1.5 text-xs font-bold border border-indigo-200 text-indigo-600 rounded-lg hover:bg-indigo-50 cursor-pointer"
+                >
+                  人員全選
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPrintEmpIds(new Set())}
+                  className="px-3 py-1.5 text-xs font-bold border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer"
+                >
+                  人員清除
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto border border-indigo-100 rounded-xl">
               <table className="w-full text-sm">
                 <thead className="bg-indigo-50">
                   <tr>
-                    <th className="px-4 py-2 text-left"></th>
-                    <th className="px-4 py-2 text-left">員工編號</th>
-                    <th className="px-4 py-2 text-left">姓名</th>
-                    <th className="px-4 py-2 text-left">部門</th>
-                    <th className="px-4 py-2 text-left">計畫</th>
-                    <th className="px-4 py-2 text-right">分數</th>
+                    <th className="px-3 py-2 text-left w-10"></th>
+                    <th className="px-3 py-2 text-left">ITEM序號</th>
+                    {(
+                      [
+                        ['emp_id', '員工編號'],
+                        ['name', '姓名'],
+                        ['dept_name', '部門名稱'],
+                        ['plan_title', '授課計畫名稱'],
+                        ['total_score', '成績分數'],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <th key={key} className="px-3 py-2 text-left">
+                        <button
+                          type="button"
+                          onClick={() => togglePrintSort(key)}
+                          className="font-black text-gray-800 hover:text-indigo-600 inline-flex items-center gap-1"
+                        >
+                          {label}
+                          {printSortKey === key ? (printSortDir === 'asc' ? '↑' : '↓') : ''}
+                        </button>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {printPreview.map((item, idx) => (
-                    <tr key={`${item.emp_id}-${item.plan_id}-${idx}`} className="border-t even:bg-gray-100">
-                      <td className="px-4 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedPrintEmpIds.has(item.emp_id)}
-                          onChange={(e) => {
-                            const next = new Set(selectedPrintEmpIds);
-                            if (e.target.checked) next.add(item.emp_id);
-                            else next.delete(item.emp_id);
-                            setSelectedPrintEmpIds(next);
-                          }}
-                        />
-                      </td>
-                      <td className="px-4 py-2">{item.emp_id}</td>
-                      <td className="px-4 py-2">{item.name}</td>
-                      <td className="px-4 py-2">{item.dept_name}</td>
-                      <td className="px-4 py-2">{item.plan_title}</td>
-                      <td className="px-4 py-2 text-right">{item.total_score}</td>
-                    </tr>
-                  ))}
+                  {printPaginatedRows.map((item, idx) => {
+                    const itemNo = (printPreviewPage - 1) * printPreviewPageSize + idx + 1;
+                    return (
+                      <tr
+                        key={`${item.emp_id}-${item.plan_id}-${item.submit_time}-${idx}`}
+                        className={clsx('border-t', idx % 2 === 1 ? 'bg-gray-100' : 'bg-white')}
+                      >
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedPrintEmpIds.has(item.emp_id)}
+                            onChange={(e) => {
+                              const next = new Set(selectedPrintEmpIds);
+                              if (e.target.checked) next.add(item.emp_id);
+                              else next.delete(item.emp_id);
+                              setSelectedPrintEmpIds(next);
+                            }}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-gray-600 tabular-nums">{itemNo}</td>
+                        <td className="px-3 py-2">{item.emp_id}</td>
+                        <td className="px-3 py-2">{item.name}</td>
+                        <td className="px-3 py-2">{item.dept_name}</td>
+                        <td className="px-3 py-2">{item.plan_title}</td>
+                        <td className="px-3 py-2 text-right font-bold">{item.total_score}</td>
+                      </tr>
+                    );
+                  })}
                   {printPreview.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-400">尚未載入預覽資料</td>
+                      <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                        尚未載入預覽資料
+                      </td>
+                    </tr>
+                  )}
+                  {printPreview.length > 0 && printPaginatedRows.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                        無符合篩選的資料
+                      </td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
+            {printProcessedRows.length > 0 && (
+              <Pagination
+                currentPage={printPreviewPage}
+                totalPages={printPreviewTotalPages}
+                pageSize={printPreviewPageSize}
+                totalItems={printProcessedRows.length}
+                onPageChange={setPrintPreviewPage}
+                onPageSizeChange={(size) => {
+                  setPrintPreviewPageSize(size);
+                  setPrintPreviewPage(1);
+                }}
+              />
+            )}
           </div>
         )}
       </div>
@@ -1464,7 +1615,7 @@ export default function ReportDashboard() {
       {showKPIModal && selectedKPI && (
         <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowKPIModal(false)}>
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-6 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-t-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-indigo-100 bg-linear-to-r from-indigo-50 to-purple-50 rounded-t-2xl">
               <h3 className="text-xl font-bold text-gray-900">{selectedKPI} 詳細資訊</h3>
               <button
                 onClick={() => setShowKPIModal(false)}

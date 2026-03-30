@@ -43,7 +43,7 @@ DEPARTMENT_SCOPE_JOB_TITLES = {
 }
 
 
-def resolve_data_scope(current_user: models.User) -> DataScope:
+def resolve_data_scope(current_user: models.User, db: Optional[Session] = None) -> DataScope:
     """
     Hybrid 規則：
     1) 角色優先
@@ -51,6 +51,15 @@ def resolve_data_scope(current_user: models.User) -> DataScope:
     3) 預設 self（最小權限）
     """
     role_name = (current_user.role.name if current_user and current_user.role else "").strip()
+
+    # 角色部門權限（可配置）優先
+    if db is not None and current_user and current_user.role_id:
+        scope_row = db.query(models.RoleDepartmentScope).filter(
+            models.RoleDepartmentScope.role_id == current_user.role_id
+        ).first()
+        if scope_row and scope_row.scope_type in ("all", "department", "self"):
+            return scope_row.scope_type
+
     if role_name in GLOBAL_ACCESS_ROLES:
         return "all"
     role_lower = role_name.lower()
@@ -73,14 +82,40 @@ def get_scope_emp_ids(db: Session, current_user: models.User, active_only: bool 
     - []: 無可見資料
     - [emp_id...]: 可見名單
     """
-    scope = resolve_data_scope(current_user)
+    scope = resolve_data_scope(current_user, db=db)
+    role_scope_row = None
+    selected_dept_ids: Set[int] = set()
+    if current_user and current_user.role_id:
+        role_scope_row = db.query(models.RoleDepartmentScope).filter(
+            models.RoleDepartmentScope.role_id == current_user.role_id
+        ).first()
+        if role_scope_row and role_scope_row.scope_type == "department":
+            selected_dept_ids = {
+                row[0]
+                for row in db.query(models.RoleDepartmentScopeDept.dept_id).filter(
+                    models.RoleDepartmentScopeDept.role_id == current_user.role_id
+                ).all()
+            }
+
     if scope == "all":
         return None
 
     if scope == "department":
-        if current_user.dept_id is None:
+        # 規則：
+        # 1) 登入者自己部門一定可見
+        # 2) 若角色部門權限有設定額外部門，則做聯集
+        # 3) 若該角色未設定 department row，維持舊行為（只看自己部門）
+        allowed_dept_ids: Set[int] = set()
+        if current_user.dept_id is not None:
+            allowed_dept_ids.add(current_user.dept_id)
+
+        if role_scope_row and role_scope_row.scope_type == "department":
+            allowed_dept_ids.update(selected_dept_ids)
+
+        if not allowed_dept_ids:
             return []
-        query = db.query(models.User.emp_id).filter(models.User.dept_id == current_user.dept_id)
+
+        query = db.query(models.User.emp_id).filter(models.User.dept_id.in_(allowed_dept_ids))
         if active_only:
             query = query.filter(models.User.status == "active")
         return [row[0] for row in query.all()]

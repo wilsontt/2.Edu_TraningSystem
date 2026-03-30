@@ -49,6 +49,32 @@ class Role(Base):
     name = Column(String, unique=True, index=True)
     users = relationship("User", back_populates="role")
     functions = relationship("SystemFunction", secondary=role_functions, back_populates="roles")
+    department_scopes = relationship(
+        "RoleDepartmentScope",
+        back_populates="role",
+        cascade="all, delete-orphan",
+    )
+    department_scope_departments = relationship(
+        "RoleDepartmentScopeDept",
+        back_populates="role",
+        cascade="all, delete-orphan",
+    )
+
+
+class RoleDepartmentScope(Base):
+    __tablename__ = "role_department_scope_map"
+    role_id = Column(Integer, ForeignKey("roles.id"), primary_key=True)
+    scope_type = Column(String, nullable=False, default="self")  # all | department | self
+    role = relationship("Role", back_populates="department_scopes")
+
+
+class RoleDepartmentScopeDept(Base):
+    __tablename__ = "role_department_scope_depts"
+    role_id = Column(Integer, ForeignKey("roles.id"), primary_key=True)
+    dept_id = Column(Integer, ForeignKey("departments.id"), primary_key=True)
+
+    role = relationship("Role", back_populates="department_scope_departments")
+    department = relationship("Department")
 
 class SystemFunction(Base):
     __tablename__ = "system_functions"

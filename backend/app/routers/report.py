@@ -17,6 +17,38 @@ def _get_report_scope_emp_ids(db: Session, current_user: models.User):
 def _apply_emp_scope(query, emp_ids):
     return apply_emp_scope_field(query, models.ExamRecord.emp_id, emp_ids)
 
+
+@router.get("/print/plan-options")
+def get_print_plan_options(
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report")
+):
+    """
+    成績列印可選訓練計畫（依可視範圍過濾）。
+    """
+    emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
+    query = db.query(
+        models.TrainingPlan.id,
+        models.TrainingPlan.title,
+        models.TrainingPlan.training_date
+    ).join(
+        models.ExamRecord, models.TrainingPlan.id == models.ExamRecord.plan_id
+    )
+    if emp_scope_ids is not None:
+        if not emp_scope_ids:
+            return []
+        query = query.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
+
+    rows = query.distinct(models.TrainingPlan.id).order_by(models.TrainingPlan.training_date.desc()).all()
+    return [
+        {
+            "plan_id": r.id,
+            "plan_title": r.title,
+            "training_date": r.training_date.isoformat() if r.training_date else None,
+        }
+        for r in rows
+    ]
+
 # --- 總覽統計 ---
 @router.get("/overview")
 def get_overview_statistics(
@@ -1419,6 +1451,7 @@ def export_pdf(
 @router.post("/print/preview")
 def report_print_preview(
     scope: str = Body("plan"),
+    print_mode: str = Body("list"),  # list | individual
     dept_ids: List[int] = Body(default=[]),
     plan_ids: List[int] = Body(default=[]),
     emp_ids: List[str] = Body(default=[]),
@@ -1468,15 +1501,130 @@ def report_print_preview(
         "total": len(items),
         "items": items,
         "options": {
+            "print_mode": print_mode,
             "include_employee_signature": include_employee_signature,
             "include_exam_history": include_exam_history
         }
     }
 
 
+def render_score_print_pdf_to_buffer(
+    db: Session,
+    items: List[dict],
+    print_mode: str,
+    include_employee_signature: bool,
+    include_exam_history: bool,
+) -> BytesIO:
+    """
+    產生成績列印 PDF（Admin / 個人共用）。
+    不在 PDF 標題區顯示「簽名欄／歷程」勾選狀態；僅在勾選時輸出簽名線或歷程明細。
+    """
+    chinese_font = register_chinese_fonts()
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    y = height - 40
+    p.setFont(chinese_font, 16)
+    p.drawString(40, y, "教育訓練成績列印")
+    y -= 24
+    p.setFont(chinese_font, 10)
+    p.drawString(40, y, f"筆數：{len(items)}")
+    y -= 20
+
+    headers = ["序號", "員編", "姓名", "部門", "計畫", "分數", "結果", "時間"]
+    x_positions = [40, 62, 92, 132, 168, 268, 302, 338]
+    p.setFont(chinese_font, 8)
+
+    def draw_table_header():
+        nonlocal y
+        for i, h in enumerate(headers):
+            p.drawString(x_positions[i], y, h)
+        y -= 12
+        p.line(40, y + 6, width - 40, y + 6)
+        y -= 6
+
+    draw_table_header()
+
+    row_seq = 0
+
+    def draw_data_row(row: dict, seq: int):
+        nonlocal y
+        if y < 50:
+            p.showPage()
+            y = height - 40
+            p.setFont(chinese_font, 8)
+            draw_table_header()
+        submit_time = row["submit_time"][:16].replace("T", " ") if row.get("submit_time") else "-"
+        p.drawString(x_positions[0], y, str(seq))
+        p.drawString(x_positions[1], y, str(row["emp_id"])[:10])
+        p.drawString(x_positions[2], y, str(row["name"])[:5])
+        p.drawString(x_positions[3], y, str(row["dept_name"])[:5])
+        p.drawString(x_positions[4], y, str(row["plan_title"])[:14])
+        p.drawString(x_positions[5], y, str(row["total_score"]))
+        p.drawString(x_positions[6], y, "通過" if row["is_passed"] else "未通")
+        p.drawString(x_positions[7], y, submit_time[:14])
+        y -= 12
+
+    if print_mode == "individual":
+        grouped = {}
+        for row in items:
+            grouped.setdefault(row["emp_id"], []).append(row)
+
+        for emp_id, records in grouped.items():
+            first = records[0]
+            if y < 70:
+                p.showPage()
+                y = height - 40
+                p.setFont(chinese_font, 8)
+            p.setFont(chinese_font, 10)
+            p.drawString(40, y, f"員工：{first['name']}（{emp_id}） / 部門：{first['dept_name']}")
+            y -= 14
+            p.setFont(chinese_font, 8)
+            p.line(40, y + 4, width - 40, y + 4)
+            y -= 4
+            for row in records:
+                row_seq += 1
+                draw_data_row(row, row_seq)
+            y -= 6
+    else:
+        for row in items:
+            row_seq += 1
+            draw_data_row(row, row_seq)
+            if include_employee_signature:
+                if y < 40:
+                    p.showPage()
+                    y = height - 40
+                    p.setFont(chinese_font, 8)
+                    draw_table_header()
+                p.drawString(72, y, "簽名：________________")
+                y -= 12
+
+            if include_exam_history:
+                history_rows = db.query(models.ExamHistory).join(
+                    models.ExamRecord, models.ExamHistory.record_id == models.ExamRecord.id
+                ).filter(
+                    models.ExamRecord.emp_id == row["emp_id"],
+                    models.ExamRecord.plan_id == row["plan_id"],
+                ).order_by(models.ExamHistory.submit_time.asc()).all()
+                for h in history_rows[:5]:
+                    if y < 40:
+                        p.showPage()
+                        y = height - 40
+                        p.setFont(chinese_font, 8)
+                        draw_table_header()
+                    htime = h.submit_time.strftime("%Y-%m-%d %H:%M") if h.submit_time else "-"
+                    p.drawString(55, y, f"歷程 {htime} / {h.total_score} / {'通過' if h.is_passed else '未通過'}")
+                    y -= 11
+
+    p.save()
+    buffer.seek(0)
+    return buffer
+
+
 @router.post("/print/pdf")
 def report_print_pdf(
     scope: str = Body("plan"),
+    print_mode: str = Body("list"),  # list | individual
     dept_ids: List[int] = Body(default=[]),
     plan_ids: List[int] = Body(default=[]),
     emp_ids: List[str] = Body(default=[]),
@@ -1487,6 +1635,7 @@ def report_print_pdf(
 ):
     preview = report_print_preview(
         scope=scope,
+        print_mode=print_mode,
         dept_ids=dept_ids,
         plan_ids=plan_ids,
         emp_ids=emp_ids,
@@ -1496,67 +1645,13 @@ def report_print_pdf(
         current_user=current_user
     )
 
-    chinese_font = register_chinese_fonts()
-    buffer = BytesIO()
-    p = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-    y = height - 40
-    p.setFont(chinese_font, 16)
-    p.drawString(40, y, "教育訓練成績列印")
-    y -= 24
-    p.setFont(chinese_font, 10)
-    p.drawString(40, y, f"筆數：{preview['total']}  簽名欄：{'是' if include_employee_signature else '否'}  歷程：{'是' if include_exam_history else '否'}")
-    y -= 20
-
-    headers = ["員工編號", "姓名", "部門", "計畫", "分數", "結果", "時間"]
-    x_positions = [40, 95, 150, 230, 370, 410, 450]
-    p.setFont(chinese_font, 9)
-    for i, h in enumerate(headers):
-        p.drawString(x_positions[i], y, h)
-    y -= 14
-    p.line(40, y + 8, width - 40, y + 8)
-    y -= 8
-
-    for row in preview["items"]:
-        if y < 50:
-            p.showPage()
-            y = height - 40
-            p.setFont(chinese_font, 9)
-            for i, h in enumerate(headers):
-                p.drawString(x_positions[i], y, h)
-            y -= 14
-            p.line(40, y + 8, width - 40, y + 8)
-            y -= 8
-
-        submit_time = row["submit_time"][:16].replace("T", " ") if row["submit_time"] else "-"
-        p.drawString(x_positions[0], y, str(row["emp_id"])[:8])
-        p.drawString(x_positions[1], y, str(row["name"])[:6])
-        p.drawString(x_positions[2], y, str(row["dept_name"])[:6])
-        p.drawString(x_positions[3], y, str(row["plan_title"])[:18])
-        p.drawString(x_positions[4], y, str(row["total_score"]))
-        p.drawString(x_positions[5], y, "通過" if row["is_passed"] else "未通過")
-        p.drawString(x_positions[6], y, submit_time)
-        y -= 14
-        if include_employee_signature:
-            p.drawString(80, y, "簽名：________________")
-            y -= 14
-
-        if include_exam_history:
-            history_rows = db.query(models.ExamHistory).join(models.ExamRecord, models.ExamHistory.record_id == models.ExamRecord.id).filter(
-                models.ExamRecord.emp_id == row["emp_id"],
-                models.ExamRecord.plan_id == row["plan_id"]
-            ).order_by(models.ExamHistory.submit_time.asc()).all()
-            for h in history_rows[:5]:
-                if y < 50:
-                    p.showPage()
-                    y = height - 40
-                    p.setFont(chinese_font, 9)
-                htime = h.submit_time.strftime("%Y-%m-%d %H:%M") if h.submit_time else "-"
-                p.drawString(95, y, f"歷程 {htime} / {h.total_score} / {'通過' if h.is_passed else '未通過'}")
-                y -= 12
-
-    p.save()
-    buffer.seek(0)
+    buffer = render_score_print_pdf_to_buffer(
+        db,
+        preview["items"],
+        print_mode,
+        include_employee_signature,
+        include_exam_history,
+    )
     return StreamingResponse(
         buffer,
         media_type="application/pdf",

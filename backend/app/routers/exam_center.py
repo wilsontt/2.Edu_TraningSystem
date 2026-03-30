@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends, Query, Request as FastAPIRequest
+from fastapi import APIRouter, HTTPException, Depends, Query, Body, Request as FastAPIRequest
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_
 from typing import List, Optional
@@ -479,15 +480,32 @@ def get_personal_overview(
         "total_study_time": round(total_study_time, 0)  # 秒數
     }
 
+def _resolve_personal_target_emp_id(
+    current_user: models.User,
+    emp_id: Optional[str],
+) -> str:
+    role_name = (current_user.role and current_user.role.name) or ""
+    is_admin = is_admin_or_system_role(role_name)
+    if emp_id:
+        if not is_admin:
+            raise HTTPException(status_code=403, detail="只有 Admin 可以查看其他使用者的成績")
+        return emp_id
+    return current_user.emp_id
+
+
 @router.get("/personal/history")
 def get_personal_history(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
     emp_id: Optional[str] = Query(None, description="員工編號（僅 Admin 可使用）"),
-    sort_by: str = Query("time", description="排序欄位：time（時間）/score（分數）"),
+    sort_by: str = Query(
+        "time",
+        description="排序：time / score / plan（計畫）/ name（姓名）/ dept（部門）/ attempts（重考次數）",
+    ),
     order: str = Query("desc", description="排序方向：asc（升序）/desc（降序）"),
     page: int = Query(1, ge=1, description="頁碼"),
-    page_size: int = Query(20, ge=1, le=100, description="每頁筆數")
+    page_size: int = Query(20, ge=1, le=100, description="每頁筆數"),
+    keyword: Optional[str] = Query(None, description="關鍵字（計畫名稱、員工編號、姓名、部門）"),
 ):
     """
     T3.2: 獲取個人成績歷史
@@ -495,15 +513,9 @@ def get_personal_history(
     - 每場考試的詳細資訊
     - 支援分頁與排序
     """
-    # 權限控制
-    role_name = (current_user.role and current_user.role.name) or ""
-    is_admin = is_admin_or_system_role(role_name)
-    target_emp_id = emp_id if emp_id and is_admin else current_user.emp_id
+    target_emp_id = _resolve_personal_target_emp_id(current_user, emp_id)
     
-    if emp_id and not is_admin:
-        raise HTTPException(status_code=403, detail="只有 Admin 可以查看其他使用者的成績")
-    
-    # 基礎查詢
+    # 基礎查詢（含部門／姓名供關鍵字與列表顯示）
     base_query = db.query(
         models.ExamRecord.id,
         models.ExamRecord.plan_id,
@@ -512,17 +524,42 @@ def get_personal_history(
         models.ExamRecord.is_passed,
         models.ExamRecord.start_time,
         models.ExamRecord.submit_time,
-        models.ExamRecord.attempts
+        models.ExamRecord.attempts,
+        models.User.name.label("user_name"),
+        models.Department.name.label("dept_name"),
     ).join(
         models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id
+    ).join(
+        models.User, models.ExamRecord.emp_id == models.User.emp_id
+    ).outerjoin(
+        models.Department, models.User.dept_id == models.Department.id
     ).filter(
         models.ExamRecord.emp_id == target_emp_id,
         models.ExamRecord.submit_time.isnot(None)
     )
+
+    if keyword and keyword.strip():
+        kw = f"%{keyword.strip()}%"
+        base_query = base_query.filter(
+            or_(
+                models.TrainingPlan.title.ilike(kw),
+                models.User.name.ilike(kw),
+                models.User.emp_id.ilike(kw),
+                models.Department.name.ilike(kw),
+            )
+        )
     
     # 排序
     if sort_by == "score":
         order_by = models.ExamRecord.total_score.desc() if order == "desc" else models.ExamRecord.total_score.asc()
+    elif sort_by == "plan":
+        order_by = models.TrainingPlan.title.desc() if order == "desc" else models.TrainingPlan.title.asc()
+    elif sort_by == "name":
+        order_by = models.User.name.desc() if order == "desc" else models.User.name.asc()
+    elif sort_by == "dept":
+        order_by = models.Department.name.desc() if order == "desc" else models.Department.name.asc()
+    elif sort_by == "attempts":
+        order_by = models.ExamRecord.attempts.desc() if order == "desc" else models.ExamRecord.attempts.asc()
     else:  # time
         order_by = models.ExamRecord.submit_time.desc() if order == "desc" else models.ExamRecord.submit_time.asc()
     
@@ -549,7 +586,10 @@ def get_personal_history(
             "start_time": r.start_time.isoformat() if r.start_time else None,
             "submit_time": r.submit_time.isoformat() if r.submit_time else None,
             "duration": round(duration, 0) if duration else None,  # 秒數
-            "attempts": r.attempts
+            "attempts": r.attempts,
+            "emp_id": target_emp_id,
+            "name": r.user_name or "",
+            "dept_name": r.dept_name or "",
         })
     
     return {
@@ -560,6 +600,123 @@ def get_personal_history(
         "total_pages": (total + page_size - 1) // page_size,
         "records": results
     }
+
+
+def _personal_score_print_rows(
+    db: Session,
+    target_emp_id: str,
+    plan_ids: List[int],
+):
+    if not plan_ids:
+        return []
+    base_query = db.query(
+        models.ExamRecord.emp_id,
+        models.User.name,
+        models.Department.name.label("dept_name"),
+        models.ExamRecord.plan_id,
+        models.TrainingPlan.title.label("plan_title"),
+        models.ExamRecord.total_score,
+        models.ExamRecord.is_passed,
+        models.ExamRecord.submit_time,
+    )     .join(models.User, models.ExamRecord.emp_id == models.User.emp_id)\
+     .outerjoin(models.Department, models.User.dept_id == models.Department.id)\
+     .join(models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id)\
+     .filter(
+        models.ExamRecord.emp_id == target_emp_id,
+        models.ExamRecord.plan_id.in_(plan_ids),
+        models.ExamRecord.submit_time.isnot(None),
+    )
+    rows = base_query.order_by(models.ExamRecord.submit_time.desc()).all()
+    return [{
+        "emp_id": r.emp_id,
+        "name": r.name,
+        "dept_name": r.dept_name,
+        "plan_id": r.plan_id,
+        "plan_title": r.plan_title,
+        "total_score": r.total_score,
+        "is_passed": r.is_passed,
+        "submit_time": r.submit_time.isoformat() if r.submit_time else None,
+    } for r in rows]
+
+
+@router.get("/personal/print/plan-options")
+def get_personal_print_plan_options(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    emp_id: Optional[str] = Query(None, description="員工編號（僅 Admin）"),
+):
+    target_emp_id = _resolve_personal_target_emp_id(current_user, emp_id)
+    query = db.query(
+        models.TrainingPlan.id,
+        models.TrainingPlan.title,
+        models.TrainingPlan.training_date,
+    ).join(
+        models.ExamRecord, models.TrainingPlan.id == models.ExamRecord.plan_id
+    ).filter(
+        models.ExamRecord.emp_id == target_emp_id,
+        models.ExamRecord.submit_time.isnot(None),
+    ).distinct(models.TrainingPlan.id).order_by(models.TrainingPlan.training_date.desc())
+    rows = query.all()
+    return [
+        {
+            "plan_id": r.id,
+            "plan_title": r.title,
+            "training_date": r.training_date.isoformat() if r.training_date else None,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/personal/print/preview")
+def personal_print_preview(
+    print_mode: str = Body("list"),
+    plan_ids: List[int] = Body(default=[]),
+    include_employee_signature: bool = Body(False),
+    include_exam_history: bool = Body(False),
+    emp_id: Optional[str] = Body(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    target_emp_id = _resolve_personal_target_emp_id(current_user, emp_id)
+    items = _personal_score_print_rows(db, target_emp_id, plan_ids)
+    return {
+        "total": len(items),
+        "items": items,
+        "options": {
+            "print_mode": print_mode,
+            "include_employee_signature": include_employee_signature,
+            "include_exam_history": include_exam_history,
+        },
+    }
+
+
+@router.post("/personal/print/pdf")
+def personal_print_pdf(
+    print_mode: str = Body("list"),
+    plan_ids: List[int] = Body(default=[]),
+    include_employee_signature: bool = Body(False),
+    include_exam_history: bool = Body(False),
+    emp_id: Optional[str] = Body(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    from .report import render_score_print_pdf_to_buffer
+
+    target_emp_id = _resolve_personal_target_emp_id(current_user, emp_id)
+    items = _personal_score_print_rows(db, target_emp_id, plan_ids)
+    buffer = render_score_print_pdf_to_buffer(
+        db,
+        items,
+        print_mode,
+        include_employee_signature,
+        include_exam_history,
+    )
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=personal_score_print.pdf"},
+    )
+
 
 @router.get("/personal/analysis")
 def get_personal_analysis(

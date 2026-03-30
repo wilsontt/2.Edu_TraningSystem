@@ -194,6 +194,16 @@ class SystemFunction(SystemFunctionBase):
 class RolePermissionUpdate(BaseModel):
     function_ids: List[int]
 
+class RoleDepartmentScopeUpdate(BaseModel):
+    scope_type: str = Field(..., description="all | department | self")
+    dept_ids: List[int] = []
+
+
+class RoleDepartmentScopeResponse(BaseModel):
+    role_id: int
+    scope_type: str
+    dept_ids: List[int] = []
+
 # 更新遞迴模型的向前參照
 # --- 考題資料結構 ---
 class QuestionBase(BaseModel):
