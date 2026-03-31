@@ -13,6 +13,8 @@ class DepartmentCreate(DepartmentBase):
 class Department(DepartmentBase):
     id: int
     user_count: int = 0
+    active_user_count: int = 0
+    inactive_user_count: int = 0
 
     class Config:
         from_attributes = True

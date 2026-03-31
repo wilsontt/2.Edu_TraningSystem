@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Request, Query, Body
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_, and_, select
 from typing import List, Optional
 from datetime import date, datetime
 import qrcode
@@ -177,6 +177,28 @@ def get_training_plans(
     if category_id:
         query = query.filter(models.TrainingPlan.sub_category_id == category_id)
     
+    # 套用可視範圍：只保留受訓名單（受課部門 + 個人受課）與可視員工有交集的計畫
+    visible_emp_ids = get_scope_emp_ids(db, current_user, active_only=True)
+    if visible_emp_ids is not None:
+        if not visible_emp_ids:
+            return []
+
+        dept_visible_plan_ids = (
+            select(models.plan_target_departments.c.plan_id)
+            .join(models.User, models.User.dept_id == models.plan_target_departments.c.dept_id)
+            .where(
+                models.User.status == "active",
+                models.User.emp_id.in_(visible_emp_ids),
+            )
+        )
+        user_visible_plan_ids = (
+            select(models.plan_target_users.c.plan_id)
+            .where(models.plan_target_users.c.emp_id.in_(visible_emp_ids))
+        )
+        query = query.filter(
+            models.TrainingPlan.id.in_(dept_visible_plan_ids.union(user_visible_plan_ids))
+        )
+
     # 使用 joinedload 載入 sub_category 關聯，避免 N+1 查詢問題
     return query.options(joinedload(models.TrainingPlan.sub_category)).order_by(models.TrainingPlan.training_date.desc()).all()
 

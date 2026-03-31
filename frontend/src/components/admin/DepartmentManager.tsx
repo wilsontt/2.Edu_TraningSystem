@@ -8,6 +8,8 @@ interface Department {
   id: number;
   name: string;
   user_count: number;
+  active_user_count: number;
+  inactive_user_count: number;
 }
 
 interface DepartmentUser {
@@ -895,7 +897,7 @@ const DepartmentManager = () => {
                         >
                           <span>{dept.name}</span>
                           <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full group-hover/name:bg-indigo-100 group-hover/name:text-indigo-600 transition-colors duration-200">
-                            {dept.user_count} 人
+                            啟用：{dept.active_user_count}人，停用：{dept.inactive_user_count}人
                           </span>
                         </button>
                       )}

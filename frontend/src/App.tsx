@@ -345,7 +345,7 @@ const App = () => {
                     <Route path="/plans" element={user.functions?.includes('menu:plan') || user.role === 'Admin' ? <TrainingPlanManager /> : <Navigate to="/" />} />
                     <Route path="/attendance-overview" element={user.functions?.includes('menu:attendance-overview') || user.role === 'Admin' ? <AttendanceOverviewPage /> : <Navigate to="/" />} />
                     <Route path="/exams" element={user.functions?.includes('menu:exam') || user.role === 'Admin' ? <ExamStudio /> : <Navigate to="/" />} />
-                    <Route path="/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <PersonalScorePage />} />
+                    <Route path="/reports" element={<PersonalScorePage />} />
                     <Route path="/reports/personal" element={<PersonalScorePage />} />
                     <Route path="/admin/departments" element={user.role === 'Admin' ? <DepartmentManager /> : <Navigate to="/" />} />
                     <Route path="/admin/categories" element={user.role === 'Admin' ? <CategoryManager /> : <Navigate to="/" />} />

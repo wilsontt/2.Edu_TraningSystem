@@ -307,13 +307,37 @@ def check_any_permission(required_func_codes: List[str]):
     return Depends(permission_dependency)
 
 @router.get("/me")
-async def get_me(current_user: models.User = Depends(get_current_user)):
+async def get_me(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    scope_type = "self"
+    scope_dept_ids: List[int] = []
+
+    if current_user.role and current_user.role.name == "Admin":
+        scope_type = "all"
+    elif current_user.role_id:
+        scope_row = db.query(models.RoleDepartmentScope).filter(
+            models.RoleDepartmentScope.role_id == current_user.role_id
+        ).first()
+        if scope_row:
+            scope_type = scope_row.scope_type or "self"
+        if scope_type == "department":
+            scope_dept_ids = [
+                row[0]
+                for row in db.query(models.RoleDepartmentScopeDept.dept_id).filter(
+                    models.RoleDepartmentScopeDept.role_id == current_user.role_id
+                ).all()
+            ]
+
     return {
         "emp_id": current_user.emp_id,
         "name": current_user.name,
         "dept_name": current_user.department.name,
         "role": current_user.role.name,
-        "functions": [f.code for f in current_user.role.functions]
+        "functions": [f.code for f in current_user.role.functions],
+        "role_scope_type": scope_type,
+        "role_scope_dept_ids": scope_dept_ids,
     }
 
 @router.post("/verify-captcha")

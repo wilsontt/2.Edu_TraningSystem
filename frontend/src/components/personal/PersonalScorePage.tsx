@@ -6,8 +6,9 @@ import api from '../../api';
 import PersonalScoreOverview from './PersonalScoreOverview';
 import PersonalScoreHistory from './PersonalScoreHistory';
 import PersonalLearningAnalysis from './PersonalLearningAnalysis';
+import ReportDashboard from '../admin/ReportDashboard';
 
-type TabType = 'overview' | 'history' | 'analysis';
+type TabType = 'overview' | 'history' | 'analysis' | 'team';
 
 interface UserOption {
   emp_id: string;
@@ -15,10 +16,26 @@ interface UserOption {
   dept_name?: string;
 }
 
+interface MeResponse {
+  role: string;
+  functions?: string[];
+  role_scope_type?: 'all' | 'department' | 'self';
+  role_scope_dept_ids?: number[];
+}
+
+interface AdminUserResponse {
+  emp_id: string;
+  name: string;
+  department?: {
+    name?: string;
+  };
+}
+
 export default function PersonalScorePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [hasReportPermission, setHasReportPermission] = useState(false);
   const [selectedEmpId, setSelectedEmpId] = useState<string | null>(null);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [userSearchTerm, setUserSearchTerm] = useState('');
@@ -45,13 +62,20 @@ export default function PersonalScorePage() {
         const response = await api.get('/auth/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        const user = response.data;
+        const user = response.data as MeResponse;
         setIsAdmin(user.role === 'Admin');
+        const hasMenuReport = Array.isArray(user.functions) && user.functions.includes('menu:report');
+        // 顯示「部門成績」規則：
+        // Admin，或具 menu:report 且角色資料可視範圍為「成員所屬部門（department）」。
+        // 不要求一定有額外勾選部門，因為自己部門本來就屬於可視範圍。
+        const canViewTeamReport =
+          user.role === 'Admin' || (hasMenuReport && user.role_scope_type === 'department');
+        setHasReportPermission(canViewTeamReport);
         
         // 如果是 Admin，載入使用者列表
         if (user.role === 'Admin') {
           const usersRes = await api.get('/admin/users');
-          const usersList = usersRes.data.map((u: any) => ({
+          const usersList = (usersRes.data as AdminUserResponse[]).map((u) => ({
             emp_id: u.emp_id,
             name: u.name,
             dept_name: u.department?.name
@@ -85,7 +109,7 @@ export default function PersonalScorePage() {
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       {/* 頁面標題 */}
       <header className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+        <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
           <Award className="w-7 h-7 text-white" />
         </div>
         <div>
@@ -205,6 +229,19 @@ export default function PersonalScorePage() {
         >
           學習分析
         </button>
+        {hasReportPermission && (
+          <button
+            onClick={() => setActiveTab('team')}
+            className={clsx(
+              "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
+              activeTab === 'team'
+                ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
+                : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+            )}
+          >
+            部門成績
+          </button>
+        )}
       </div>
 
       {/* Tab 內容 */}
@@ -212,6 +249,7 @@ export default function PersonalScorePage() {
         {activeTab === 'overview' && <PersonalScoreOverview empId={selectedEmpId || undefined} />}
         {activeTab === 'history' && <PersonalScoreHistory empId={selectedEmpId || undefined} />}
         {activeTab === 'analysis' && <PersonalLearningAnalysis empId={selectedEmpId || undefined} />}
+        {activeTab === 'team' && hasReportPermission && <ReportDashboard />}
       </div>
     </div>
   );

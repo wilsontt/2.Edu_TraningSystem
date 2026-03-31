@@ -14,6 +14,8 @@ def get_departments(db: Session = Depends(get_db), current_user = check_permissi
     # 新增統計數據
     for dept in departments:
         dept.user_count = len(dept.users)
+        dept.active_user_count = len([u for u in dept.users if (u.status or "").strip().lower() == "active"])
+        dept.inactive_user_count = len(dept.users) - dept.active_user_count
     return departments
 
 @router.post("/departments", response_model=schemas.Department)
