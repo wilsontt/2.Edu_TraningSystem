@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from .. import models, schemas
 from ..database import get_db
 from .auth import get_current_user
+from ..access_scope import get_scope_emp_ids
 
 router = APIRouter(prefix="/exam", tags=["exam_center"])
 
@@ -19,6 +20,12 @@ def is_admin_or_system_role(role_name: str) -> bool:
         or "admin" in normalized_role
         or (role_name or "").strip() == "系統管理者"
     )
+
+
+def _has_menu_report_permission(current_user: models.User) -> bool:
+    if not current_user or not current_user.role or not current_user.role.functions:
+        return False
+    return any(f.code == "menu:report" for f in current_user.role.functions)
 
 # --- 考試中心資料結構 ---
 class ExamListItem(BaseModel):
@@ -408,7 +415,7 @@ def submit_exam(
 def get_personal_overview(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
-    emp_id: Optional[str] = Query(None, description="員工編號（僅 Admin 可使用）")
+    emp_id: Optional[str] = Query(None, description="員工編號（Admin 或具 menu:report 且範圍內可使用）")
 ):
     """
     T3.1: 獲取個人成績總覽
@@ -423,13 +430,7 @@ def get_personal_overview(
     - 一般使用者只能查看自己的成績
     - Admin 可查看所有使用者成績（需 emp_id 參數）
     """
-    # 權限控制
-    role_name = (current_user.role and current_user.role.name) or ""
-    is_admin = is_admin_or_system_role(role_name)
-    target_emp_id = emp_id if emp_id and is_admin else current_user.emp_id
-    
-    if emp_id and not is_admin:
-        raise HTTPException(status_code=403, detail="只有 Admin 可以查看其他使用者的成績")
+    target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
     
     # 取得該使用者的所有考試記錄
     records = db.query(models.ExamRecord).filter(
@@ -481,6 +482,7 @@ def get_personal_overview(
     }
 
 def _resolve_personal_target_emp_id(
+    db: Session,
     current_user: models.User,
     emp_id: Optional[str],
 ) -> str:
@@ -488,7 +490,11 @@ def _resolve_personal_target_emp_id(
     is_admin = is_admin_or_system_role(role_name)
     if emp_id:
         if not is_admin:
-            raise HTTPException(status_code=403, detail="只有 Admin 可以查看其他使用者的成績")
+            if not _has_menu_report_permission(current_user):
+                raise HTTPException(status_code=403, detail="只有 Admin 或具成績中心權限者可以查看其他使用者的成績")
+            allowed_emp_ids = get_scope_emp_ids(db, current_user, active_only=False)
+            if allowed_emp_ids is not None and emp_id not in allowed_emp_ids:
+                raise HTTPException(status_code=403, detail="目標員工不在您的可視範圍內")
         return emp_id
     return current_user.emp_id
 
@@ -497,7 +503,7 @@ def _resolve_personal_target_emp_id(
 def get_personal_history(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
-    emp_id: Optional[str] = Query(None, description="員工編號（僅 Admin 可使用）"),
+    emp_id: Optional[str] = Query(None, description="員工編號（Admin 或具 menu:report 且範圍內可使用）"),
     sort_by: str = Query(
         "time",
         description="排序：time / score / plan（計畫）/ name（姓名）/ dept（部門）/ attempts（重考次數）",
@@ -513,7 +519,7 @@ def get_personal_history(
     - 每場考試的詳細資訊
     - 支援分頁與排序
     """
-    target_emp_id = _resolve_personal_target_emp_id(current_user, emp_id)
+    target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
     
     # 基礎查詢（含部門／姓名供關鍵字與列表顯示）
     base_query = db.query(
@@ -643,9 +649,9 @@ def _personal_score_print_rows(
 def get_personal_print_plan_options(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
-    emp_id: Optional[str] = Query(None, description="員工編號（僅 Admin）"),
+    emp_id: Optional[str] = Query(None, description="員工編號（Admin 或具 menu:report 且範圍內可使用）"),
 ):
-    target_emp_id = _resolve_personal_target_emp_id(current_user, emp_id)
+    target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
     query = db.query(
         models.TrainingPlan.id,
         models.TrainingPlan.title,
@@ -677,7 +683,7 @@ def personal_print_preview(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    target_emp_id = _resolve_personal_target_emp_id(current_user, emp_id)
+    target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
     items = _personal_score_print_rows(db, target_emp_id, plan_ids)
     return {
         "total": len(items),
@@ -702,7 +708,7 @@ def personal_print_pdf(
 ):
     from .report import render_score_print_pdf_to_buffer
 
-    target_emp_id = _resolve_personal_target_emp_id(current_user, emp_id)
+    target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
     items = _personal_score_print_rows(db, target_emp_id, plan_ids)
     buffer = render_score_print_pdf_to_buffer(
         db,
@@ -722,7 +728,7 @@ def personal_print_pdf(
 def get_personal_analysis(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
-    emp_id: Optional[str] = Query(None, description="員工編號（僅 Admin 可使用）"),
+    emp_id: Optional[str] = Query(None, description="員工編號（Admin 或具 menu:report 且範圍內可使用）"),
     trend_period: int = Query(6, description="成績趨勢時間範圍（月數）：3、6、12")
 ):
     """
@@ -739,13 +745,7 @@ def get_personal_analysis(
     if trend_period not in [3, 6, 12]:
         raise HTTPException(status_code=400, detail="trend_period 參數必須為 3、6 或 12")
     
-    # 權限控制
-    role_name = (current_user.role and current_user.role.name) or ""
-    is_admin = is_admin_or_system_role(role_name)
-    target_emp_id = emp_id if emp_id and is_admin else current_user.emp_id
-    
-    if emp_id and not is_admin:
-        raise HTTPException(status_code=403, detail="只有 Admin 可以查看其他使用者的成績")
+    target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
     
     # 取得該使用者的所有考試記錄
     records = db.query(

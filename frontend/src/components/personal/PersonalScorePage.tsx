@@ -44,6 +44,11 @@ export default function PersonalScorePage() {
   useEffect(() => {
     // 從 URL 參數讀取 emp_id
     const empIdFromUrl = searchParams.get('emp_id');
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl === 'history') {
+      setActiveTab('history');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     if (empIdFromUrl) {
       setSelectedEmpId(empIdFromUrl);
       // 找到對應的使用者名稱

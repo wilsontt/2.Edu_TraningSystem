@@ -1317,7 +1317,7 @@ export default function ReportDashboard() {
                                                               <td className="px-4 py-2 text-center">
                                                                 {record.emp_id && (
                                                                   <Link
-                                                                    to={`/reports/personal?emp_id=${record.emp_id}`}
+                                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=history`}
                                                                     onClick={(e) => e.stopPropagation()}
                                                                     className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                                   >
@@ -1427,7 +1427,7 @@ export default function ReportDashboard() {
                                                               <td className="px-4 py-2 text-center">
                                                                 {record.emp_id && (
                                                                   <Link
-                                                                    to={`/reports/personal?emp_id=${record.emp_id}`}
+                                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=history`}
                                                                     onClick={(e) => e.stopPropagation()}
                                                                     className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                                   >
