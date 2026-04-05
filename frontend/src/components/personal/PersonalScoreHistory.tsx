@@ -1,10 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Eye, Search } from 'lucide-react';
 import clsx from 'clsx';
-import { format } from 'date-fns';
 import { API_BASE_URL } from '../../api';
 import PlanHistoryModal from './PlanHistoryModal';
-import ScorePrintFlow, { type ScorePrintPlanOption } from '../common/ScorePrintFlow';
 import Pagination from '../common/Pagination';
 import {
   LineChart,
@@ -55,11 +53,23 @@ interface PlanTrendData {
 
 interface PersonalScoreHistoryProps {
   empId?: string;
+  titlePrefix?: string;
 }
+
+interface DetailHistoryItem {
+  id?: number;
+  total_score: number;
+  submit_time?: string | null;
+}
+
+type TrendChartPoint = {
+  attempt: number;
+  [key: string]: number | null;
+};
 
 type HistorySortKey = 'time' | 'score' | 'plan' | 'name' | 'dept' | 'attempts';
 
-export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProps) {
+export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalScoreHistoryProps) {
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [plansData, setPlansData] = useState<Record<number, PlanTrendData>>({});
   const [selectedPlanIds, setSelectedPlanIds] = useState<Set<number>>(new Set());
@@ -69,27 +79,10 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [keyword, setKeyword] = useState('');
+  const [keywordInput, setKeywordInput] = useState('');
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
-  const [printPlanOptions, setPrintPlanOptions] = useState<ScorePrintPlanOption[]>([]);
-  const [selectedPrintPlanIds, setSelectedPrintPlanIds] = useState<Set<number>>(new Set());
-  const [printMode, setPrintMode] = useState<'list' | 'individual'>('list');
-  const [includeEmployeeSignature, setIncludeEmployeeSignature] = useState(false);
-  const [includeExamHistory, setIncludeExamHistory] = useState(false);
-  const [printLoading, setPrintLoading] = useState(false);
-  const [printPreview, setPrintPreview] = useState<
-    Array<{
-      emp_id: string;
-      name: string;
-      dept_name: string;
-      plan_id: number;
-      plan_title: string;
-      total_score: number;
-      is_passed: boolean;
-      submit_time: string | null;
-    }>
-  >([]);
 
   const fetchPlansHistory = async (records: HistoryRecord[]) => {
     try {
@@ -114,7 +107,8 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
         const record = records[index];
         const planId = record.plan_id;
 
-        const trend = detail.history.map((h: any, idx: number) => ({
+        const trend = (detail.history as DetailHistoryItem[]).map((h, idx: number) => ({
+          // 以實際歷程順序為準，避免用 attempts 推算造成錯位或缺筆誤導
           attempt: idx + 1,
           score: h.total_score,
           date: h.submit_time ? new Date(h.submit_time).toLocaleDateString('zh-TW') : '',
@@ -189,109 +183,16 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortBy, order, page, pageSize, keyword, empId]);
 
-  const fetchPrintPlanOptions = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const baseURL = API_BASE_URL;
-      const q = empId ? `?emp_id=${encodeURIComponent(empId)}` : '';
-      const res = await fetch(`${baseURL}/exam/personal/print/plan-options${q}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('plan options');
-      const data = (await res.json()) as ScorePrintPlanOption[];
-      setPrintPlanOptions(data);
-      setSelectedPrintPlanIds(new Set(data.map((p) => p.plan_id)));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [empId]);
-
   useEffect(() => {
-    if (!loading && history) {
-      fetchPrintPlanOptions();
-    }
-  }, [loading, history?.emp_id, fetchPrintPlanOptions]);
+    const timer = window.setTimeout(() => {
+      setKeyword(keywordInput);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [keywordInput]);
 
   useEffect(() => {
     setPage(1);
   }, [keyword, sortBy, order, pageSize]);
-
-  const loadPersonalPrintPreview = async () => {
-    if (selectedPrintPlanIds.size === 0) {
-      alert('請至少選擇一個訓練計畫');
-      return;
-    }
-    try {
-      setPrintLoading(true);
-      const token = localStorage.getItem('token');
-      const baseURL = API_BASE_URL;
-      const body: Record<string, unknown> = {
-        print_mode: printMode,
-        plan_ids: Array.from(selectedPrintPlanIds),
-        include_employee_signature: includeEmployeeSignature,
-        include_exam_history: includeExamHistory,
-      };
-      if (empId) body.emp_id = empId;
-      const res = await fetch(`${baseURL}/exam/personal/print/preview`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error('preview');
-      const data = await res.json();
-      setPrintPreview(data.items || []);
-    } catch (e) {
-      console.error(e);
-      alert('載入列印預覽失敗');
-    } finally {
-      setPrintLoading(false);
-    }
-  };
-
-  const exportPersonalPrintPdf = async () => {
-    if (selectedPrintPlanIds.size === 0) {
-      alert('請至少選擇一個訓練計畫');
-      return;
-    }
-    try {
-      setPrintLoading(true);
-      const token = localStorage.getItem('token');
-      const baseURL = API_BASE_URL;
-      const body: Record<string, unknown> = {
-        print_mode: printMode,
-        plan_ids: Array.from(selectedPrintPlanIds),
-        include_employee_signature: includeEmployeeSignature,
-        include_exam_history: includeExamHistory,
-      };
-      if (empId) body.emp_id = empId;
-      const response = await fetch(`${baseURL}/exam/personal/print/pdf`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) throw new Error('pdf');
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `personal-score-print-${format(new Date(), 'yyyyMMdd')}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (e) {
-      console.error(e);
-      alert('成績列印失敗');
-    } finally {
-      setPrintLoading(false);
-    }
-  };
 
   const formatDuration = (seconds: number | null): string => {
     if (!seconds) return '-';
@@ -304,7 +205,7 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
     return `${hours}小時${mins}分`;
   };
 
-  if (loading) {
+  if (loading && !history) {
     return <div className="p-8 flex justify-center text-gray-500">載入中...</div>;
   }
 
@@ -316,7 +217,7 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#06b6d4', '#f97316', '#84cc16'];
   
   // 準備圖表資料（多線圖格式）
-  const chartData: Array<Record<string, any>> = [];
+  const chartData: TrendChartPoint[] = [];
   const maxAttempts = Math.max(
     ...Array.from(selectedPlanIds)
       .map(planId => plansData[planId]?.trend.length || 0)
@@ -326,7 +227,7 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
   
   // 為每個 attempt 建立資料點
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const dataPoint: Record<string, any> = { attempt };
+    const dataPoint: TrendChartPoint = { attempt };
     
     selectedPlanIds.forEach(planId => {
       const plan = plansData[planId];
@@ -354,57 +255,12 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:hidden">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-gray-900">個人成績歷史</h2>
-        <p className="text-gray-500 mt-1">查看您的所有考試記錄</p>
-      </div>
-
-      {/* 成績列印（與成績中心相同流程） */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-3">
-        <h3 className="text-lg font-bold text-gray-900">成績列印</h3>
-        <ScorePrintFlow
-          planOptions={printPlanOptions}
-          selectedPlanIds={selectedPrintPlanIds}
-          onSelectedPlanIdsChange={setSelectedPrintPlanIds}
-          printMode={printMode}
-          onPrintModeChange={setPrintMode}
-          includeEmployeeSignature={includeEmployeeSignature}
-          onIncludeEmployeeSignatureChange={setIncludeEmployeeSignature}
-          includeExamHistory={includeExamHistory}
-          onIncludeExamHistoryChange={setIncludeExamHistory}
-          onLoadPreview={loadPersonalPrintPreview}
-          onPrintPdf={exportPersonalPrintPdf}
-          printLoading={printLoading}
-          selectedEmployeeCount={1}
-          requireEmployeeSelectionForPrint={false}
-        />
-        {printPreview.length > 0 && (
-          <div className="overflow-x-auto border border-gray-100 rounded-lg text-xs">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-2 text-left">序號</th>
-                  <th className="px-3 py-2 text-left">員工編號</th>
-                  <th className="px-3 py-2 text-left">姓名</th>
-                  <th className="px-3 py-2 text-left">部門</th>
-                  <th className="px-3 py-2 text-left">計畫</th>
-                  <th className="px-3 py-2 text-right">分數</th>
-                </tr>
-              </thead>
-              <tbody>
-                {printPreview.map((row, idx) => (
-                  <tr key={`${row.plan_id}-${row.submit_time}-${idx}`} className={idx % 2 === 1 ? 'bg-gray-50' : ''}>
-                    <td className="px-3 py-2">{idx + 1}</td>
-                    <td className="px-3 py-2">{row.emp_id}</td>
-                    <td className="px-3 py-2">{row.name}</td>
-                    <td className="px-3 py-2">{row.dept_name}</td>
-                    <td className="px-3 py-2">{row.plan_title}</td>
-                    <td className="px-3 py-2 text-right font-bold">{row.total_score}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+          {titlePrefix ? `${titlePrefix} 個人成績歷史` : '個人成績歷史'}
+        </h2>
+        <p className="text-gray-500 mt-1">
+          {titlePrefix ? `查看 ${titlePrefix} 的所有考試記錄` : '查看您的所有考試記錄'}
+        </p>
       </div>
 
       {/* 排序與關鍵字 */}
@@ -414,8 +270,8 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
           <input
             type="search"
             placeholder="搜尋部門、員工編號、姓名、計畫名稱…"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
+            value={keywordInput}
+            onChange={(e) => setKeywordInput(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-md"
           />
         </div>
@@ -433,7 +289,7 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
             <option value="plan">授課計畫名稱</option>
             <option value="name">姓名</option>
             <option value="dept">部門名稱</option>
-            <option value="attempts">重考次數</option>
+            <option value="attempts">考試次數</option>
           </select>
           <select
             value={order}
@@ -548,7 +404,7 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
                 <th className="px-4 py-4 text-center text-sm font-bold text-gray-500">狀態</th>
                 <th className="px-4 py-4 text-right text-sm font-bold text-gray-500">作答時間</th>
                 <th className="px-4 py-4 text-right text-sm font-bold text-gray-500">提交時間</th>
-                <th className="px-4 py-4 text-right text-sm font-bold text-gray-500">重考次數</th>
+                <th className="px-4 py-4 text-right text-sm font-bold text-gray-500">考試次數</th>
                 <th className="px-4 py-4 text-center text-sm font-bold text-gray-500">操作</th>
               </tr>
             </thead>
@@ -598,7 +454,7 @@ export default function PersonalScoreHistory({ empId }: PersonalScoreHistoryProp
                       {formatDuration(record.duration)}
                     </td>
                     <td className="px-4 py-4 text-right text-gray-500 text-sm">
-                      {record.submit_time ? new Date(record.submit_time).toLocaleString() : '-'}
+                      {record.submit_time ? new Date(record.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
                     </td>
                     <td className="px-4 py-4 text-right text-gray-700">
                       {record.attempts}

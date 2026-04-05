@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2, X, Plus, Trash2, Check, AlertCircle } from 'lucide-react';
+import { isAxiosError } from 'axios';
 import api from '../../api';
 
 interface Question {
@@ -69,7 +70,7 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
         } else {
              // Fallback for numeric or other keys, try to find next available letter
              const allLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-             for(let char of allLetters) {
+             for(const char of allLetters) {
                  if(!keys.includes(char)) {
                      nextKey = char;
                      break;
@@ -114,9 +115,14 @@ const QuestionEditorModal = ({ question, onClose, onSave, apiUrl }: QuestionEdit
             await api.put(url, payload);
             onSave();
             onClose();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
-            setError(err.response?.data?.detail || err.message || "儲存失敗");
+            const detail = isAxiosError(err)
+                ? String(err.response?.data?.detail ?? '')
+                : err instanceof Error
+                  ? err.message
+                  : '';
+            setError(detail || '儲存失敗');
         } finally {
             setIsSaving(false);
         }

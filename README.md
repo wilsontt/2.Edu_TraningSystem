@@ -128,6 +128,7 @@ npm run dev
 2. **初始化**：僅在首次或無資料庫時執行 `init_db()`；否則可能覆寫或遺失資料。  
 3. **恢復**：可參考 [資料庫資料遺失與恢復記錄](1.docs/reviews/2025-01-09-資料庫資料遺失與恢復記錄.md) 與 `backend/restore_training_data.py`。  
 4. **遷移**：表結構變更請依 [資料庫遷移指南](1.docs/資料庫遷移/MIGRATION_GUIDE.md) 處理。  
+5. **結構說明**：全表欄位與關聯見 [education_training.db 結構分析](1.docs/資料庫結構分析/education_training_db_結構分析.md)。  
 
 ---
 

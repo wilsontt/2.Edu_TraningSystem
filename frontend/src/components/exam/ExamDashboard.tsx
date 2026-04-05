@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BookOpen, Clock, CheckCircle, AlertCircle, ChevronRight, Loader2, GraduationCap, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { isAxiosError } from 'axios';
 import api from '../../api';
 import CheckInButton from './CheckInButton';
 
@@ -99,8 +100,11 @@ const ExamDashboard = () => {
             await api.post(`/exam/plan/${pendingStartExamId}/attendance/checkin`);
             setShowNotCheckedInModal(false);
             navigate(`/exam/run/${pendingStartExamId}`);
-        } catch (err: any) {
-            alert(err?.response?.data?.detail || '報到失敗，請稍後再試');
+        } catch (err: unknown) {
+            const msg = isAxiosError(err)
+                ? String(err.response?.data?.detail ?? '')
+                : '';
+            alert(msg || '報到失敗，請稍後再試');
         } finally {
             setQuickCheckInLoading(false);
         }

@@ -95,7 +95,7 @@ const ExamRunner = () => {
                         setLoading(false);
                         return;
                     }
-                } catch (attendanceErr: any) {
+                } catch (attendanceErr: unknown) {
                     // 如果 API 不存在或出錯，允許繼續（向後兼容）
                     console.warn('Attendance check failed, allowing exam to continue:', attendanceErr);
                 }
@@ -329,7 +329,13 @@ const ExamRunner = () => {
                 <div className="font-bold text-blue-800 text-sm truncate max-w-[150px] md:max-w-xs">
                     {examData.title}
                 </div>
-                {!result && <ExamTimer limitTime={examData.limit_time} onTimeUp={handleTimeUp} />}
+                {!result && (
+                    <ExamTimer
+                        key={examData.limit_time}
+                        limitTime={examData.limit_time}
+                        onTimeUp={handleTimeUp}
+                    />
+                )}
             </div>
 
             {/* 進度條 - 固定 */}

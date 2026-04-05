@@ -11,8 +11,9 @@ export interface QuestionDetail {
   earned_points: number;
 }
 
+/** 考試歷程列；舊補資料列可能無 id（無法開詳情） */
 export interface ExamHistoryItem {
-  id: number;
+  id?: number | null;
   submit_time: string | null;
   total_score: number;
   is_passed: boolean;

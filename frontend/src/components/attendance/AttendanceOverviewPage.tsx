@@ -377,7 +377,11 @@ const AttendanceOverviewPage = () => {
                               <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
                               <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">部門</th>
                               <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">
-                                {selectedAttendanceFilter === 'actual' ? '報到時間' : '未到原因'}
+                                {selectedAttendanceFilter === 'actual'
+                                  ? '報到時間'
+                                  : selectedAttendanceFilter === 'expected'
+                                    ? '報到時間／未到原因'
+                                    : '未到原因'}
                               </th>
                               {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && (
                                 <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">操作</th>
@@ -416,7 +420,7 @@ const AttendanceOverviewPage = () => {
                                   <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
                                   <td className="px-4 py-2 text-gray-500 text-xs">
                                     {user.kind === 'actual' && 'checkin_time' in user && user.checkin_time
-                                      ? new Date(user.checkin_time).toLocaleString('zh-TW')
+                                      ? new Date(user.checkin_time).toLocaleString('zh-TW', { hour12: false })
                                       : ('absence_reason_code' in user && user.absence_reason_code
                                           ? `${ABSENCE_REASON_OPTIONS.find(o => o.code === user.absence_reason_code)?.label || user.absence_reason_code}${user.absence_reason_code === 'other' && user.absence_reason_text ? `：${user.absence_reason_text}` : ''}`
                                           : '-')}

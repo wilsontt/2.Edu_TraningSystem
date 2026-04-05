@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { User, Search, Award } from 'lucide-react';
@@ -10,6 +10,13 @@ import ReportDashboard from '../admin/ReportDashboard';
 
 type TabType = 'overview' | 'history' | 'analysis' | 'team';
 
+const URL_TAB_VALUES = ['overview', 'history', 'analysis'] as const;
+type UrlTab = (typeof URL_TAB_VALUES)[number];
+
+function parseUrlTab(raw: string | null): UrlTab | null {
+  return raw && URL_TAB_VALUES.includes(raw as UrlTab) ? (raw as UrlTab) : null;
+}
+
 interface UserOption {
   emp_id: string;
   name: string;
@@ -17,6 +24,9 @@ interface UserOption {
 }
 
 interface MeResponse {
+  emp_id?: string;
+  name?: string;
+  dept_name?: string;
   role: string;
   functions?: string[];
   role_scope_type?: 'all' | 'department' | 'self';
@@ -33,30 +43,59 @@ interface AdminUserResponse {
 
 export default function PersonalScorePage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const urlTab = parseUrlTab(searchParams.get('tab'));
+  const [localTab, setLocalTab] = useState<TabType>('overview');
+  const activeTab: TabType = urlTab ?? localTab;
+
+  const navigateTab = (t: TabType) => {
+    setLocalTab(t);
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (t === 'team') {
+          p.delete('tab');
+        } else {
+          p.set('tab', t);
+        }
+        return p;
+      },
+      { replace: true }
+    );
+  };
   const [isAdmin, setIsAdmin] = useState(false);
   const [hasReportPermission, setHasReportPermission] = useState(false);
   const [selectedEmpId, setSelectedEmpId] = useState<string | null>(null);
+  const [selectedEmpName, setSelectedEmpName] = useState('');
+  const [selectedDeptName, setSelectedDeptName] = useState('');
+  const [selfEmpId, setSelfEmpId] = useState('');
+  const [selfName, setSelfName] = useState('');
   const [users, setUsers] = useState<UserOption[]>([]);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [showUserSelector, setShowUserSelector] = useState(false);
 
   useEffect(() => {
-    // 從 URL 參數讀取 emp_id
-    const empIdFromUrl = searchParams.get('emp_id');
-    const tabFromUrl = searchParams.get('tab');
-    if (tabFromUrl === 'history') {
-      setActiveTab('history');
+    if (urlTab) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    if (empIdFromUrl) {
+  }, [urlTab]);
+
+  useEffect(() => {
+    const empIdFromUrl = searchParams.get('emp_id');
+    const empNameFromUrl = searchParams.get('emp_name');
+    const deptNameFromUrl = searchParams.get('dept_name');
+    if (!empIdFromUrl) return;
+
+    startTransition(() => {
       setSelectedEmpId(empIdFromUrl);
-      // 找到對應的使用者名稱
-      const user = users.find(u => u.emp_id === empIdFromUrl);
+      if (empNameFromUrl) setSelectedEmpName(empNameFromUrl);
+      if (deptNameFromUrl) setSelectedDeptName(deptNameFromUrl);
+      const user = users.find((u) => u.emp_id === empIdFromUrl);
       if (user) {
+        setSelectedEmpName(user.name || '');
+        setSelectedDeptName(user.dept_name || '');
         setUserSearchTerm(`${user.name} (${user.emp_id})`);
       }
-    }
+    });
   }, [searchParams, users]);
 
   useEffect(() => {
@@ -68,6 +107,8 @@ export default function PersonalScorePage() {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const user = response.data as MeResponse;
+        setSelfEmpId(user.emp_id || '');
+        setSelfName(user.name || '');
         setIsAdmin(user.role === 'Admin');
         const hasMenuReport = Array.isArray(user.functions) && user.functions.includes('menu:report');
         // 顯示「部門成績」規則：
@@ -93,6 +134,8 @@ export default function PersonalScorePage() {
             const user = usersList.find((u: UserOption) => u.emp_id === empIdFromUrl);
             if (user) {
               setSelectedEmpId(empIdFromUrl);
+              setSelectedEmpName(user.name || '');
+              setSelectedDeptName(user.dept_name || '');
               setUserSearchTerm(`${user.name} (${user.emp_id})`);
             }
           }
@@ -110,13 +153,36 @@ export default function PersonalScorePage() {
     (u.dept_name && u.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase()))
   );
 
+  const titlePrefix = (() => {
+    if (!selectedEmpId || (selfEmpId && selectedEmpId === selfEmpId)) return '';
+    const name = selectedEmpName || users.find((u) => u.emp_id === selectedEmpId)?.name || selectedEmpId;
+    const dept = selectedDeptName || users.find((u) => u.emp_id === selectedEmpId)?.dept_name || '';
+    return `${dept ? `${dept} ` : ''}${name}`.trim();
+  })();
+
+  const resetToSelfView = () => {
+    setLocalTab('overview');
+    setSelectedEmpId(null);
+    setSelectedEmpName('');
+    setSelectedDeptName('');
+    setShowUserSelector(false);
+    setUserSearchTerm('');
+    setSearchParams({});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       {/* 頁面標題 */}
       <header className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+        <button
+          type="button"
+          onClick={resetToSelfView}
+          title="回到登入者的個人成績中心"
+          className="w-14 h-14 rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200 cursor-pointer"
+        >
           <Award className="w-7 h-7 text-white" />
-        </div>
+        </button>
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight mb-1">成績中心</h1>
           <p className="text-gray-500 font-medium">查看個人學習成績與分析報表</p>
@@ -134,7 +200,10 @@ export default function PersonalScorePage() {
             {selectedEmpId && (
               <button
                 onClick={() => {
+                  setLocalTab('overview');
                   setSelectedEmpId(null);
+                  setSelectedEmpName('');
+                  setSelectedDeptName('');
                   setShowUserSelector(false);
                   setUserSearchTerm('');
                   setSearchParams({});
@@ -171,6 +240,8 @@ export default function PersonalScorePage() {
                     key={user.emp_id}
                     onClick={() => {
                       setSelectedEmpId(user.emp_id);
+                      setSelectedEmpName(user.name || '');
+                      setSelectedDeptName(user.dept_name || '');
                       setShowUserSelector(false);
                       setUserSearchTerm(`${user.name} (${user.emp_id})`);
                       // 更新 URL 參數
@@ -192,7 +263,7 @@ export default function PersonalScorePage() {
             <div className="mt-4 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
               <div className="text-sm text-indigo-600 font-medium">目前查看：</div>
               <div className="font-bold text-gray-900 mt-1">
-                {users.find(u => u.emp_id === selectedEmpId)?.name} ({selectedEmpId})
+                {(selectedEmpName || users.find(u => u.emp_id === selectedEmpId)?.name || selfName)} ({selectedEmpId || selfEmpId})
               </div>
             </div>
           )}
@@ -202,7 +273,7 @@ export default function PersonalScorePage() {
       {/* Tab 切換 */}
       <div className="flex space-x-1 bg-indigo-50/50 p-1.5 rounded-xl w-fit border border-indigo-100/50">
         <button
-          onClick={() => setActiveTab('overview')}
+          onClick={() => navigateTab('overview')}
           className={clsx(
             "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
             activeTab === 'overview'
@@ -213,7 +284,7 @@ export default function PersonalScorePage() {
           總覽
         </button>
         <button
-          onClick={() => setActiveTab('history')}
+          onClick={() => navigateTab('history')}
           className={clsx(
             "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
             activeTab === 'history'
@@ -224,7 +295,7 @@ export default function PersonalScorePage() {
           歷史記錄
         </button>
         <button
-          onClick={() => setActiveTab('analysis')}
+          onClick={() => navigateTab('analysis')}
           className={clsx(
             "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
             activeTab === 'analysis'
@@ -236,7 +307,7 @@ export default function PersonalScorePage() {
         </button>
         {hasReportPermission && (
           <button
-            onClick={() => setActiveTab('team')}
+            onClick={() => navigateTab('team')}
             className={clsx(
               "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
               activeTab === 'team'
@@ -251,9 +322,15 @@ export default function PersonalScorePage() {
 
       {/* Tab 內容 */}
       <div>
-        {activeTab === 'overview' && <PersonalScoreOverview empId={selectedEmpId || undefined} />}
-        {activeTab === 'history' && <PersonalScoreHistory empId={selectedEmpId || undefined} />}
-        {activeTab === 'analysis' && <PersonalLearningAnalysis empId={selectedEmpId || undefined} />}
+        {activeTab === 'overview' && (
+          <PersonalScoreOverview
+            empId={selectedEmpId || undefined}
+            titlePrefix={titlePrefix}
+            onNavigateHistory={() => navigateTab('history')}
+          />
+        )}
+        {activeTab === 'history' && <PersonalScoreHistory empId={selectedEmpId || undefined} titlePrefix={titlePrefix} />}
+        {activeTab === 'analysis' && <PersonalLearningAnalysis empId={selectedEmpId || undefined} titlePrefix={titlePrefix} />}
         {activeTab === 'team' && hasReportPermission && <ReportDashboard />}
       </div>
     </div>

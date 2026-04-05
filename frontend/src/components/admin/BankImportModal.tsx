@@ -80,11 +80,14 @@ const BankImportModal = ({ planId, onClose, onImportSuccess }: BankImportModalPr
         
         try {
             setImporting(true);
-            const res = await api.post('/admin/question-bank/import', {
-                plan_id: planId,
-                question_ids: selectedIds
-            });
-            const { imported, duplicate } = (res as any).data;
+            const res = await api.post<{ imported: number; duplicate: number }>(
+                '/admin/question-bank/import',
+                {
+                    plan_id: planId,
+                    question_ids: selectedIds,
+                }
+            );
+            const { imported, duplicate } = res.data;
             let msg = `匯入成功 ${imported} 題`;
             if (duplicate > 0) msg += `\n(另有 ${duplicate} 題因重複而未匯入)`;
             

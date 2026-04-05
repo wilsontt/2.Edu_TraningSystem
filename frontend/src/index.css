@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* 與 vite 的 @shared-ui 別名一致：掃描企業入口網站根目錄下的 0.shared-ui，否則 PortalTopNav 等元件內的
+   responsive utilities（如 lg:flex）不會進 bundle，桌面版中欄會永遠維持 hidden。 */
+@source "../../../0.shared-ui";
+
 /* UI UX Pro Max Design System - 企業教育訓練系統 */
 /* Google Fonts 已移至 index.html 以避免 @import 順序問題 */
 

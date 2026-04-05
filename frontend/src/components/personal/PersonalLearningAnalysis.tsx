@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { TrendingUp, TrendingDown, Target } from 'lucide-react';
 import { API_BASE_URL } from '../../api';
 import {
@@ -40,25 +40,22 @@ interface PersonalAnalysis {
 
 interface PersonalLearningAnalysisProps {
   empId?: string;
+  titlePrefix?: string;
 }
 
-export default function PersonalLearningAnalysis({ empId }: PersonalLearningAnalysisProps) {
+export default function PersonalLearningAnalysis({ empId, titlePrefix }: PersonalLearningAnalysisProps) {
   const [analysis, setAnalysis] = useState<PersonalAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [trendPeriod, setTrendPeriod] = useState<number>(6); // 預設 6 個月
   const trendChartRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    fetchAnalysis();
-  }, [empId, trendPeriod]);
-
-  const fetchAnalysis = async () => {
+  const fetchAnalysis = useCallback(async () => {
     try {
       // 保存當前滾動位置（相對於趨勢圖表的位置）
-      const scrollPosition = trendChartRef.current 
+      const scrollPosition = trendChartRef.current
         ? trendChartRef.current.getBoundingClientRect().top + window.scrollY
         : null;
-      
+
       setLoading(true);
       const token = localStorage.getItem('token');
       const baseURL = API_BASE_URL;
@@ -66,19 +63,19 @@ export default function PersonalLearningAnalysis({ empId }: PersonalLearningAnal
         ? `${baseURL}/exam/personal/analysis?emp_id=${empId}&trend_period=${trendPeriod}`
         : `${baseURL}/exam/personal/analysis?trend_period=${trendPeriod}`;
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as PersonalAnalysis;
         setAnalysis(data);
-        
+
         // 恢復滾動位置
         if (scrollPosition !== null) {
           setTimeout(() => {
             window.scrollTo({
               top: scrollPosition - 100, // 稍微向上偏移，避免被頁籤遮住
-              behavior: 'instant' // 不使用 smooth，避免動畫
+              behavior: 'instant', // 不使用 smooth，避免動畫
             });
           }, 0);
         }
@@ -88,7 +85,11 @@ export default function PersonalLearningAnalysis({ empId }: PersonalLearningAnal
     } finally {
       setLoading(false);
     }
-  };
+  }, [empId, trendPeriod]);
+
+  useEffect(() => {
+    void fetchAnalysis();
+  }, [fetchAnalysis]);
 
   if (loading) {
     return <div className="p-8 flex justify-center text-gray-500">載入中...</div>;
@@ -101,8 +102,12 @@ export default function PersonalLearningAnalysis({ empId }: PersonalLearningAnal
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:hidden">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-gray-900">個人學習分析</h2>
-        <p className="text-gray-500 mt-1">深入了解您的學習狀況與進步軌跡</p>
+        <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+          {titlePrefix ? `${titlePrefix} 個人學習分析` : '個人學習分析'}
+        </h2>
+        <p className="text-gray-500 mt-1">
+          {titlePrefix ? `深入了解 ${titlePrefix} 的學習狀況與進步軌跡` : '深入了解您的學習狀況與進步軌跡'}
+        </p>
       </div>
 
       {/* 學習進度 */}

@@ -15,8 +15,9 @@ export const useExamProgress = (planId: string | undefined, userId: string | und
         
         if (saved) {
             try {
-                const parsed = JSON.parse(saved);
-                // 使用 functional update 避免依賴問題
+                const parsed = JSON.parse(saved) as Record<number, string>;
+                // 由 localStorage 還原進度；planId/userId 變更時依賴陣列會重跑此 effect
+                // eslint-disable-next-line react-hooks/set-state-in-effect -- 無法在 render 讀取 async storage，亦不宜用 key 拆整個考試頁
                 setAnswers(parsed);
                 console.log(`[Exam] Restored progress for plan ${planId}`);
             } catch (e) {

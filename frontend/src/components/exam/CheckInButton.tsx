@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, Clock, Loader2, AlertCircle } from 'lucide-react';
+import { isAxiosError } from 'axios';
 import api from '../../api';
 
 interface CheckInButtonProps {
@@ -19,19 +20,22 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
     const [error, setError] = useState<string | null>(null);
 
     // 載入報到狀態
-    const fetchStatus = async () => {
+    const fetchStatus = useCallback(async () => {
         try {
             setLoading(true);
             const res = await api.get<AttendanceStatus>(`/exam/plan/${planId}/attendance/status`);
             setStatus(res.data);
             setError(null);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Failed to fetch attendance status', err);
-            setError(err.response?.data?.detail || '無法載入報到狀態');
+            const msg = isAxiosError(err)
+                ? String(err.response?.data?.detail ?? '')
+                : '';
+            setError(msg || '無法載入報到狀態');
         } finally {
             setLoading(false);
         }
-    };
+    }, [planId]);
 
     // 執行報到
     const handleCheckIn = async () => {
@@ -53,9 +57,12 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
             if (onCheckInSuccess) {
                 onCheckInSuccess();
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Failed to check in', err);
-            setError(err.response?.data?.detail || '報到失敗，請稍後再試');
+            const msg = isAxiosError(err)
+                ? String(err.response?.data?.detail ?? '')
+                : '';
+            setError(msg || '報到失敗，請稍後再試');
         } finally {
             setCheckingIn(false);
         }
@@ -63,8 +70,8 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
 
     // 初始載入狀態
     useEffect(() => {
-        fetchStatus();
-    }, [planId]);
+        void fetchStatus();
+    }, [fetchStatus]);
 
     if (loading) {
         return (
@@ -82,7 +89,8 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
                 month: '2-digit',
                 day: '2-digit',
                 hour: '2-digit',
-                minute: '2-digit'
+                minute: '2-digit',
+                hour12: false,
             })
             : '';
         

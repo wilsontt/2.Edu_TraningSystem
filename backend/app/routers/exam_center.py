@@ -1,14 +1,62 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Body, Request as FastAPIRequest
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, case
 from typing import List, Optional
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from pydantic import BaseModel
 from .. import models, schemas
 from ..database import get_db
 from .auth import get_current_user
 from ..access_scope import get_scope_emp_ids
+
+_TZ_TAIPEI = ZoneInfo("Asia/Taipei")
+
+
+def _now_taipei_naive() -> datetime:
+    """業務時區 Asia/Taipei 的牆上時間（naive datetime），報到與交卷需一致。"""
+    return datetime.now(_TZ_TAIPEI).replace(tzinfo=None)
+
+
+def _history_already_covers_record_submit(
+    history_list: List[dict],
+    record_submit_time: Optional[datetime],
+    total_score: Optional[int],
+    is_passed: Optional[bool],
+) -> bool:
+    """
+    判斷 ExamHistory 是否已涵蓋目前 ExamRecord 的最後一次提交。
+    除 ISO 字串完全一致外，亦容忍舊版 submit_exam 曾以兩次 datetime.now() 造成的微秒差。
+    """
+    if not record_submit_time:
+        return True
+    record_iso = record_submit_time.isoformat()
+    if any(row.get("submit_time") == record_iso for row in history_list):
+        return True
+    r_naive = (
+        record_submit_time.replace(tzinfo=None)
+        if getattr(record_submit_time, "tzinfo", None)
+        else record_submit_time
+    )
+    for row in history_list:
+        st = row.get("submit_time")
+        if not st or not isinstance(st, str):
+            continue
+        try:
+            h_raw = datetime.fromisoformat(st.replace("Z", "+00:00"))
+            h_naive = h_raw.replace(tzinfo=None) if h_raw.tzinfo else h_raw
+            if abs((h_naive - r_naive).total_seconds()) > 2:
+                continue
+            if row.get("total_score") != total_score:
+                continue
+            if row.get("is_passed") != is_passed:
+                continue
+            return True
+        except (ValueError, TypeError):
+            continue
+    return False
+
 
 router = APIRouter(prefix="/exam", tags=["exam_center"])
 
@@ -26,6 +74,18 @@ def _has_menu_report_permission(current_user: models.User) -> bool:
     if not current_user or not current_user.role or not current_user.role.functions:
         return False
     return any(f.code == "menu:report" for f in current_user.role.functions)
+
+
+def _can_view_emp_id(db: Session, current_user: models.User, target_emp_id: str) -> bool:
+    role_name = (current_user.role and current_user.role.name) or ""
+    if is_admin_or_system_role(role_name):
+        return True
+    if target_emp_id == current_user.emp_id:
+        return True
+    if not _has_menu_report_permission(current_user):
+        return False
+    allowed_emp_ids = get_scope_emp_ids(db, current_user, active_only=False)
+    return allowed_emp_ids is None or target_emp_id in allowed_emp_ids
 
 # --- 考試中心資料結構 ---
 class ExamListItem(BaseModel):
@@ -108,13 +168,32 @@ def get_my_exams(
         plans = base_query.filter(or_(*or_conds)).order_by(models.TrainingPlan.training_date.desc()).all()
 
     results = []
-    
+
+    plan_ids = [p.id for p in plans]
+    record_by_plan_id: dict[int, models.ExamRecord] = {}
+    if plan_ids:
+        user_records = db.query(models.ExamRecord).filter(
+            models.ExamRecord.emp_id == current_user.emp_id,
+            models.ExamRecord.plan_id.in_(plan_ids),
+        ).all()
+        record_by_plan_id = {r.plan_id: r for r in user_records}
+
+    history_count_by_record_id: dict[int, int] = {}
+    if plan_ids:
+        rows = db.query(
+            models.ExamHistory.record_id,
+            func.count(models.ExamHistory.id).label("history_count"),
+        ).join(
+            models.ExamRecord, models.ExamRecord.id == models.ExamHistory.record_id
+        ).filter(
+            models.ExamRecord.emp_id == current_user.emp_id,
+            models.ExamRecord.plan_id.in_(plan_ids),
+        ).group_by(models.ExamHistory.record_id).all()
+        history_count_by_record_id = {int(r.record_id): int(r.history_count) for r in rows}
+
     for plan in plans:
         # Check if record exists
-        record = db.query(models.ExamRecord).filter(
-            models.ExamRecord.plan_id == plan.id,
-            models.ExamRecord.emp_id == current_user.emp_id
-        ).first()
+        record = record_by_plan_id.get(plan.id)
         
         status = "pending"
         score = None
@@ -127,7 +206,7 @@ def get_my_exams(
         calculated_total = sum([q.points for q in qs]) if qs else 0
         total = calculated_total if calculated_total > 0 else 100
 
-        if record:
+        if record and record.submit_time is not None:
             status = "completed"
             score = record.total_score
         else:
@@ -142,6 +221,12 @@ def get_my_exams(
             else:
                 status = "active"
         
+        attempts = 0
+        if record and record.submit_time is not None:
+            history_count = history_count_by_record_id.get(record.id, 0)
+            # 以 ExamHistory 筆數代表實際提交次數；舊資料無 history 時至少為 1
+            attempts = history_count if history_count > 0 else 1
+
         results.append(ExamListItem(
             plan_id=plan.id,
             title=plan.title,
@@ -150,7 +235,7 @@ def get_my_exams(
             status=status,
             score=score,
             total_points=total,
-            attempts=record.attempts if record else 0
+            attempts=attempts
         ))
         
     return results
@@ -330,8 +415,8 @@ def submit_exam(
         models.ExamRecord.emp_id == current_user.emp_id
     ).first()
     
-    now = datetime.now()
-    
+    now = _now_taipei_naive()
+
     if existing_record:
         # Update existing record (Re-take)
         # 注意：start_time 應該在 start_exam 時已設定，這裡只更新 submit_time
@@ -342,7 +427,8 @@ def submit_exam(
         existing_record.total_score = earned_score
         existing_record.is_passed = is_passed
         existing_record.submit_time = now
-        existing_record.attempts = (existing_record.attempts or 1) + 1
+        # attempts 定義為「提交次數」：首次提交應為 1（start_exam 會先建立 attempts=0 的 record）
+        existing_record.attempts = (existing_record.attempts or 0) + 1
         
         # Clear old details
         db.query(models.ExamDetail).filter(models.ExamDetail.record_id == existing_record.id).delete()
@@ -392,7 +478,7 @@ def submit_exam(
 
     history_record = models.ExamHistory(
         record_id=record_id,
-        submit_time=datetime.now(),
+        submit_time=now,
         total_score=earned_score,
         is_passed=is_passed,
         details=details_json
@@ -522,6 +608,23 @@ def get_personal_history(
     target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
     
     # 基礎查詢（含部門／姓名供關鍵字與列表顯示）
+    history_counts_sq = db.query(
+        models.ExamHistory.record_id.label("record_id"),
+        func.count(models.ExamHistory.id).label("history_count"),
+    ).group_by(models.ExamHistory.record_id).subquery()
+
+    # list_attempts：以 ExamHistory 筆數為主；若無 history 但已有 submit_time（舊資料）視為 1
+    list_attempts_expr = case(
+        (
+            and_(
+                models.ExamRecord.submit_time.isnot(None),
+                func.coalesce(history_counts_sq.c.history_count, 0) <= 0,
+            ),
+            1,
+        ),
+        else_=func.coalesce(history_counts_sq.c.history_count, 0),
+    )
+
     base_query = db.query(
         models.ExamRecord.id,
         models.ExamRecord.plan_id,
@@ -530,7 +633,7 @@ def get_personal_history(
         models.ExamRecord.is_passed,
         models.ExamRecord.start_time,
         models.ExamRecord.submit_time,
-        models.ExamRecord.attempts,
+        list_attempts_expr.label("attempts"),
         models.User.name.label("user_name"),
         models.Department.name.label("dept_name"),
     ).join(
@@ -539,6 +642,8 @@ def get_personal_history(
         models.User, models.ExamRecord.emp_id == models.User.emp_id
     ).outerjoin(
         models.Department, models.User.dept_id == models.Department.id
+    ).outerjoin(
+        history_counts_sq, models.ExamRecord.id == history_counts_sq.c.record_id
     ).filter(
         models.ExamRecord.emp_id == target_emp_id,
         models.ExamRecord.submit_time.isnot(None)
@@ -565,7 +670,7 @@ def get_personal_history(
     elif sort_by == "dept":
         order_by = models.Department.name.desc() if order == "desc" else models.Department.name.asc()
     elif sort_by == "attempts":
-        order_by = models.ExamRecord.attempts.desc() if order == "desc" else models.ExamRecord.attempts.asc()
+        order_by = list_attempts_expr.desc() if order == "desc" else list_attempts_expr.asc()
     else:  # time
         order_by = models.ExamRecord.submit_time.desc() if order == "desc" else models.ExamRecord.submit_time.asc()
     
@@ -581,7 +686,8 @@ def get_personal_history(
         # 計算作答時間
         duration = None
         if r.start_time and r.submit_time:
-            duration = (r.submit_time - r.start_time).total_seconds()
+            diff = (r.submit_time - r.start_time).total_seconds()
+            duration = diff if diff >= 0 else None
         
         results.append({
             "record_id": r.id,
@@ -592,7 +698,7 @@ def get_personal_history(
             "start_time": r.start_time.isoformat() if r.start_time else None,
             "submit_time": r.submit_time.isoformat() if r.submit_time else None,
             "duration": round(duration, 0) if duration else None,  # 秒數
-            "attempts": r.attempts,
+            "attempts": int(r.attempts or 0),
             "emp_id": target_emp_id,
             "name": r.user_name or "",
             "dept_name": r.dept_name or "",
@@ -883,9 +989,7 @@ def get_exam_record_detail(
         raise HTTPException(status_code=404, detail="考試記錄不存在")
     
     # 權限控制
-    role_name = (current_user.role and current_user.role.name) or ""
-    is_admin = is_admin_or_system_role(role_name)
-    if not is_admin and record.emp_id != current_user.emp_id:
+    if not _can_view_emp_id(db, current_user, record.emp_id):
         raise HTTPException(status_code=403, detail="您只能查看自己的成績詳情")
     
     # 取得使用者資訊
@@ -952,6 +1056,25 @@ def get_exam_record_detail(
             "is_passed": h.is_passed
         })
 
+    # 舊資料可能出現 ExamRecord.attempts 已增加，但最後一次提交未寫入 ExamHistory。
+    # 為了讓「考試歷程記錄」與列表重考次數一致，若缺少當前 record 的提交資訊則補一筆。
+    if record.submit_time:
+        has_current_submit = _history_already_covers_record_submit(
+            history_list,
+            record.submit_time,
+            record.total_score,
+            record.is_passed,
+        )
+        if not has_current_submit:
+            record_submit_iso = record.submit_time.isoformat()
+            history_list.append({
+                "id": None,
+                "submit_time": record_submit_iso,
+                "total_score": record.total_score,
+                "is_passed": record.is_passed,
+            })
+            history_list.sort(key=lambda x: x.get("submit_time") or "")
+
     return {
         "record_id": record.id,
         "basic_info": {
@@ -994,9 +1117,7 @@ def get_exam_history_detail(
         raise HTTPException(status_code=404, detail="關聯的考試紀錄不存在")
         
     # 3. 權限控制
-    role_name = (current_user.role and current_user.role.name) or ""
-    is_admin = is_admin_or_system_role(role_name)
-    if not is_admin and record.emp_id != current_user.emp_id:
+    if not _can_view_emp_id(db, current_user, record.emp_id):
         raise HTTPException(status_code=403, detail="您只能查看自己的成績詳情")
         
     # 4. 取得使用者資訊
@@ -1044,6 +1165,24 @@ def get_exam_history_detail(
             "total_score": h.total_score,
             "is_passed": h.is_passed
         })
+
+    # 與 /record/{record_id}/detail 一致：若缺少當前 record 的最後一次提交，補進歷程清單。
+    if record.submit_time:
+        has_current_submit = _history_already_covers_record_submit(
+            history_list,
+            record.submit_time,
+            record.total_score,
+            record.is_passed,
+        )
+        if not has_current_submit:
+            record_submit_iso = record.submit_time.isoformat()
+            history_list.append({
+                "id": None,
+                "submit_time": record_submit_iso,
+                "total_score": record.total_score,
+                "is_passed": record.is_passed,
+            })
+            history_list.sort(key=lambda x: x.get("submit_time") or "")
 
     # 9. 回傳資料
     return {
@@ -1145,7 +1284,7 @@ def check_in_attendance(
     attendance = models.AttendanceRecord(
         emp_id=current_user.emp_id,
         plan_id=plan_id,
-        checkin_time=datetime.utcnow(),
+        checkin_time=_now_taipei_naive(),
         ip_address=client_ip
     )
     

@@ -117,6 +117,21 @@ interface DepartmentComparison {
   completion_rate: number;
 }
 
+/** 部門／計畫展開列表明細 API 回傳之單筆成績列 */
+interface ReportDetailScoreRecord {
+  name: string;
+  plan_title: string;
+  total_score: number;
+  is_passed: boolean;
+  submit_time?: string | null;
+  emp_id?: string;
+  dept_name?: string;
+}
+
+interface ReportExpandDetailPayload {
+  records: ReportDetailScoreRecord[];
+}
+
 interface PlanPopularity {
   popularity_ranking: Array<{
     plan_id: number;
@@ -216,8 +231,8 @@ export default function ReportDashboard() {
   const [includeAdvanced, setIncludeAdvanced] = useState(true);
   const [expandedDept, setExpandedDept] = useState<number | null>(null);
   const [expandedPlan, setExpandedPlan] = useState<number | null>(null);
-  const [deptDetails, setDeptDetails] = useState<Record<number, any>>({});
-  const [planDetails, setPlanDetails] = useState<Record<number, any>>({});
+  const [deptDetails, setDeptDetails] = useState<Record<number, ReportExpandDetailPayload>>({});
+  const [planDetails, setPlanDetails] = useState<Record<number, ReportExpandDetailPayload>>({});
   const [printPreview, setPrintPreview] = useState<PrintPreviewItem[]>([]);
   const [selectedPrintEmpIds, setSelectedPrintEmpIds] = useState<Set<string>>(new Set());
   const [printPlanOptions, setPrintPlanOptions] = useState<PrintPlanOption[]>([]);
@@ -251,7 +266,7 @@ export default function ReportDashboard() {
             { headers: { 'Authorization': `Bearer ${token}` } }
           );
           if (res.ok) {
-            const data = await res.json();
+            const data = (await res.json()) as ReportExpandDetailPayload;
             setDeptDetails((prev) => ({ ...prev, [itemId]: data }));
           }
         } catch (error) {
@@ -275,7 +290,7 @@ export default function ReportDashboard() {
           { headers: { 'Authorization': `Bearer ${token}` } }
         );
         if (res.ok) {
-          const data = await res.json();
+          const data = (await res.json()) as ReportExpandDetailPayload;
           setPlanDetails((prev) => ({ ...prev, [itemId]: data }));
         }
       } catch (error) {
@@ -310,10 +325,8 @@ export default function ReportDashboard() {
 
       // 建立時間篩選參數
       const baseURL = API_BASE_URL;
-      let deptUrl = `${baseURL}/admin/reports/department`;
-      let planUrl = `${baseURL}/admin/reports/plan`;
       const params = new URLSearchParams();
-      
+
       if (timeFilter.type === 'year' && timeFilter.year) {
         params.append('year', timeFilter.year.toString());
       } else if (timeFilter.type === 'quarter' && timeFilter.year && timeFilter.quarter) {
@@ -323,14 +336,14 @@ export default function ReportDashboard() {
         params.append('year', timeFilter.year.toString());
         params.append('month', timeFilter.month.toString());
       }
-      
+
       if (includeAdvanced) {
         params.append('include_advanced', 'true');
       }
-      
-      if (params.toString()) {
-        deptUrl += '?' + params.toString();
-      }
+
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const deptUrl = `${baseURL}/admin/reports/department${query}`;
+      const planUrl = `${baseURL}/admin/reports/plan${query}`;
 
       const [
         overviewRes, 
@@ -1299,7 +1312,7 @@ export default function ReportDashboard() {
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {deptDetails[itemId].records.map((record: any, rIdx: number) => (
+                                          {deptDetails[itemId].records.map((record, rIdx: number) => (
                                             <tr key={rIdx} className="border-b even:bg-gray-100">
                                               <td className="px-4 py-2">{record.name}</td>
                                               <td className="px-4 py-2">{record.plan_title}</td>
@@ -1312,12 +1325,12 @@ export default function ReportDashboard() {
                                                 )}
                                               </td>
                                               <td className="px-4 py-2 text-right text-gray-500">
-                                                {record.submit_time ? new Date(record.submit_time).toLocaleString() : '-'}
+                                                {record.submit_time ? new Date(record.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
                                               </td>
                                                               <td className="px-4 py-2 text-center">
                                                                 {record.emp_id && (
                                                                   <Link
-                                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=history`}
+                                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || (item as DepartmentStat).name || '')}`}
                                                                     onClick={(e) => e.stopPropagation()}
                                                                     className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                                   >
@@ -1409,7 +1422,7 @@ export default function ReportDashboard() {
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {planDetails[itemId].records.map((record: any, rIdx: number) => (
+                                          {planDetails[itemId].records.map((record, rIdx: number) => (
                                             <tr key={rIdx} className="border-b even:bg-gray-100">
                                               <td className="px-4 py-2">{record.name}</td>
                                               <td className="px-4 py-2">{record.dept_name}</td>
@@ -1422,12 +1435,12 @@ export default function ReportDashboard() {
                                                 )}
                                               </td>
                                               <td className="px-4 py-2 text-right text-gray-500">
-                                                {record.submit_time ? new Date(record.submit_time).toLocaleString() : '-'}
+                                                {record.submit_time ? new Date(record.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
                                               </td>
                                                               <td className="px-4 py-2 text-center">
                                                                 {record.emp_id && (
                                                                   <Link
-                                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=history`}
+                                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || '')}`}
                                                                     onClick={(e) => e.stopPropagation()}
                                                                     className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                                   >

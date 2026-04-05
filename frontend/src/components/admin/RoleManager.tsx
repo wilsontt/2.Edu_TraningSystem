@@ -41,7 +41,7 @@ const RoleManager = () => {
   const [isAddingMemberToRole, setIsAddingMemberToRole] = useState(false);
   const [removingMemberFromRole, setRemovingMemberFromRole] = useState<{emp_id: string; name: string} | null>(null);
   const [allUsers, setAllUsers] = useState<Array<{emp_id: string; name: string; role_id: number | null; dept_id?: number | null; department?: {name: string}; job_title?: {id: number; name: string}}>>([]);
-  const [loadingAllUsers, _setLoadingAllUsers] = useState(false);
+  const [loadingAllUsers, setLoadingAllUsers] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [userDepartmentFilter, setUserDepartmentFilter] = useState<number | ''>('');
   const [userJobTitleFilter, setUserJobTitleFilter] = useState<number | ''>('');
@@ -410,7 +410,11 @@ const RoleManager = () => {
                       setUserJobTitleFilter('');
                       setIsAddingMemberToRole(true);
                       if (allUsers.length === 0) {
-                        api.get('/admin/users').then(res => setAllUsers(res.data));
+                        setLoadingAllUsers(true);
+                        api
+                          .get('/admin/users')
+                          .then((res) => setAllUsers(res.data))
+                          .finally(() => setLoadingAllUsers(false));
                       }
                     }}
                     className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 hover:shadow-md transition-all duration-200 text-sm cursor-pointer"

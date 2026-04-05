@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, Eye, CheckCircle, XCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { format } from 'date-fns';
 import { API_BASE_URL } from '../../api';
 import ScoreDetailModal from './ScoreDetailModal';
-import type { ScoreDetail } from './types';
+import type { ExamHistoryItem, ScoreDetail } from './types';
 import ScorePrintFlow, { type ScorePrintPlanOption } from '../common/ScorePrintFlow';
 
 interface PlanHistoryModalProps {
@@ -55,24 +55,17 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
     }
   }, [detail?.basic_info?.plan_id]);
 
-  useEffect(() => {
-    if (isOpen && recordId) {
-      fetchDetail();
-    }
-  }, [isOpen, recordId]);
-
-  const fetchDetail = async () => {
+  const fetchDetail = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
       const baseURL = API_BASE_URL;
-      const response = await fetch(
-        `${baseURL}/exam/record/${recordId}/detail`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await fetch(`${baseURL}/exam/record/${recordId}/detail`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as ScoreDetail;
         setDetail(data);
       } else {
         console.error('Failed to fetch plan history');
@@ -82,7 +75,13 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
     } finally {
       setLoading(false);
     }
-  };
+  }, [recordId]);
+
+  useEffect(() => {
+    if (isOpen && recordId) {
+      void fetchDetail();
+    }
+  }, [isOpen, recordId, fetchDetail]);
 
   const loadModalPrintPreview = async () => {
     if (selectedPrintPlanIds.size === 0) {
@@ -210,28 +209,14 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {/* 為了顯示完整歷程，我們需要結合 history 陣列與最後一次的 record 資訊嗎？
-                        不，後端 API 回傳的 history 陣列已經包含了所有歷程（包含最後一次）。
-                        但要注意 history item 沒有 id (history_id)，我們需要確認後端是否有回傳 id。
-                        
-                        檢查後端 API get_exam_record_detail:
-                        history_list.append({
-                            "submit_time": h.submit_time...,
-                            "total_score": h.total_score,
-                            "is_passed": h.is_passed
-                        })
-                        
-                        糟糕，後端沒有回傳 history id！這樣前端無法呼叫 /exam/history/{id}。
-                        我需要先去修後端 API。
-                    */}
                     {detail.history && detail.history.length > 0 ? (
-                      detail.history.map((h: any, idx) => (
+                      detail.history.map((h: ExamHistoryItem, idx) => (
                         <tr key={idx} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             第 {idx + 1} 次
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {h.submit_time ? new Date(h.submit_time).toLocaleString('zh-TW') : '-'}
+                            {h.submit_time ? new Date(h.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
                           </td>
                           <td className={clsx(
                             "px-6 py-4 whitespace-nowrap text-sm font-bold",
@@ -251,9 +236,13 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            {h.id ? (
+                            {typeof h.id === 'number' ? (
                                 <button
-                                onClick={() => setSelectedHistoryId(h.id)}
+                                type="button"
+                                onClick={() => {
+                                  const hid = h.id;
+                                  if (typeof hid === 'number') setSelectedHistoryId(hid);
+                                }}
                                 className="text-blue-600 hover:text-blue-900 flex items-center justify-end gap-1 ml-auto"
                                 >
                                 <Eye className="w-4 h-4" />

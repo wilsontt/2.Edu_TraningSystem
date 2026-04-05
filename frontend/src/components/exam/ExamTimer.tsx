@@ -7,15 +7,8 @@ interface ExamTimerProps {
 }
 
 const ExamTimer = ({ limitTime, onTimeUp }: ExamTimerProps) => {
-    // 直接從 prop 初始化 state 以避免 effect 中的同步 setState
+    /** 由父層 key={limitTime} 在限時變更時重掛載，避免在 effect 內同步 setState */
     const [timeLeft, setTimeLeft] = useState(limitTime);
-
-    // 僅在 limitTime 顯著變更時同步
-    useEffect(() => {
-        if (limitTime > 0) {
-            setTimeLeft(limitTime);
-        }
-    }, [limitTime]);
 
     useEffect(() => {
         if (limitTime <= 0) return;

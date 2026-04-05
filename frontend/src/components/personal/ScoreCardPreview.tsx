@@ -317,7 +317,7 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
             return `
                 <tr style="${rowStyle} font-family:${CHINESE_FONT_STACK};">
                     <td style="padding:0.5rem 1rem; text-align:center; vertical-align:middle;">${idx + 1}${currentMarker}</td>
-                    <td style="padding:0.5rem 1rem; text-align:center;">${h.submit_time ? new Date(h.submit_time).toLocaleString('zh-TW') : '-'}</td>
+                    <td style="padding:0.5rem 1rem; text-align:center;">${h.submit_time ? new Date(h.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}</td>
                     <td style="padding:0.5rem 1rem; text-align:center; font-weight:bold; color:${scoreColor};">
                         ${h.total_score}
                     </td>

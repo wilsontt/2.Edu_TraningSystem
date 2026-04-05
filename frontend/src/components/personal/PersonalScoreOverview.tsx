@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Award, TrendingUp, Clock, Target, CheckCircle, XCircle } from 'lucide-react';
 import { API_BASE_URL } from '../../api';
 
@@ -14,30 +14,28 @@ interface PersonalOverview {
 
 interface PersonalScoreOverviewProps {
   empId?: string;
+  titlePrefix?: string;
+  onNavigateHistory?: () => void;
 }
 
-export default function PersonalScoreOverview({ empId }: PersonalScoreOverviewProps) {
+export default function PersonalScoreOverview({ empId, titlePrefix, onNavigateHistory }: PersonalScoreOverviewProps) {
   const [overview, setOverview] = useState<PersonalOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchOverview();
-  }, [empId]);
-
-  const fetchOverview = async () => {
+  const fetchOverview = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
       const baseURL = API_BASE_URL;
-      const url = empId 
+      const url = empId
         ? `${baseURL}/exam/personal/overview?emp_id=${empId}`
         : `${baseURL}/exam/personal/overview`;
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as PersonalOverview;
         setOverview(data);
       }
     } catch (error) {
@@ -45,7 +43,11 @@ export default function PersonalScoreOverview({ empId }: PersonalScoreOverviewPr
     } finally {
       setLoading(false);
     }
-  };
+  }, [empId]);
+
+  useEffect(() => {
+    void fetchOverview();
+  }, [fetchOverview]);
 
   const formatDuration = (seconds: number): string => {
     if (seconds < 60) return `${Math.round(seconds)}秒`;
@@ -68,8 +70,12 @@ export default function PersonalScoreOverview({ empId }: PersonalScoreOverviewPr
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:hidden">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-gray-900">個人成績總覽</h2>
-        <p className="text-gray-500 mt-1">查看您的學習成果與統計資料</p>
+        <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+          {titlePrefix ? `${titlePrefix} 個人成績總覽` : '個人成績總覽'}
+        </h2>
+        <p className="text-gray-500 mt-1">
+          {titlePrefix ? `查看 ${titlePrefix} 的學習成果與統計資料` : '查看您的學習成果與統計資料'}
+        </p>
       </div>
 
       {/* KPI 卡片 */}
@@ -124,7 +130,14 @@ export default function PersonalScoreOverview({ empId }: PersonalScoreOverviewPr
             bgColor: "bg-indigo-50"
           }
         ].map((kpi, idx) => (
-          <div key={idx} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all">
+          <button
+            key={idx}
+            type="button"
+            onClick={idx === 0 ? onNavigateHistory : undefined}
+            className={`bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all text-left w-full ${
+              idx === 0 && onNavigateHistory ? 'cursor-pointer' : 'cursor-default'
+            }`}
+          >
             <div className="flex flex-row items-center justify-between space-y-0 pb-2">
               <h3 className="text-sm font-medium text-gray-500">{kpi.title}</h3>
               <div className={`p-2 rounded-lg ${kpi.bgColor}`}>
@@ -135,7 +148,7 @@ export default function PersonalScoreOverview({ empId }: PersonalScoreOverviewPr
               <div className="text-2xl font-bold text-gray-900">{kpi.value}</div>
               <p className="text-xs text-gray-500 mt-1">{kpi.sub}</p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 

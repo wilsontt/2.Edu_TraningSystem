@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { QrCode, RefreshCw, Loader2, Clock, X, Copy, Check, Eye, Trash2 } from 'lucide-react';
 import api from '../../api';
 import { AxiosError } from 'axios';
@@ -31,20 +31,20 @@ const QRCodeManager = () => {
     const [deletingTokenId, setDeletingTokenId] = useState<number | null>(null);
 
     // 載入 token 列表
-    const fetchTokens = async () => {
+    const fetchTokens = useCallback(async () => {
         try {
             setLoading(true);
             const res = await api.get<LoginToken[]>('/admin/qrcode/login/tokens');
-            
+
             // 分離未過期和已過期的 token
-            const validTokens = res.data.filter(token => !isExpired(token.expires_at));
-            const expiredTokens = res.data.filter(token => isExpired(token.expires_at));
-            
+            const validTokens = res.data.filter((token) => !isExpired(token.expires_at));
+            const expiredTokens = res.data.filter((token) => isExpired(token.expires_at));
+
             // 已過期的 token 按過期時間排序（最新的在前），只取前 5 筆
             const recentExpiredTokens = expiredTokens
                 .sort((a, b) => new Date(b.expires_at).getTime() - new Date(a.expires_at).getTime())
                 .slice(0, 5);
-            
+
             // 合併：未過期的全部 + 最近 5 筆已過期的
             setTokens([...validTokens, ...recentExpiredTokens]);
         } catch (err) {
@@ -52,7 +52,7 @@ const QRCodeManager = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     // 產生 QRcode
     const handleGenerate = async () => {
@@ -133,6 +133,7 @@ const QRCodeManager = () => {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
+            hour12: false,
             timeZone: 'Asia/Taipei' // 明確指定台灣時區
         });
     };
@@ -193,8 +194,8 @@ const QRCodeManager = () => {
 
     // 初始載入 token 列表
     useEffect(() => {
-        fetchTokens();
-    }, []);
+        void fetchTokens();
+    }, [fetchTokens]);
 
     return (
         <div className="max-w-4xl mx-auto p-6 space-y-8">
