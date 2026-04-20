@@ -1,13 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2, Clock, ArrowLeft } from 'lucide-react';
-import { isAxiosError } from 'axios';
 import api from '../../api';
-
-interface TrainingPlanRow {
-  id: number;
-  title: string;
-}
 
 const CheckInPage = () => {
   const navigate = useNavigate();
@@ -42,20 +36,17 @@ const CheckInPage = () => {
 
         // 獲取計畫資訊（可選）
         try {
-          const plansRes = await api.get<TrainingPlanRow[]>('/training/plans');
-          const plan = plansRes.data.find((p) => p.id === parseInt(planId, 10));
+          const plansRes = await api.get('/training/plans');
+          const plan = plansRes.data.find((p: any) => p.id === parseInt(planId));
           if (plan) {
             setPlanTitle(plan.title);
           }
         } catch {
           // 如果無法獲取計畫資訊，忽略
         }
-      } catch (err: unknown) {
+      } catch (err: any) {
         console.error('Failed to load attendance status', err);
-        const msg = isAxiosError(err)
-          ? String(err.response?.data?.detail ?? '')
-          : '';
-        setError(msg || '無法載入報到狀態');
+        setError(err.response?.data?.detail || '無法載入報到狀態');
         setAttendanceStatus({
           is_checked_in: false
         });
@@ -79,12 +70,9 @@ const CheckInPage = () => {
         is_checked_in: true,
         checkin_time: res.data.checkin_time || new Date().toISOString()
       });
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error('Failed to check in', err);
-      const msg = isAxiosError(err)
-        ? String(err.response?.data?.detail ?? '')
-        : '';
-      setError(msg || '報到失敗，請稍後再試');
+      setError(err.response?.data?.detail || '報到失敗，請稍後再試');
     } finally {
       setCheckingIn(false);
     }

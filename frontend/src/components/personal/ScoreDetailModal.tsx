@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { X, CheckCircle, XCircle, Clock, User, FileText, Award, Printer } from 'lucide-react';
 import clsx from 'clsx';
 import { API_BASE_URL } from '../../api';
@@ -19,23 +19,30 @@ export default function ScoreDetailModal({ recordId, historyId, isOpen, onClose 
   const [loading, setLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
-  const fetchDetail = useCallback(async () => {
+  useEffect(() => {
+    if (isOpen && (recordId || historyId)) {
+      fetchDetail();
+    }
+  }, [isOpen, recordId, historyId]);
+
+  const fetchDetail = async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
       const baseURL = API_BASE_URL;
-
+      
       let url = `${baseURL}/exam/record/${recordId}/detail`;
       if (historyId) {
         url = `${baseURL}/exam/history/${historyId}`;
       }
 
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(
+        url,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
 
       if (response.ok) {
-        const data = (await response.json()) as ScoreDetail;
+        const data = await response.json();
         setDetail(data);
       } else {
         console.error('Failed to fetch score detail');
@@ -45,13 +52,7 @@ export default function ScoreDetailModal({ recordId, historyId, isOpen, onClose 
     } finally {
       setLoading(false);
     }
-  }, [recordId, historyId]);
-
-  useEffect(() => {
-    if (isOpen && (recordId || historyId)) {
-      void fetchDetail();
-    }
-  }, [isOpen, recordId, historyId, fetchDetail]);
+  };
 
   const formatDuration = (seconds: number | null): string => {
     if (!seconds) return '-';

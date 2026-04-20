@@ -117,21 +117,6 @@ interface DepartmentComparison {
   completion_rate: number;
 }
 
-/** 部門／計畫展開列表明細 API 回傳之單筆成績列 */
-interface ReportDetailScoreRecord {
-  name: string;
-  plan_title: string;
-  total_score: number;
-  is_passed: boolean;
-  submit_time?: string | null;
-  emp_id?: string;
-  dept_name?: string;
-}
-
-interface ReportExpandDetailPayload {
-  records: ReportDetailScoreRecord[];
-}
-
 interface PlanPopularity {
   popularity_ranking: Array<{
     plan_id: number;
@@ -231,8 +216,8 @@ export default function ReportDashboard() {
   const [includeAdvanced, setIncludeAdvanced] = useState(true);
   const [expandedDept, setExpandedDept] = useState<number | null>(null);
   const [expandedPlan, setExpandedPlan] = useState<number | null>(null);
-  const [deptDetails, setDeptDetails] = useState<Record<number, ReportExpandDetailPayload>>({});
-  const [planDetails, setPlanDetails] = useState<Record<number, ReportExpandDetailPayload>>({});
+  const [deptDetails, setDeptDetails] = useState<Record<number, any>>({});
+  const [planDetails, setPlanDetails] = useState<Record<number, any>>({});
   const [printPreview, setPrintPreview] = useState<PrintPreviewItem[]>([]);
   const [selectedPrintEmpIds, setSelectedPrintEmpIds] = useState<Set<string>>(new Set());
   const [printPlanOptions, setPrintPlanOptions] = useState<PrintPlanOption[]>([]);
@@ -266,7 +251,7 @@ export default function ReportDashboard() {
             { headers: { 'Authorization': `Bearer ${token}` } }
           );
           if (res.ok) {
-            const data = (await res.json()) as ReportExpandDetailPayload;
+            const data = await res.json();
             setDeptDetails((prev) => ({ ...prev, [itemId]: data }));
           }
         } catch (error) {
@@ -290,7 +275,7 @@ export default function ReportDashboard() {
           { headers: { 'Authorization': `Bearer ${token}` } }
         );
         if (res.ok) {
-          const data = (await res.json()) as ReportExpandDetailPayload;
+          const data = await res.json();
           setPlanDetails((prev) => ({ ...prev, [itemId]: data }));
         }
       } catch (error) {
@@ -325,8 +310,10 @@ export default function ReportDashboard() {
 
       // 建立時間篩選參數
       const baseURL = API_BASE_URL;
+      let deptUrl = `${baseURL}/admin/reports/department`;
+      let planUrl = `${baseURL}/admin/reports/plan`;
       const params = new URLSearchParams();
-
+      
       if (timeFilter.type === 'year' && timeFilter.year) {
         params.append('year', timeFilter.year.toString());
       } else if (timeFilter.type === 'quarter' && timeFilter.year && timeFilter.quarter) {
@@ -336,14 +323,14 @@ export default function ReportDashboard() {
         params.append('year', timeFilter.year.toString());
         params.append('month', timeFilter.month.toString());
       }
-
+      
       if (includeAdvanced) {
         params.append('include_advanced', 'true');
       }
-
-      const query = params.toString() ? `?${params.toString()}` : '';
-      const deptUrl = `${baseURL}/admin/reports/department${query}`;
-      const planUrl = `${baseURL}/admin/reports/plan${query}`;
+      
+      if (params.toString()) {
+        deptUrl += '?' + params.toString();
+      }
 
       const [
         overviewRes, 
@@ -1312,7 +1299,7 @@ export default function ReportDashboard() {
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {deptDetails[itemId].records.map((record, rIdx: number) => (
+                                          {deptDetails[itemId].records.map((record: any, rIdx: number) => (
                                             <tr key={rIdx} className="border-b even:bg-gray-100">
                                               <td className="px-4 py-2">{record.name}</td>
                                               <td className="px-4 py-2">{record.plan_title}</td>
@@ -1422,7 +1409,7 @@ export default function ReportDashboard() {
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {planDetails[itemId].records.map((record, rIdx: number) => (
+                                          {planDetails[itemId].records.map((record: any, rIdx: number) => (
                                             <tr key={rIdx} className="border-b even:bg-gray-100">
                                               <td className="px-4 py-2">{record.name}</td>
                                               <td className="px-4 py-2">{record.dept_name}</td>

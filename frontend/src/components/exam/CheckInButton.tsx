@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CheckCircle, Clock, Loader2, AlertCircle } from 'lucide-react';
-import { isAxiosError } from 'axios';
 import api from '../../api';
 
 interface CheckInButtonProps {
@@ -20,22 +19,19 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
     const [error, setError] = useState<string | null>(null);
 
     // 載入報到狀態
-    const fetchStatus = useCallback(async () => {
+    const fetchStatus = async () => {
         try {
             setLoading(true);
             const res = await api.get<AttendanceStatus>(`/exam/plan/${planId}/attendance/status`);
             setStatus(res.data);
             setError(null);
-        } catch (err: unknown) {
+        } catch (err: any) {
             console.error('Failed to fetch attendance status', err);
-            const msg = isAxiosError(err)
-                ? String(err.response?.data?.detail ?? '')
-                : '';
-            setError(msg || '無法載入報到狀態');
+            setError(err.response?.data?.detail || '無法載入報到狀態');
         } finally {
             setLoading(false);
         }
-    }, [planId]);
+    };
 
     // 執行報到
     const handleCheckIn = async () => {
@@ -57,12 +53,9 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
             if (onCheckInSuccess) {
                 onCheckInSuccess();
             }
-        } catch (err: unknown) {
+        } catch (err: any) {
             console.error('Failed to check in', err);
-            const msg = isAxiosError(err)
-                ? String(err.response?.data?.detail ?? '')
-                : '';
-            setError(msg || '報到失敗，請稍後再試');
+            setError(err.response?.data?.detail || '報到失敗，請稍後再試');
         } finally {
             setCheckingIn(false);
         }
@@ -70,8 +63,8 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
 
     // 初始載入狀態
     useEffect(() => {
-        void fetchStatus();
-    }, [fetchStatus]);
+        fetchStatus();
+    }, [planId]);
 
     if (loading) {
         return (

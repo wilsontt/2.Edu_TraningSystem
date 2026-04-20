@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { X, Eye, CheckCircle, XCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { format } from 'date-fns';
@@ -55,17 +55,24 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
     }
   }, [detail?.basic_info?.plan_id]);
 
-  const fetchDetail = useCallback(async () => {
+  useEffect(() => {
+    if (isOpen && recordId) {
+      fetchDetail();
+    }
+  }, [isOpen, recordId]);
+
+  const fetchDetail = async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
       const baseURL = API_BASE_URL;
-      const response = await fetch(`${baseURL}/exam/record/${recordId}/detail`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(
+        `${baseURL}/exam/record/${recordId}/detail`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
 
       if (response.ok) {
-        const data = (await response.json()) as ScoreDetail;
+        const data = await response.json();
         setDetail(data);
       } else {
         console.error('Failed to fetch plan history');
@@ -75,13 +82,7 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
     } finally {
       setLoading(false);
     }
-  }, [recordId]);
-
-  useEffect(() => {
-    if (isOpen && recordId) {
-      void fetchDetail();
-    }
-  }, [isOpen, recordId, fetchDetail]);
+  };
 
   const loadModalPrintPreview = async () => {
     if (selectedPrintPlanIds.size === 0) {
