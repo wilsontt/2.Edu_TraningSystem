@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } f
 import { LayoutDashboard, BookOpen, PenTool, BarChart3, Settings, LogOut, ChevronDown, Menu, X, ClipboardList } from 'lucide-react';
 import api from './api';
 import LoginPage from './components/LoginPage';
-import LandingPage from './components/LandingPage';
 import DepartmentManager from './components/admin/DepartmentManager';
 import CategoryManager from './components/admin/CategoryManager';
 import TrainingPlanManager from './components/admin/TrainingPlanManager';
@@ -287,7 +286,7 @@ const App = () => {
           } />
           <Route path="*" element={
             !user ? (
-              <LandingPage />
+              <Navigate to="/login" replace />
             ) : (
               <>
                 <Navbar user={user} onLogout={handleLogout} />

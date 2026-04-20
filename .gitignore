@@ -29,6 +29,7 @@ build/
 # IDE
 .vscode/
 .idea/
+.cursorignore
 
 # Local data
 data/*.db
