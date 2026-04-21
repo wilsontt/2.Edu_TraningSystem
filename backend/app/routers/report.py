@@ -18,6 +18,32 @@ def _apply_emp_scope(query, emp_ids):
     return apply_emp_scope_field(query, models.ExamRecord.emp_id, emp_ids)
 
 
+def _training_plan_status_filter_expr(status: str):
+    """
+    與 GET /training/plans 的 status 參數語意一致（active／expired／archived）。
+    """
+    today = date.today()
+    if status == "active":
+        return and_(
+            models.TrainingPlan.is_archived == False,
+            or_(
+                models.TrainingPlan.end_date >= today,
+                models.TrainingPlan.end_date.is_(None),
+            ),
+        )
+    if status == "expired":
+        return and_(
+            models.TrainingPlan.is_archived == False,
+            models.TrainingPlan.end_date < today,
+        )
+    if status == "archived":
+        return models.TrainingPlan.is_archived == True
+    raise HTTPException(
+        status_code=400,
+        detail="plan_status 必須為 active、expired 或 archived",
+    )
+
+
 @router.get("/print/plan-options")
 def get_print_plan_options(
     db: Session = Depends(get_db),
@@ -56,7 +82,11 @@ def get_overview_statistics(
     current_user = check_permission("menu:report"),
     year: Optional[int] = Query(None, description="年度篩選（例如：2026）"),
     month: Optional[int] = Query(None, description="月份篩選（1-12），需配合 year 使用"),
-    quarter: Optional[int] = Query(None, description="季度篩選（1-4），需配合 year 使用")
+    quarter: Optional[int] = Query(None, description="季度篩選（1-4），需配合 year 使用"),
+    plan_status: str = Query(
+        "active",
+        description="訓練計畫狀態：active／expired／archived（與訓練計畫管理相同）",
+    ),
 ):
     """
     獲取總體統計數據:
@@ -126,6 +156,11 @@ def get_overview_statistics(
     
     emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
 
+    ps = (plan_status or "active").strip().lower()
+    if ps not in ("active", "expired", "archived"):
+        raise HTTPException(status_code=400, detail="plan_status 必須為 active、expired 或 archived")
+    plan_status_expr = _training_plan_status_filter_expr(ps)
+
     # 本月時間範圍
     month_start_dt = datetime(current_year, current_month, 1, 0, 0, 0)
     if current_month == 12:
@@ -133,9 +168,16 @@ def get_overview_statistics(
     else:
         month_end_dt = datetime(current_year, current_month + 1, 1, 0, 0, 0) - timedelta(seconds=1)
     
-    # 基礎查詢（套用時間篩選，只查詢有 submit_time 的記錄）
+    # 基礎查詢（套用時間篩選，只查詢有 submit_time 的記錄；依訓練計畫狀態篩選）
     try:
-        base_query = db.query(models.ExamRecord).filter(models.ExamRecord.submit_time.isnot(None))
+        base_query = (
+            db.query(models.ExamRecord)
+            .join(models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id)
+            .filter(
+                models.ExamRecord.submit_time.isnot(None),
+                plan_status_expr,
+            )
+        )
         base_query = _apply_emp_scope(base_query, emp_scope_ids)
         if time_filter:
             base_query = base_query.filter(time_filter)
@@ -182,44 +224,35 @@ def get_overview_statistics(
         and_(
             models.TrainingPlan.training_date >= month_start_date,
             models.TrainingPlan.training_date <= month_end_date,
-            models.TrainingPlan.is_archived == False
+            plan_status_expr,
         )
     ).count()
     
     # 本月應考人次
-    monthly_records = _apply_emp_scope(db.query(models.ExamRecord), emp_scope_ids).filter(
-        and_(
+    monthly_records = (
+        _apply_emp_scope(db.query(models.ExamRecord), emp_scope_ids)
+        .join(models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id)
+        .filter(
+            plan_status_expr,
             models.ExamRecord.submit_time >= month_start_dt,
-            models.ExamRecord.submit_time <= month_end_dt
+            models.ExamRecord.submit_time <= month_end_dt,
         )
     ).count()
     
     # 待考試人數（已指派但尚未完成考試的人員數）
-    # 邏輯：找出所有有效的訓練計畫（今天在 training_date 和 end_date 之間）
-    # 然後找出這些計畫的 target_departments 中的所有使用者
-    # 再排除已經有 ExamRecord 的使用者
-    today = date.today()
-    active_plans = db.query(models.TrainingPlan).filter(
-        and_(
-            models.TrainingPlan.training_date <= today,
-            or_(
-                models.TrainingPlan.end_date.is_(None),
-                models.TrainingPlan.end_date >= today
-            ),
-            models.TrainingPlan.is_archived == False
-        )
-    ).all()
+    # 依目前 plan_status 篩選後的計畫集合，計算應考／已完成人員（與上方成績統計同一批計畫定義）
+    scoped_plans = db.query(models.TrainingPlan).filter(plan_status_expr).all()
     
-    # 收集所有應考人員（從 active_plans 的 target_departments）
+    # 收集所有應考人員（從 scoped_plans 的 target_departments）
     target_user_ids = set()
-    for plan in active_plans:
+    for plan in scoped_plans:
         for dept in plan.target_departments:
             for user in dept.users:
                 target_user_ids.add(user.emp_id)
     
     # 找出已完成考試的人員（有 ExamRecord 且 is_passed=True）
     completed_user_ids = set()
-    for plan in active_plans:
+    for plan in scoped_plans:
         records = _apply_emp_scope(db.query(models.ExamRecord), emp_scope_ids).filter(
             models.ExamRecord.plan_id == plan.id,
             models.ExamRecord.is_passed == True
@@ -281,7 +314,11 @@ def get_department_statistics(
     year: Optional[int] = Query(None, description="年度篩選（例如：2026）"),
     month: Optional[int] = Query(None, description="月份篩選（1-12），需配合 year 使用"),
     quarter: Optional[int] = Query(None, description="季度篩選（1-4），需配合 year 使用"),
-    include_advanced: bool = Query(False, description="是否包含進階分析資料")
+    include_advanced: bool = Query(False, description="是否包含進階分析資料"),
+    plan_status: str = Query(
+        "active",
+        description="訓練計畫狀態：active／expired／archived（與訓練計畫管理相同）",
+    ),
 ):
     """
     各部門與單位統計列表（T2.1 擴充版）
@@ -295,6 +332,10 @@ def get_department_statistics(
     """
     try:
         emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
+        ps = (plan_status or "active").strip().lower()
+        if ps not in ("active", "expired", "archived"):
+            raise HTTPException(status_code=400, detail="plan_status 必須為 active、expired 或 archived")
+        plan_status_expr = _training_plan_status_filter_expr(ps)
         # 計算時間篩選條件
         time_filter = None
         if year and month:
@@ -341,7 +382,11 @@ def get_department_statistics(
             func.avg(models.ExamRecord.total_score).label("avg_score")
         ).join(models.User, models.Department.id == models.User.dept_id)\
          .join(models.ExamRecord, models.User.emp_id == models.ExamRecord.emp_id)\
-         .filter(models.ExamRecord.submit_time.isnot(None))
+         .join(models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id)\
+         .filter(
+            models.ExamRecord.submit_time.isnot(None),
+            plan_status_expr,
+        )
         if emp_scope_ids is not None:
             if not emp_scope_ids:
                 return []
@@ -359,9 +404,12 @@ def get_department_statistics(
             # 計算及格數（使用 Python 邏輯避免 case() 問題）
             dept_records_query = db.query(models.ExamRecord).join(
                 models.User, models.ExamRecord.emp_id == models.User.emp_id
+            ).join(
+                models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id
             ).filter(
                 models.User.dept_id == r.id,
-                models.ExamRecord.submit_time.isnot(None)
+                models.ExamRecord.submit_time.isnot(None),
+                plan_status_expr,
             )
             if emp_scope_ids is not None:
                 dept_records_query = dept_records_query.filter(models.ExamRecord.emp_id.in_(emp_scope_ids))
@@ -496,9 +544,12 @@ def get_department_statistics(
                     )
                     prev_records = db.query(models.ExamRecord).join(
                         models.User, models.ExamRecord.emp_id == models.User.emp_id
+                    ).join(
+                        models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id
                     ).filter(
                         models.User.dept_id == r.id,
                         models.ExamRecord.submit_time.isnot(None),
+                        plan_status_expr,
                         prev_filter
                     ).all()
                     if emp_scope_ids is not None:
@@ -535,19 +586,31 @@ def get_department_statistics(
 
 # --- 計畫統計 ---
 @router.get("/plan")
-def get_plan_statistics(db: Session = Depends(get_db), current_user = check_permission("menu:report")):
+def get_plan_statistics(
+    db: Session = Depends(get_db),
+    current_user = check_permission("menu:report"),
+    plan_status: str = Query(
+        "active",
+        description="訓練計畫狀態：active／expired／archived（與訓練計畫管理相同）",
+    ),
+):
     """
     各訓練計畫統計列表
     """
     try:
         emp_scope_ids = _get_report_scope_emp_ids(db, current_user)
+        ps = (plan_status or "active").strip().lower()
+        if ps not in ("active", "expired", "archived"):
+            raise HTTPException(status_code=400, detail="plan_status 必須為 active、expired 或 archived")
+        plan_status_expr = _training_plan_status_filter_expr(ps)
         results = db.query(
             models.TrainingPlan.title,
             models.TrainingPlan.training_date,
             func.count(models.ExamRecord.id).label("count"),
             func.avg(models.ExamRecord.total_score).label("avg_score"),
             func.sum(case((models.ExamRecord.is_passed == True, 1), else_=0)).label("passed_count")
-        ).join(models.ExamRecord, models.TrainingPlan.id == models.ExamRecord.plan_id)
+        ).join(models.ExamRecord, models.TrainingPlan.id == models.ExamRecord.plan_id)\
+         .filter(plan_status_expr)
         if emp_scope_ids is not None:
             if not emp_scope_ids:
                 return []

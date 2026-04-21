@@ -252,6 +252,14 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
     setSelectedPlanIds(newSelected);
   };
 
+  const selectAllPlans = () => {
+    setSelectedPlanIds(new Set(Object.keys(plansData).map((id) => Number(id))));
+  };
+
+  const clearAllPlans = () => {
+    setSelectedPlanIds(new Set());
+  };
+
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:hidden">
       <div>
@@ -308,7 +316,25 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
       {/* 計畫選擇器 */}
       {Object.keys(plansData).length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">選擇計畫</h3>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h3 className="text-lg font-bold text-gray-900">選擇計畫</h3>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={selectAllPlans}
+                className="text-sm font-bold px-3 py-1.5 border border-indigo-200 text-indigo-600 rounded-lg hover:bg-indigo-50"
+              >
+                全選
+              </button>
+              <button
+                type="button"
+                onClick={clearAllPlans}
+                className="text-sm font-bold px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
+              >
+                清除
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {Object.values(plansData).map((plan, index) => (
               <label

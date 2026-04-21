@@ -8,6 +8,8 @@ export interface ScorePrintPlanOption {
 }
 
 export interface ScorePrintFlowProps {
+  /** 歷程 Modal 底部：僅詢問1+2（個人文案）、單一「產生 PDF」出口，無簽名／歷程與預覽 */
+  variant?: 'full' | 'planHistoryFooter';
   planOptions: ScorePrintPlanOption[];
   selectedPlanIds: Set<number>;
   onSelectedPlanIdsChange: (next: Set<number>) => void;
@@ -30,6 +32,7 @@ export interface ScorePrintFlowProps {
  * T13：成績列印共用流程（順序：先選訓練計畫 → 列印方式 → 簽名／歷程，預設皆否）
  */
 export default function ScorePrintFlow({
+  variant = 'full',
   planOptions,
   selectedPlanIds,
   onSelectedPlanIdsChange,
@@ -45,6 +48,7 @@ export default function ScorePrintFlow({
   selectedEmployeeCount = 0,
   requireEmployeeSelectionForPrint = false,
 }: ScorePrintFlowProps) {
+  const isPlanHistoryFooter = variant === 'planHistoryFooter';
   const [planMenuOpen, setPlanMenuOpen] = useState(false);
   const [planSearch, setPlanSearch] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -82,6 +86,9 @@ export default function ScorePrintFlow({
     printLoading ||
     selectedPlanIds.size === 0 ||
     (requireEmployeeSelectionForPrint && selectedEmployeeCount === 0);
+
+  const listLabel = isPlanHistoryFooter ? '列印個人成績清單' : '列印成績清單';
+  const individualLabel = isPlanHistoryFooter ? '列印個人考卷成績' : '列印每個人的考卷成績';
 
   return (
     <div className="space-y-4">
@@ -163,7 +170,7 @@ export default function ScorePrintFlow({
               checked={printMode === 'list'}
               onChange={() => onPrintModeChange('list')}
             />
-            列印成績清單
+            {listLabel}
           </label>
           <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
             <input
@@ -172,46 +179,59 @@ export default function ScorePrintFlow({
               checked={printMode === 'individual'}
               onChange={() => onPrintModeChange('individual')}
             />
-            列印每個人的考卷成績
+            {individualLabel}
           </label>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={includeEmployeeSignature}
-            onChange={(e) => onIncludeEmployeeSignatureChange(e.target.checked)}
-          />
-          列印員工簽名（預設否）
-        </label>
-        <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={includeExamHistory}
-            onChange={(e) => onIncludeExamHistoryChange(e.target.checked)}
-          />
-          列印考試歷程（預設否）
-        </label>
-        <button
-          type="button"
-          onClick={onLoadPreview}
-          disabled={printLoading || selectedPlanIds.size === 0}
-          className="px-4 py-2 text-sm font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
-        >
-          {printLoading ? '載入中...' : '載入預覽'}
-        </button>
-        <button
-          type="button"
-          onClick={onPrintPdf}
-          disabled={printDisabled}
-          title="括號數字為「已勾選要列印的員工人數（去重）」，不是預覽列筆數"
-          className="px-4 py-2 text-sm font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed"
-        >
-          列印 PDF（已選 {selectedEmployeeCount} 人）
-        </button>
-      </div>
+      {isPlanHistoryFooter ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={onPrintPdf}
+            disabled={printDisabled}
+            className="px-4 py-2 text-sm font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed"
+          >
+            {printLoading ? '產生中...' : '產生 PDF'}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeEmployeeSignature}
+              onChange={(e) => onIncludeEmployeeSignatureChange(e.target.checked)}
+            />
+            列印員工簽名（預設否）
+          </label>
+          <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeExamHistory}
+              onChange={(e) => onIncludeExamHistoryChange(e.target.checked)}
+            />
+            列印考試歷程（預設否）
+          </label>
+          <button
+            type="button"
+            onClick={onLoadPreview}
+            disabled={printLoading || selectedPlanIds.size === 0}
+            className="px-4 py-2 text-sm font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+          >
+            {printLoading ? '載入中...' : '載入預覽'}
+          </button>
+          <button
+            type="button"
+            onClick={onPrintPdf}
+            disabled={printDisabled}
+            title="括號數字為「已勾選要列印的員工人數（去重）」，不是預覽列筆數"
+            className="px-4 py-2 text-sm font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed"
+          >
+            列印 PDF（已選 {selectedEmployeeCount} 人）
+          </button>
+        </div>
+      )}
     </div>
   );
 }

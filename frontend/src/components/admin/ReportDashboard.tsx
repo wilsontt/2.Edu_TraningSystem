@@ -214,6 +214,7 @@ export default function ReportDashboard() {
   const [trendMonths, setTrendMonths] = useState(6);
   const [timeFilter, setTimeFilter] = useState<{ type: 'all' | 'year' | 'quarter' | 'month'; year?: number; quarter?: number; month?: number }>({ type: 'all' });
   const [includeAdvanced, setIncludeAdvanced] = useState(true);
+  const [planStatus, setPlanStatus] = useState<'active' | 'expired' | 'archived'>('active');
   const [expandedDept, setExpandedDept] = useState<number | null>(null);
   const [expandedPlan, setExpandedPlan] = useState<number | null>(null);
   const [deptDetails, setDeptDetails] = useState<Record<number, any>>({});
@@ -298,7 +299,10 @@ export default function ReportDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trendMonths]);
 
-  const fetchData = async (isInitialLoad = false) => {
+  const fetchData = async (
+    isInitialLoad = false,
+    planStatusOverride?: 'active' | 'expired' | 'archived'
+  ) => {
     try {
       if (isInitialLoad) {
         setLoading(true);
@@ -313,6 +317,7 @@ export default function ReportDashboard() {
       let deptUrl = `${baseURL}/admin/reports/department`;
       let planUrl = `${baseURL}/admin/reports/plan`;
       const params = new URLSearchParams();
+      const ps = planStatusOverride ?? planStatus;
       
       if (timeFilter.type === 'year' && timeFilter.year) {
         params.append('year', timeFilter.year.toString());
@@ -327,10 +332,26 @@ export default function ReportDashboard() {
       if (includeAdvanced) {
         params.append('include_advanced', 'true');
       }
-      
+      params.append('plan_status', ps);
+
       if (params.toString()) {
         deptUrl += '?' + params.toString();
+        planUrl += '?' + params.toString();
       }
+
+      const overviewParams = new URLSearchParams();
+      if (timeFilter.type === 'year' && timeFilter.year) {
+        overviewParams.append('year', timeFilter.year.toString());
+      } else if (timeFilter.type === 'quarter' && timeFilter.year && timeFilter.quarter) {
+        overviewParams.append('year', timeFilter.year.toString());
+        overviewParams.append('quarter', timeFilter.quarter.toString());
+      } else if (timeFilter.type === 'month' && timeFilter.year && timeFilter.month) {
+        overviewParams.append('year', timeFilter.year.toString());
+        overviewParams.append('month', timeFilter.month.toString());
+      }
+      overviewParams.append('plan_status', ps);
+      const overviewQuery = overviewParams.toString();
+      const overviewUrl = `${baseURL}/admin/reports/overview${overviewQuery ? `?${overviewQuery}` : ''}`;
 
       const [
         overviewRes, 
@@ -343,7 +364,7 @@ export default function ReportDashboard() {
         expiringRes,
         retakeRes
       ] = await Promise.all([
-        fetch(`${baseURL}/admin/reports/overview`, { headers }),
+        fetch(overviewUrl, { headers }),
         fetch(deptUrl, { headers }),
         fetch(planUrl, { headers }),
         fetch(`${baseURL}/admin/reports/trends?months=${trendMonths}`, { headers }),
@@ -985,6 +1006,34 @@ export default function ReportDashboard() {
 
       {/* 分頁籤與時間篩選器 */}
       <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-bold text-gray-700 whitespace-nowrap">訓練計畫狀態</span>
+          {(
+            [
+              { id: 'active' as const, label: '進行中' },
+              { id: 'expired' as const, label: '已過期' },
+              { id: 'archived' as const, label: '已封存' },
+            ]
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setPlanStatus(tab.id);
+                void fetchData(false, tab.id);
+              }}
+              className={clsx(
+                'px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors',
+                planStatus === tab.id
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex space-x-1 bg-indigo-50/50 p-1.5 rounded-xl w-fit border border-indigo-100/50">
             <button

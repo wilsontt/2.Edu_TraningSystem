@@ -6,6 +6,8 @@ interface ScoreCardPreviewProps {
   detail: ScoreDetail;
   isOpen: boolean;
   onClose: () => void;
+  /** 為 false 時不顯示簽名欄（螢幕預覽與列印 HTML） */
+  includeEmployeeSignature?: boolean;
 }
 
 // SVG Icons for Print HTML
@@ -15,8 +17,12 @@ const ICON_CHECK_CIRCLE = `<svg xmlns="http://www.w3.org/2000/svg" width="20" he
 const ICON_X_CIRCLE = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-600"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
 
 // 成績單內容組件（可重用）
-function ScoreCardContent({ detail }: { 
-  detail: ScoreDetail; 
+function ScoreCardContent({
+  detail,
+  includeEmployeeSignature,
+}: {
+  detail: ScoreDetail;
+  includeEmployeeSignature: boolean;
 }) {
   return (
     <>
@@ -108,16 +114,18 @@ function ScoreCardContent({ detail }: {
       </div>
 
       {/* 簽名欄 (預覽時隱藏，列印時移至第一頁底部) */}
-      <div className="mt-4 grid grid-cols-2 gap-8 print:hidden">
-        <div>
-          <div className="text-sm text-gray-600 mb-1">考生簽名 / Examinee Signature</div>
-          <div className="border-b-2 border-gray-800 h-16"></div>
+      {includeEmployeeSignature && (
+        <div className="mt-4 grid grid-cols-2 gap-8 print:hidden">
+          <div>
+            <div className="text-sm text-gray-600 mb-1">考生簽名 / Examinee Signature</div>
+            <div className="border-b-2 border-gray-800 h-16"></div>
+          </div>
+          <div>
+            <div className="text-sm text-gray-600 mb-1">日期 / Date</div>
+            <div className="border-b-2 border-gray-800 h-16"></div>
+          </div>
         </div>
-        <div>
-          <div className="text-sm text-gray-600 mb-1">日期 / Date</div>
-          <div className="border-b-2 border-gray-800 h-16"></div>
-        </div>
-      </div>
+      )}
 
       {/* 答題詳情表格 (預覽時隱藏，列印時使用新版詳細列表) */}
       <div className="mb-6 print:hidden">
@@ -165,7 +173,12 @@ function ScoreCardContent({ detail }: {
   );
 }
 
-export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardPreviewProps) {
+export default function ScoreCardPreview({
+  detail,
+  isOpen,
+  onClose,
+  includeEmployeeSignature = true,
+}: ScoreCardPreviewProps) {
 
   if (!isOpen) return null;
 
@@ -350,6 +363,22 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
         `;
     }
 
+    const signatureFooterHtml = includeEmployeeSignature
+      ? `
+                <div class="mt-8 border-t-2 border-gray-800 pt-4 break-inside-avoid">
+                    <div class="grid grid-cols-2 gap-8">
+                        <div>
+                            <div class="text-sm text-gray-600 mb-1">考生簽名 / Examinee Signature</div>
+                            <div class="border-b-2 border-gray-800 h-16"></div>
+                        </div>
+                        <div>
+                            <div class="text-sm text-gray-600 mb-1">日期 / Date</div>
+                            <div class="border-b-2 border-gray-800 h-16"></div>
+                        </div>
+                    </div>
+                </div>`
+      : '';
+
     // 4. 構建 HTML 內容
     const htmlContent = `
       <!DOCTYPE html>
@@ -434,20 +463,7 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
                     ${contentElement.innerHTML}
                     ${historyHtml}
                 </div>
-                
-                <!-- 簽名欄 (移至第一頁最下方) -->
-                <div class="mt-8 border-t-2 border-gray-800 pt-4 break-inside-avoid">
-                    <div class="grid grid-cols-2 gap-8">
-                        <div>
-                            <div class="text-sm text-gray-600 mb-1">考生簽名 / Examinee Signature</div>
-                            <div class="border-b-2 border-gray-800 h-16"></div>
-                        </div>
-                        <div>
-                            <div class="text-sm text-gray-600 mb-1">日期 / Date</div>
-                            <div class="border-b-2 border-gray-800 h-16"></div>
-                        </div>
-                    </div>
-                </div>
+                ${signatureFooterHtml}
             </div>
 
             <!-- 分頁 -->
@@ -534,7 +550,7 @@ export default function ScoreCardPreview({ detail, isOpen, onClose }: ScoreCardP
           {/* 成績單內容（螢幕預覽用） */}
           <div className="p-4">
             <div className="border-2 border-gray-800 p-8 score-card-preview-content">
-              <ScoreCardContent detail={detail} />
+              <ScoreCardContent detail={detail} includeEmployeeSignature={includeEmployeeSignature} />
             </div>
           </div>
 

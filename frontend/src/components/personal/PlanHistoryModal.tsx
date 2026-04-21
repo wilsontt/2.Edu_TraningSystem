@@ -22,21 +22,7 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
 
   const [selectedPrintPlanIds, setSelectedPrintPlanIds] = useState<Set<number>>(new Set());
   const [printMode, setPrintMode] = useState<'list' | 'individual'>('list');
-  const [includeEmployeeSignature, setIncludeEmployeeSignature] = useState(false);
-  const [includeExamHistory, setIncludeExamHistory] = useState(false);
   const [printLoading, setPrintLoading] = useState(false);
-  const [printPreview, setPrintPreview] = useState<
-    Array<{
-      emp_id: string;
-      name: string;
-      dept_name: string;
-      plan_id: number;
-      plan_title: string;
-      total_score: number;
-      is_passed: boolean;
-      submit_time: string | null;
-    }>
-  >([]);
 
   const printPlanOptions: ScorePrintPlanOption[] = useMemo(() => {
     if (!detail?.basic_info) return [];
@@ -84,41 +70,6 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
     }
   };
 
-  const loadModalPrintPreview = async () => {
-    if (selectedPrintPlanIds.size === 0) {
-      alert('請至少選擇一個訓練計畫');
-      return;
-    }
-    try {
-      setPrintLoading(true);
-      const token = localStorage.getItem('token');
-      const baseURL = API_BASE_URL;
-      const body: Record<string, unknown> = {
-        print_mode: printMode,
-        plan_ids: Array.from(selectedPrintPlanIds),
-        include_employee_signature: includeEmployeeSignature,
-        include_exam_history: includeExamHistory,
-      };
-      if (targetEmpId) body.emp_id = targetEmpId;
-      const res = await fetch(`${baseURL}/exam/personal/print/preview`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error('preview');
-      const data = await res.json();
-      setPrintPreview(data.items || []);
-    } catch (e) {
-      console.error(e);
-      alert('載入列印預覽失敗');
-    } finally {
-      setPrintLoading(false);
-    }
-  };
-
   const exportModalPrintPdf = async () => {
     if (selectedPrintPlanIds.size === 0) {
       alert('請至少選擇一個訓練計畫');
@@ -131,8 +82,8 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
       const body: Record<string, unknown> = {
         print_mode: printMode,
         plan_ids: Array.from(selectedPrintPlanIds),
-        include_employee_signature: includeEmployeeSignature,
-        include_exam_history: includeExamHistory,
+        include_employee_signature: false,
+        include_exam_history: false,
       };
       if (targetEmpId) body.emp_id = targetEmpId;
       const response = await fetch(`${baseURL}/exam/personal/print/pdf`, {
@@ -270,51 +221,24 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
 
           {detail && printPlanOptions.length > 0 && (
             <div className="px-6 py-4 border-t border-gray-100 space-y-3 bg-gray-50/80">
-              <h4 className="text-sm font-black text-gray-800">成績列印（與成績中心相同流程）</h4>
+              <h4 className="text-sm font-black text-gray-800">成績列印</h4>
               <ScorePrintFlow
+                variant="planHistoryFooter"
                 planOptions={printPlanOptions}
                 selectedPlanIds={selectedPrintPlanIds}
                 onSelectedPlanIdsChange={setSelectedPrintPlanIds}
                 printMode={printMode}
                 onPrintModeChange={setPrintMode}
-                includeEmployeeSignature={includeEmployeeSignature}
-                onIncludeEmployeeSignatureChange={setIncludeEmployeeSignature}
-                includeExamHistory={includeExamHistory}
-                onIncludeExamHistoryChange={setIncludeExamHistory}
-                onLoadPreview={loadModalPrintPreview}
+                includeEmployeeSignature={false}
+                onIncludeEmployeeSignatureChange={() => {}}
+                includeExamHistory={false}
+                onIncludeExamHistoryChange={() => {}}
+                onLoadPreview={() => {}}
                 onPrintPdf={exportModalPrintPdf}
                 printLoading={printLoading}
                 selectedEmployeeCount={1}
                 requireEmployeeSelectionForPrint={false}
               />
-              {printPreview.length > 0 && (
-                <div className="overflow-x-auto border border-gray-200 rounded-lg text-xs bg-white">
-                  <table className="w-full">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="px-2 py-1 text-left">序號</th>
-                        <th className="px-2 py-1 text-left">員編</th>
-                        <th className="px-2 py-1 text-left">姓名</th>
-                        <th className="px-2 py-1 text-left">部門</th>
-                        <th className="px-2 py-1 text-left">計畫</th>
-                        <th className="px-2 py-1 text-right">分數</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {printPreview.map((row, idx) => (
-                        <tr key={`${row.plan_id}-${idx}`} className={idx % 2 === 1 ? 'bg-gray-50' : ''}>
-                          <td className="px-2 py-1">{idx + 1}</td>
-                          <td className="px-2 py-1">{row.emp_id}</td>
-                          <td className="px-2 py-1">{row.name}</td>
-                          <td className="px-2 py-1">{row.dept_name}</td>
-                          <td className="px-2 py-1">{row.plan_title}</td>
-                          <td className="px-2 py-1 text-right font-bold">{row.total_score}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
           )}
 
@@ -333,10 +257,11 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
       {/* 成績詳情 Modal (顯示特定歷史紀錄) */}
       {selectedHistoryId && (
         <ScoreDetailModal
-          recordId={recordId} // 這裡傳入 recordId 主要是為了讓 Modal 內部邏輯運作（雖然我們主要用 historyId）
+          recordId={recordId}
           historyId={selectedHistoryId}
           isOpen={!!selectedHistoryId}
           onClose={() => setSelectedHistoryId(null)}
+          printGate="requireSignatureCheckbox"
         />
       )}
     </>

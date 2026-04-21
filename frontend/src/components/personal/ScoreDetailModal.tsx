@@ -12,18 +12,42 @@ interface ScoreDetailModalProps {
   historyId?: number; // 新增：支援顯示特定歷史紀錄
   isOpen: boolean;
   onClose: () => void;
+  /** 從考試歷程進入時：須勾選「列印員工簽名」才可預覽成績單 */
+  printGate?: 'none' | 'requireSignatureCheckbox';
 }
 
-export default function ScoreDetailModal({ recordId, historyId, isOpen, onClose }: ScoreDetailModalProps) {
+export default function ScoreDetailModal({
+  recordId,
+  historyId,
+  isOpen,
+  onClose,
+  printGate = 'none',
+}: ScoreDetailModalProps) {
   const [detail, setDetail] = useState<ScoreDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [includeEmployeeSignatureForPrint, setIncludeEmployeeSignatureForPrint] = useState(false);
+
+  const requireSignatureForPreview = printGate === 'requireSignatureCheckbox';
+  const previewAllowed = !requireSignatureForPreview || includeEmployeeSignatureForPrint;
 
   useEffect(() => {
     if (isOpen && (recordId || historyId)) {
       fetchDetail();
     }
   }, [isOpen, recordId, historyId]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIncludeEmployeeSignatureForPrint(false);
+      setShowPreview(false);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    setIncludeEmployeeSignatureForPrint(false);
+    setShowPreview(false);
+  }, [historyId, recordId]);
 
   const fetchDetail = async () => {
     try {
@@ -83,11 +107,28 @@ export default function ScoreDetailModal({ recordId, historyId, isOpen, onClose 
           {/* Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
             <h3 className="text-xl font-bold text-gray-900">成績詳情</h3>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {detail && requireSignatureForPreview && (
+                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeEmployeeSignatureForPrint}
+                    onChange={(e) => setIncludeEmployeeSignatureForPrint(e.target.checked)}
+                  />
+                  列印員工簽名
+                </label>
+              )}
               {detail && (
                 <button
+                  type="button"
                   onClick={() => setShowPreview(true)}
-                  className="flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  disabled={!previewAllowed}
+                  className={clsx(
+                    'flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors',
+                    previewAllowed
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  )}
                 >
                   <Printer className="h-4 w-4 mr-1" />
                   預覽成績單
@@ -295,6 +336,9 @@ export default function ScoreDetailModal({ recordId, historyId, isOpen, onClose 
             detail={detail}
             isOpen={showPreview}
             onClose={() => setShowPreview(false)}
+            includeEmployeeSignature={
+              requireSignatureForPreview ? includeEmployeeSignatureForPrint : true
+            }
           />
         </Suspense>
       )}

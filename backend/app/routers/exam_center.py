@@ -14,6 +14,25 @@ from ..access_scope import get_scope_emp_ids
 _TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 
 
+def _training_plan_status_filter_expr_exam(status: str):
+    """與 GET /training/plans、報表 overview 之 plan_status 語意一致。"""
+    today = date.today()
+    if status == "active":
+        return and_(
+            models.TrainingPlan.is_archived == False,
+            or_(
+                models.TrainingPlan.end_date >= today,
+                models.TrainingPlan.end_date.is_(None),
+            ),
+        )
+    if status == "expired":
+        return and_(
+            models.TrainingPlan.is_archived == False,
+            models.TrainingPlan.end_date < today,
+        )
+    return models.TrainingPlan.is_archived == True
+
+
 def _now_taipei_naive() -> datetime:
     """業務時區 Asia/Taipei 的牆上時間（naive datetime），報到與交卷需一致。"""
     return datetime.now(_TZ_TAIPEI).replace(tzinfo=None)
@@ -501,7 +520,11 @@ def submit_exam(
 def get_personal_overview(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
-    emp_id: Optional[str] = Query(None, description="員工編號（Admin 或具 menu:report 且範圍內可使用）")
+    emp_id: Optional[str] = Query(None, description="員工編號（Admin 或具 menu:report 且範圍內可使用）"),
+    plan_status: str = Query(
+        "active",
+        description="訓練計畫狀態：active／expired／archived（與訓練計畫管理相同）",
+    ),
 ):
     """
     T3.1: 獲取個人成績總覽
@@ -517,12 +540,23 @@ def get_personal_overview(
     - Admin 可查看所有使用者成績（需 emp_id 參數）
     """
     target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
-    
-    # 取得該使用者的所有考試記錄
-    records = db.query(models.ExamRecord).filter(
-        models.ExamRecord.emp_id == target_emp_id,
-        models.ExamRecord.submit_time.isnot(None)
-    ).all()
+
+    ps = (plan_status or "active").strip().lower()
+    if ps not in ("active", "expired", "archived"):
+        raise HTTPException(status_code=400, detail="plan_status 必須為 active、expired 或 archived")
+    plan_status_expr = _training_plan_status_filter_expr_exam(ps)
+
+    # 取得該使用者的考試記錄（依訓練計畫狀態篩選）
+    records = (
+        db.query(models.ExamRecord)
+        .join(models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id)
+        .filter(
+            models.ExamRecord.emp_id == target_emp_id,
+            models.ExamRecord.submit_time.isnot(None),
+            plan_status_expr,
+        )
+        .all()
+    )
     
     if not records:
         return {

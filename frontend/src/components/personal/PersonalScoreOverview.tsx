@@ -18,18 +18,24 @@ interface PersonalScoreOverviewProps {
   onNavigateHistory?: () => void;
 }
 
+type TrainingPlanStatusTab = 'active' | 'expired' | 'archived';
+
 export default function PersonalScoreOverview({ empId, titlePrefix, onNavigateHistory }: PersonalScoreOverviewProps) {
   const [overview, setOverview] = useState<PersonalOverview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [planStatus, setPlanStatus] = useState<TrainingPlanStatusTab>('active');
 
   const fetchOverview = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
       const baseURL = API_BASE_URL;
-      const url = empId
-        ? `${baseURL}/exam/personal/overview?emp_id=${empId}`
-        : `${baseURL}/exam/personal/overview`;
+      const params = new URLSearchParams();
+      params.set('plan_status', planStatus);
+      if (empId) {
+        params.set('emp_id', empId);
+      }
+      const url = `${baseURL}/exam/personal/overview?${params.toString()}`;
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -43,7 +49,7 @@ export default function PersonalScoreOverview({ empId, titlePrefix, onNavigateHi
     } finally {
       setLoading(false);
     }
-  }, [empId]);
+  }, [empId, planStatus]);
 
   useEffect(() => {
     void fetchOverview();
@@ -76,6 +82,29 @@ export default function PersonalScoreOverview({ empId, titlePrefix, onNavigateHi
         <p className="text-gray-500 mt-1">
           {titlePrefix ? `查看 ${titlePrefix} 的學習成果與統計資料` : '查看您的學習成果與統計資料'}
         </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-1">
+        {(
+          [
+            { id: 'active' as const, label: '進行中' },
+            { id: 'expired' as const, label: '已過期' },
+            { id: 'archived' as const, label: '已封存' },
+          ]
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setPlanStatus(tab.id)}
+            className={`px-4 py-2 text-sm font-bold rounded-t-lg border-b-2 -mb-px transition-colors ${
+              planStatus === tab.id
+                ? 'border-indigo-600 text-indigo-700 bg-white'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* KPI 卡片 */}
