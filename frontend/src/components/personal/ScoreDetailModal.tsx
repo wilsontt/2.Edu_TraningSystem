@@ -3,6 +3,7 @@ import { X, CheckCircle, XCircle, Clock, User, FileText, Award, Printer } from '
 import clsx from 'clsx';
 import { API_BASE_URL } from '../../api';
 import type { ScoreDetail } from './types';
+import type { SignatureTriState } from './printTriState';
 
 // 動態導入以避免循環依賴
 const ScoreCardPreview = lazy(() => import('./ScoreCardPreview'));
@@ -12,7 +13,7 @@ interface ScoreDetailModalProps {
   historyId?: number; // 新增：支援顯示特定歷史紀錄
   isOpen: boolean;
   onClose: () => void;
-  /** 從考試歷程進入時：須勾選「列印員工簽名」才可預覽成績單 */
+  /** 從考試歷程進入：須以**是／否**明確是否於預覽顯示簽名；**預覽成績單**鈕常駐可點 */
   printGate?: 'none' | 'requireSignatureCheckbox';
 }
 
@@ -26,10 +27,12 @@ export default function ScoreDetailModal({
   const [detail, setDetail] = useState<ScoreDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [includeEmployeeSignatureForPrint, setIncludeEmployeeSignatureForPrint] = useState(false);
+  const [signatureTriState, setSignatureTriState] = useState<SignatureTriState>('unset');
 
   const requireSignatureForPreview = printGate === 'requireSignatureCheckbox';
-  const previewAllowed = !requireSignatureForPreview || includeEmployeeSignatureForPrint;
+  /** 僅在選「是」時預覽顯示簽名欄；未選／否與否同（不顯示） */
+  const showSignatureInPreview =
+    !requireSignatureForPreview || signatureTriState === 'yes';
 
   useEffect(() => {
     if (isOpen && (recordId || historyId)) {
@@ -39,13 +42,13 @@ export default function ScoreDetailModal({
 
   useEffect(() => {
     if (!isOpen) {
-      setIncludeEmployeeSignatureForPrint(false);
+      setSignatureTriState('unset');
       setShowPreview(false);
     }
   }, [isOpen]);
 
   useEffect(() => {
-    setIncludeEmployeeSignatureForPrint(false);
+    setSignatureTriState('unset');
     setShowPreview(false);
   }, [historyId, recordId]);
 
@@ -109,26 +112,38 @@ export default function ScoreDetailModal({
             <h3 className="text-xl font-bold text-gray-900">成績詳情</h3>
             <div className="flex items-center gap-2 flex-wrap justify-end">
               {detail && requireSignatureForPreview && (
-                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={includeEmployeeSignatureForPrint}
-                    onChange={(e) => setIncludeEmployeeSignatureForPrint(e.target.checked)}
-                  />
-                  列印員工簽名
-                </label>
+                <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
+                  <span className="text-xs text-gray-500 sm:mr-1">列印員工簽名</span>
+                  <div className="flex items-center gap-3" role="radiogroup" aria-label="列印員工簽名">
+                    <label className="flex items-center gap-1.5 text-sm font-bold text-gray-700 cursor-pointer select-none">
+                      <input
+                        type="radio"
+                        name="detail_print_signature"
+                        checked={signatureTriState === 'no'}
+                        onChange={() => setSignatureTriState('no')}
+                      />
+                      否
+                    </label>
+                    <label className="flex items-center gap-1.5 text-sm font-bold text-gray-700 cursor-pointer select-none">
+                      <input
+                        type="radio"
+                        name="detail_print_signature"
+                        checked={signatureTriState === 'yes'}
+                        onChange={() => setSignatureTriState('yes')}
+                      />
+                      是
+                    </label>
+                  </div>
+                  {signatureTriState === 'unset' && (
+                    <span className="text-xs text-gray-400">請選擇是否列印簽名</span>
+                  )}
+                </div>
               )}
               {detail && (
                 <button
                   type="button"
                   onClick={() => setShowPreview(true)}
-                  disabled={!previewAllowed}
-                  className={clsx(
-                    'flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors',
-                    previewAllowed
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                  )}
+                  className="flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Printer className="h-4 w-4 mr-1" />
                   預覽成績單
@@ -332,13 +347,13 @@ export default function ScoreDetailModal({
         <Suspense fallback={<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-4">載入中...</div>
         </div>}>
+          {/* T13：歷程進入之單次成績預覽／列印不附考試歷程表 */}
           <ScoreCardPreview
             detail={detail}
             isOpen={showPreview}
             onClose={() => setShowPreview(false)}
-            includeEmployeeSignature={
-              requireSignatureForPreview ? includeEmployeeSignatureForPrint : true
-            }
+            includeEmployeeSignature={showSignatureInPreview}
+            printIncludeExamHistory={false}
           />
         </Suspense>
       )}

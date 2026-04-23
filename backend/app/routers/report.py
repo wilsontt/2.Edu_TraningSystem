@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_, or_, extract, select, Integer
 from typing import List, Optional
 from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission
@@ -1184,6 +1185,7 @@ def get_retake_needed(
 # --- PDF 匯出 ---
 from fastapi.responses import StreamingResponse
 from reportlab.pdfgen import canvas
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -1571,30 +1573,192 @@ def report_print_preview(
     }
 
 
+def _pdf_draw_dual_signature_employee_date(
+    p, y: float, width: float, height: float, chinese_font: str
+) -> float:
+    """T13：個人歷程 PDF 詢問3 選「是」時之雙欄簽名／日期（非主表單行底線）。"""
+    if y < 64:
+        p.showPage()
+        y = height - 40
+    p.setFont(chinese_font, 8)
+    p.setFillColor(colors.black)
+    p.drawString(50, y, "考生簽名 / Examinee Signature")
+    p.drawString(300, y, "日期 / Date")
+    y -= 10
+    p.setStrokeColor(colors.black)
+    p.line(50, y, 260, y)
+    p.line(300, y, 520, y)
+    y -= 22
+    return y
+
+
+def _pdf_draw_exam_history_table_zebra(
+    p,
+    y: float,
+    width: float,
+    height: float,
+    db: Session,
+    emp_id: str,
+    plan_id: int,
+    chinese_font: str,
+) -> float:
+    """
+    T13 personal_exam_history + list：主表下方之「考試歷程」表（zebra）。
+    對應規格 T13 測試問題約 216–220、232–244 行（表格式、隔列、欄名考試結果、
+    字級／垂直對齊、與主表及簽名區垂直間距）。
+    """
+    history_rows = (
+        db.query(models.ExamHistory)
+        .join(models.ExamRecord, models.ExamHistory.record_id == models.ExamRecord.id)
+        .filter(
+            models.ExamRecord.emp_id == emp_id,
+            models.ExamRecord.plan_id == plan_id,
+        )
+        .order_by(models.ExamHistory.submit_time.asc())
+        .all()
+    )
+    if not history_rows:
+        return y
+    y -= 15  # T13：與上方主表區塊加間距
+    if y < 120:
+        p.showPage()
+        y = height - 40
+        p.setFont(chinese_font, 8)
+    p.setFont(chinese_font, 9)
+    p.drawString(40, y, "考試歷程 / Exam History")
+    y -= 14
+    p.setFont(chinese_font, 8)
+    col_x = (42, 88, 290, 360)
+    hdrs = ("次數", "考試時間", "分數", "考試結果")
+    for i, h in enumerate(hdrs):
+        p.drawString(col_x[i], y, h)
+    y -= 10
+    p.line(40, y + 6, width - 40, y + 6)
+    y -= 8
+    for i, h in enumerate(history_rows):
+        if y < 46:
+            p.showPage()
+            y = height - 40
+            p.setFont(chinese_font, 8)
+        row_h = 18
+        fill_c = colors.HexColor("#f3f4f6") if i % 2 == 0 else colors.white
+        p.setFillColor(fill_c)
+        p.rect(38, y - row_h + 6, width - 76, row_h, fill=1, stroke=0)
+        p.setFillColor(colors.black)
+        p.setFont(chinese_font, 8)
+        htime = h.submit_time.strftime("%Y/%m/%d %H:%M") if h.submit_time else "-"
+        text_y = y - 3  # T13：儲存格內文字垂直置中（約略對齊列高）
+        p.drawString(col_x[0] + 2, text_y, str(i + 1))
+        p.drawString(col_x[1] + 2, text_y, htime[:24])
+        p.drawString(col_x[2] + 2, text_y, str(h.total_score))
+        p.drawString(col_x[3] + 2, text_y, "通過" if h.is_passed else "未通過")
+        y -= row_h
+    y -= 15  # T13：與下方簽名區塊加間距
+    return y
+
+
+def _render_personal_exam_individual_to_buffer(
+    db: Session,
+    items: List[dict],
+    include_employee_signature: bool,
+    personal_plan_title: Optional[str],
+) -> BytesIO:
+    """
+    個人歷程列印、individual：每次考試一頁（摘要），多頁一 PDF。答題明細以系統查看為準（T13 階段二可再擴充）。
+    """
+    chinese_font = register_chinese_fonts()
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    sorted_items = sorted(items, key=lambda r: (r.get("submit_time") or ""))
+    for idx, row in enumerate(sorted_items):
+        if idx > 0:
+            p.showPage()
+        y = height - 40
+        plab = (row.get("plan_title") or personal_plan_title or "")[:32]
+        p.setFont(chinese_font, 14)
+        title = f"{plab} 教育訓練測驗成績單" if plab else "教育訓練測驗成績單"
+        p.drawString(40, y, title)
+        y -= 26
+        p.setFont(chinese_font, 9)
+        p.drawString(40, y, f"考生姓名：{str(row.get('name', ''))[:18]}  員工編號：{str(row.get('emp_id', ''))[:12]}")
+        y -= 14
+        p.drawString(40, y, f"部門：{str(row.get('dept_name') or '')[:16]}  訓練計畫：{str(row.get('plan_title') or '')[:28]}")
+        y -= 14
+        st = row.get("submit_time")
+        st_str = (st[:19].replace("T", " ") if st else "-")
+        p.drawString(
+            40,
+            y,
+            f"測驗日期：{st_str}  總分：{row.get('total_score', '')}  結果："
+            f"{'通過' if row.get('is_passed') else '未通過'}",
+        )
+        y -= 18
+        p.setFont(chinese_font, 7)
+        p.drawString(40, y, "答題明細與成績單完整版面請至系統【查看詳情】；本 PDF 依每次考試分頁列印摘要。")
+        y -= 20
+        if include_employee_signature:
+            y = _pdf_draw_dual_signature_employee_date(p, y, width, height, chinese_font)
+    p.save()
+    buffer.seek(0)
+    return buffer
+
+
 def render_score_print_pdf_to_buffer(
     db: Session,
     items: List[dict],
     print_mode: str,
     include_employee_signature: bool,
     include_exam_history: bool,
+    *,
+    document_context: str = "default",
+    personal_plan_title: Optional[str] = None,
 ) -> BytesIO:
     """
     產生成績列印 PDF（Admin / 個人共用）。
-    不在 PDF 標題區顯示「簽名欄／歷程」勾選狀態；僅在勾選時輸出簽名線或歷程明細。
+    document_context=personal_exam_history：歷程成績列印專用抬頭、不印筆數、
+    list 時歷程改表格式＋隔列；簽名為雙欄；表頭右側列印時間（Asia/Taipei）。
+    individual 時每試一頁摘要（T13；前端 2026/04/23 起暫隱藏詢問2 該選項）。
+    規格對照：T13 測試問題約 208–247 行；實作索引見
+    1.docs/reviews/T13-成績中心歷史記錄與考試歷程列印-變更記錄-20260423.md。
     """
+    is_personal_exam = document_context == "personal_exam_history"
+    if is_personal_exam and print_mode == "individual":
+        return _render_personal_exam_individual_to_buffer(
+            db, items, include_employee_signature, personal_plan_title
+        )
+
     chinese_font = register_chinese_fonts()
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     y = height - 40
     p.setFont(chinese_font, 16)
-    p.drawString(40, y, "教育訓練成績列印")
+    if is_personal_exam:
+        plan_head = (personal_plan_title or (items[0].get("plan_title") if items else None) or "")[:40]
+        title_line = f"{plan_head} 教育訓練考試歷程成績列印" if plan_head else "教育訓練考試歷程成績列印"
+        p.drawString(40, y, title_line)
+        # T13（約 247 行）：PDF 表頭列印當下時間（與下載檔名由前端另組）
+        now_str = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y/%m/%d %H:%M")
+        p.setFont(chinese_font, 10)
+        p.drawString(width - 180, y, f"列印時間：{now_str}")
+        p.setFont(chinese_font, 16)
+    else:
+        p.drawString(40, y, "教育訓練成績列印")
     y -= 24
     p.setFont(chinese_font, 10)
-    p.drawString(40, y, f"筆數：{len(items)}")
-    y -= 20
+    if not is_personal_exam:
+        p.drawString(40, y, f"筆數：{len(items)}")
+        y -= 20
+    else:
+        y -= 4
 
-    headers = ["序號", "員編", "姓名", "部門", "計畫", "分數", "結果", "時間"]
+    # T13：僅 personal_exam_history 主表最後欄顯示「考試時間」；Admin default 維持「時間」
+    headers = (
+        ["序號", "員編", "姓名", "部門", "計畫", "分數", "結果", "考試時間"]
+        if is_personal_exam
+        else ["序號", "員編", "姓名", "部門", "計畫", "分數", "結果", "時間"]
+    )
     x_positions = [40, 62, 92, 132, 168, 268, 302, 338]
     p.setFont(chinese_font, 8)
 
@@ -1617,7 +1781,9 @@ def render_score_print_pdf_to_buffer(
             y = height - 40
             p.setFont(chinese_font, 8)
             draw_table_header()
+        # T13：ISO 時間顯示至分鐘；personal 與 Admin 共用欄寬，勿用 [:14] 截斷分鐘
         submit_time = row["submit_time"][:16].replace("T", " ") if row.get("submit_time") else "-"
+        p.setFillColor(colors.black)
         p.drawString(x_positions[0], y, str(seq))
         p.drawString(x_positions[1], y, str(row["emp_id"])[:10])
         p.drawString(x_positions[2], y, str(row["name"])[:5])
@@ -1625,11 +1791,11 @@ def render_score_print_pdf_to_buffer(
         p.drawString(x_positions[4], y, str(row["plan_title"])[:14])
         p.drawString(x_positions[5], y, str(row["total_score"]))
         p.drawString(x_positions[6], y, "通過" if row["is_passed"] else "未通")
-        p.drawString(x_positions[7], y, submit_time[:14])
+        p.drawString(x_positions[7], y, submit_time[:16])
         y -= 12
 
     if print_mode == "individual":
-        grouped = {}
+        grouped: dict = {}
         for row in items:
             grouped.setdefault(row["emp_id"], []).append(row)
 
@@ -1649,6 +1815,22 @@ def render_score_print_pdf_to_buffer(
                 row_seq += 1
                 draw_data_row(row, row_seq)
             y -= 6
+    elif is_personal_exam:
+        for row in items:
+            row_seq += 1
+            draw_data_row(row, row_seq)
+        if include_exam_history:
+            seen = set()
+            for row in items:
+                k = (row["emp_id"], row["plan_id"])
+                if k in seen:
+                    continue
+                seen.add(k)
+                y = _pdf_draw_exam_history_table_zebra(
+                    p, y, width, height, db, row["emp_id"], row["plan_id"], chinese_font
+                )
+        if include_employee_signature:
+            y = _pdf_draw_dual_signature_employee_date(p, y, width, height, chinese_font)
     else:
         for row in items:
             row_seq += 1
@@ -1663,13 +1845,19 @@ def render_score_print_pdf_to_buffer(
                 y -= 12
 
             if include_exam_history:
-                history_rows = db.query(models.ExamHistory).join(
-                    models.ExamRecord, models.ExamHistory.record_id == models.ExamRecord.id
-                ).filter(
-                    models.ExamRecord.emp_id == row["emp_id"],
-                    models.ExamRecord.plan_id == row["plan_id"],
-                ).order_by(models.ExamHistory.submit_time.asc()).all()
-                for h in history_rows[:5]:
+                history_query = (
+                    db.query(models.ExamHistory)
+                    .join(
+                        models.ExamRecord, models.ExamHistory.record_id == models.ExamRecord.id
+                    )
+                    .filter(
+                        models.ExamRecord.emp_id == row["emp_id"],
+                        models.ExamRecord.plan_id == row["plan_id"],
+                    )
+                    .order_by(models.ExamHistory.submit_time.asc())
+                    .all()
+                )
+                for h in history_query[:5]:
                     if y < 40:
                         p.showPage()
                         y = height - 40

@@ -8,6 +8,11 @@ interface ScoreCardPreviewProps {
   onClose: () => void;
   /** 為 false 時不顯示簽名欄（螢幕預覽與列印 HTML） */
   includeEmployeeSignature?: boolean;
+  /**
+   * T13（規格約 211–214 行）：單次成績瀏覽器列印不得附「考試歷程」大表 → 預設 false；
+   * 僅在需將歷程表併入列印 HTML 時顯式傳 true。
+   */
+  printIncludeExamHistory?: boolean;
 }
 
 // SVG Icons for Print HTML
@@ -178,6 +183,7 @@ export default function ScoreCardPreview({
   isOpen,
   onClose,
   includeEmployeeSignature = true,
+  printIncludeExamHistory = false,
 }: ScoreCardPreviewProps) {
 
   if (!isOpen) return null;
@@ -304,24 +310,12 @@ export default function ScoreCardPreview({
         `;
     }).join('');
 
-    // 生成考試歷程 HTML（標示當前選中的記錄，全部使用 inline style）
-    // 使用 submit_time 比對，因為 record_id 和 history[].id 可能不一致
-    const currentSubmitTime = detail.basic_info.submit_time;
+    // T13：考試歷程表僅在 printIncludeExamHistory 為 true 時併入列印 HTML
     let historyHtml = '';
-    if (detail.history && detail.history.length > 0) {
+    if (printIncludeExamHistory && detail.history && detail.history.length > 0) {
         const historyRows = detail.history.map((h, idx) => {
-            // 判斷是否為當前選中的考試記錄（使用 submit_time 比對）
-            const isCurrentRecord = h.submit_time === currentSubmitTime;
-            
-            // 使用 inline style 確保跨平台相容
-            const rowStyle = isCurrentRecord 
-                ? 'border:2px solid #4f46e5; background-color:#eef2ff;' 
-                : 'border-bottom:1px solid #e5e7eb;';
-            
-            const currentMarker = isCurrentRecord 
-                ? `<div style="display:block; background:#4f46e5; color:white; font-size:10px; padding:2px 4px; border-radius:3px; margin-top:4px; text-align:center; font-family:${CHINESE_FONT_STACK};">本次</div>` 
-                : '';
-            
+            const zebraBg = idx % 2 === 0 ? '#ffffff' : '#f3f4f6';
+            const rowStyle = `background-color:${zebraBg}; border-bottom:1px solid #e5e7eb;`;
             const scoreColor = h.is_passed ? '#16a34a' : '#dc2626';
             const statusBg = h.is_passed ? '#dcfce7' : '#fee2e2';
             const statusColor = h.is_passed ? '#15803d' : '#b91c1c';
@@ -329,7 +323,7 @@ export default function ScoreCardPreview({
             
             return `
                 <tr style="${rowStyle} font-family:${CHINESE_FONT_STACK};">
-                    <td style="padding:0.5rem 1rem; text-align:center; vertical-align:middle;">${idx + 1}${currentMarker}</td>
+                    <td style="padding:0.5rem 1rem; text-align:center; vertical-align:middle;">${idx + 1}</td>
                     <td style="padding:0.5rem 1rem; text-align:center;">${h.submit_time ? new Date(h.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}</td>
                     <td style="padding:0.5rem 1rem; text-align:center; font-weight:bold; color:${scoreColor};">
                         ${h.total_score}

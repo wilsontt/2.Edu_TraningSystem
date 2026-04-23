@@ -9,10 +9,14 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+
+# Environment variables
 env/
 venv/
 .venv/
 .env
+.vscode
+CLAUDE.md
 
 # Node.js
 node_modules/
@@ -53,3 +57,5 @@ temp/
 * (3).*
 * 拷貝.*
 * 拷貝2.*
+backend/app/routers/report.py
+.gitignore

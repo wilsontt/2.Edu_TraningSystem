@@ -6,6 +6,7 @@ import { API_BASE_URL } from '../../api';
 import ScoreDetailModal from './ScoreDetailModal';
 import type { ExamHistoryItem, ScoreDetail } from './types';
 import ScorePrintFlow, { type ScorePrintPlanOption } from '../common/ScorePrintFlow';
+import type { PrintModeTriState, SignatureTriState } from './printTriState';
 
 interface PlanHistoryModalProps {
   recordId: number;
@@ -21,8 +22,11 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
   const [selectedHistoryId, setSelectedHistoryId] = useState<number | null>(null);
 
   const [selectedPrintPlanIds, setSelectedPrintPlanIds] = useState<Set<number>>(new Set());
-  const [printMode, setPrintMode] = useState<'list' | 'individual'>('list');
+  const [printModeTri, setPrintModeTri] = useState<PrintModeTriState>('unset');
+  const [signatureTri, setSignatureTri] = useState<SignatureTriState>('unset');
   const [printLoading, setPrintLoading] = useState(false);
+  /** 每次開啟 Modal 遞增，供 `ScorePrintFlow` 重設精靈步驟至第 1 步 */
+  const [planHistoryWizardResetSignal, setPlanHistoryWizardResetSignal] = useState(0);
 
   const printPlanOptions: ScorePrintPlanOption[] = useMemo(() => {
     if (!detail?.basic_info) return [];
@@ -46,6 +50,14 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
       fetchDetail();
     }
   }, [isOpen, recordId]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setPrintModeTri('unset');
+      setSignatureTri('unset');
+      setPlanHistoryWizardResetSignal((n) => n + 1);
+    }
+  }, [isOpen]);
 
   const fetchDetail = async () => {
     try {
@@ -75,15 +87,30 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
       alert('請至少選擇一個訓練計畫');
       return;
     }
+    if (printModeTri === 'unset' || signatureTri === 'unset') {
+      return;
+    }
+    if (!detail?.basic_info) {
+      alert('無法取得成績資訊');
+      return;
+    }
     try {
       setPrintLoading(true);
       const token = localStorage.getItem('token');
       const baseURL = API_BASE_URL;
+      /**
+       * T13（規格約 187–198、208–247 行）：考試歷程成績列印 API。
+       * - include_exam_history：list PDF 附表格式歷程（zebra 等由 report.py 處理）
+       * - document_context / plan_title：歷程專用抬頭與樣式分岔
+       * - 下載檔名：{計畫}_{部門}_{員編}_{姓名}_教育訓練考試歷程成績_{yyyyMMdd_HHmm}.pdf（與 PDF 內列印時間分開）
+       */
       const body: Record<string, unknown> = {
-        print_mode: printMode,
+        print_mode: printModeTri,
         plan_ids: Array.from(selectedPrintPlanIds),
-        include_employee_signature: false,
-        include_exam_history: false,
+        include_employee_signature: signatureTri === 'yes',
+        include_exam_history: true,
+        document_context: 'personal_exam_history',
+        plan_title: detail?.basic_info?.plan_title ?? null,
       };
       if (targetEmpId) body.emp_id = targetEmpId;
       const response = await fetch(`${baseURL}/exam/personal/print/pdf`, {
@@ -99,7 +126,9 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `personal-score-print-${format(new Date(), 'yyyyMMdd')}.pdf`;
+      const { plan_title, dept_name, emp_id, name } = detail.basic_info;
+      const printTime = format(new Date(), 'yyyyMMdd_HHmm');
+      a.download = `${plan_title}_${dept_name}_${emp_id}_${name}_教育訓練考試歷程成績_${printTime}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -163,7 +192,10 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                   <tbody className="bg-white divide-y divide-gray-200">
                     {detail.history && detail.history.length > 0 ? (
                       detail.history.map((h: ExamHistoryItem, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50">
+                        <tr
+                          key={idx}
+                          className={clsx(idx % 2 === 1 ? 'bg-gray-50' : 'bg-white', 'hover:bg-gray-100/80')}
+                        >
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             第 {idx + 1} 次
                           </td>
@@ -221,14 +253,14 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
 
           {detail && printPlanOptions.length > 0 && (
             <div className="px-6 py-4 border-t border-gray-100 space-y-3 bg-gray-50/80">
-              <h4 className="text-sm font-black text-gray-800">成績列印</h4>
+              <h4 className="text-sm font-black text-gray-800">考試歷程成績列印</h4>
               <ScorePrintFlow
                 variant="planHistoryFooter"
                 planOptions={printPlanOptions}
                 selectedPlanIds={selectedPrintPlanIds}
                 onSelectedPlanIdsChange={setSelectedPrintPlanIds}
-                printMode={printMode}
-                onPrintModeChange={setPrintMode}
+                printMode="list"
+                onPrintModeChange={() => {}}
                 includeEmployeeSignature={false}
                 onIncludeEmployeeSignatureChange={() => {}}
                 includeExamHistory={false}
@@ -238,6 +270,13 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                 printLoading={printLoading}
                 selectedEmployeeCount={1}
                 requireEmployeeSelectionForPrint={false}
+                planHistoryTri={{
+                  printMode: printModeTri,
+                  onPrintModeChange: setPrintModeTri,
+                  signature: signatureTri,
+                  onSignatureChange: setSignatureTri,
+                }}
+                planHistoryWizardResetSignal={planHistoryWizardResetSignal}
               />
             </div>
           )}

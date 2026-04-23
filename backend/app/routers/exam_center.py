@@ -756,6 +756,7 @@ def _personal_score_print_rows(
     if not plan_ids:
         return []
     base_query = db.query(
+        models.ExamRecord.id.label("record_id"),
         models.ExamRecord.emp_id,
         models.User.name,
         models.Department.name.label("dept_name"),
@@ -774,6 +775,7 @@ def _personal_score_print_rows(
     )
     rows = base_query.order_by(models.ExamRecord.submit_time.desc()).all()
     return [{
+        "record_id": r.record_id,
         "emp_id": r.emp_id,
         "name": r.name,
         "dept_name": r.dept_name,
@@ -843,9 +845,16 @@ def personal_print_pdf(
     include_employee_signature: bool = Body(False),
     include_exam_history: bool = Body(False),
     emp_id: Optional[str] = Body(None),
+    plan_title: Optional[str] = Body(None, description="抬頭用訓練計畫名稱（歷程成績列印）"),
+    document_context: str = Body("personal_exam_history", description="default | personal_exam_history，個人端固定帶歷程列印樣式"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    """
+    個人端考試歷程成績 PDF（T13）。
+    `plan_title`、`document_context=personal_exam_history` 傳入 `render_score_print_pdf_to_buffer`；
+    下載檔名由前端 `PlanHistoryModal` 依規格組字（見 1.docs/reviews/T13-…-20260423.md）。
+    """
     from .report import render_score_print_pdf_to_buffer
 
     target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
@@ -856,6 +865,8 @@ def personal_print_pdf(
         print_mode,
         include_employee_signature,
         include_exam_history,
+        document_context=document_context,
+        personal_plan_title=plan_title,
     )
     return StreamingResponse(
         buffer,
