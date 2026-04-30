@@ -4,6 +4,7 @@ from sqlalchemy import func, case, and_, or_, extract, select, Integer
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
+from urllib.parse import quote
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission
@@ -75,6 +76,190 @@ def get_print_plan_options(
         }
         for r in rows
     ]
+
+
+@router.get("/department/{dept_id}/print-plan-options")
+def get_dept_print_plan_options(
+    dept_id: int,
+    plan_status: str = Query("active"),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report"),
+):
+    """取得部門可列印的訓練計畫選項（依狀態篩選）。"""
+    allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
+    if allowed_emp_ids is not None:
+        dept_emp_ids = {
+            r[0]
+            for r in db.query(models.User.emp_id)
+            .filter(models.User.dept_id == dept_id)
+            .all()
+        }
+        if not dept_emp_ids.intersection(set(allowed_emp_ids)):
+            raise HTTPException(status_code=403, detail="您沒有查看此部門的權限")
+
+    status_filter = _training_plan_status_filter_expr(plan_status)
+    dept_exam_plan_sq = (
+        db.query(models.ExamRecord.plan_id)
+        .join(models.User, models.ExamRecord.emp_id == models.User.emp_id)
+        .filter(models.User.dept_id == dept_id)
+        .subquery()
+    )
+    rows = (
+        db.query(
+            models.TrainingPlan.id,
+            models.TrainingPlan.title,
+            models.TrainingPlan.training_date,
+        )
+        .filter(
+            status_filter,
+            or_(
+                models.TrainingPlan.id.in_(
+                    select(models.plan_target_departments.c.plan_id).where(
+                        models.plan_target_departments.c.dept_id == dept_id
+                    )
+                ),
+                models.TrainingPlan.id.in_(dept_exam_plan_sq),
+            ),
+        )
+        .distinct()
+        .order_by(models.TrainingPlan.training_date.desc())
+        .all()
+    )
+    return [
+        {
+            "plan_id": r.id,
+            "plan_title": r.title,
+            "training_date": r.training_date.isoformat() if r.training_date else None,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/department/{dept_id}/print-members")
+def get_dept_print_members(
+    dept_id: int,
+    plan_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report"),
+):
+    """取得部門成員名單（以 User 為主），含指定計畫最後一次考試與出席狀態。"""
+    allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
+
+    users_q = db.query(models.User).filter(
+        models.User.dept_id == dept_id,
+        models.User.status == "active",
+    )
+    if allowed_emp_ids is not None:
+        if not allowed_emp_ids:
+            return []
+        users_q = users_q.filter(models.User.emp_id.in_(allowed_emp_ids))
+
+    users = users_q.order_by(models.User.name).all()
+    if not users:
+        return []
+
+    emp_ids = [u.emp_id for u in users]
+
+    # 每人最後一次考試（submit_time 最大值）
+    last_subq = (
+        db.query(
+            models.ExamRecord.emp_id,
+            func.max(models.ExamRecord.submit_time).label("last_submit_time"),
+        )
+        .filter(
+            models.ExamRecord.plan_id == plan_id,
+            models.ExamRecord.emp_id.in_(emp_ids),
+        )
+        .group_by(models.ExamRecord.emp_id)
+        .subquery()
+    )
+    exam_rows = (
+        db.query(models.ExamRecord)
+        .join(
+            last_subq,
+            and_(
+                models.ExamRecord.emp_id == last_subq.c.emp_id,
+                models.ExamRecord.submit_time == last_subq.c.last_submit_time,
+                models.ExamRecord.plan_id == plan_id,
+            ),
+        )
+        .all()
+    )
+    exam_map = {r.emp_id: r for r in exam_rows}
+
+    att_rows = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.plan_id == plan_id,
+            models.AttendanceRecord.emp_id.in_(emp_ids),
+        )
+        .all()
+    )
+    att_dict = {r.emp_id: r for r in att_rows}
+
+    reason_code_map = {
+        "sick_leave": "病假",
+        "business_trip": "出差",
+        "official_leave": "公假",
+        "other": "其他",
+    }
+    abs_rows = (
+        db.query(models.AttendanceAbsenceReason)
+        .filter(
+            models.AttendanceAbsenceReason.plan_id == plan_id,
+            models.AttendanceAbsenceReason.emp_id.in_(emp_ids),
+        )
+        .all()
+    )
+    abs_label_map: dict = {}
+    abs_obj_map: dict = {}
+    for r in abs_rows:
+        label = reason_code_map.get(r.reason_code, r.reason_code)
+        if r.reason_code == "other" and r.reason_text:
+            label = r.reason_text
+        abs_label_map[r.emp_id] = label
+        abs_obj_map[r.emp_id] = r
+
+    result = []
+    for u in users:
+        exam = exam_map.get(u.emp_id)
+        att_record = att_dict.get(u.emp_id)
+        absence = abs_label_map.get(u.emp_id)
+        abs_record = abs_obj_map.get(u.emp_id)
+
+        if exam:
+            att_status = "已考試"
+        elif att_record:
+            att_status = "已報到/未完成"
+        else:
+            reason_part = f"（{absence}）" if absence else ""
+            att_status = f"未應考{reason_part}"
+
+        result.append(
+            {
+                "emp_id": u.emp_id,
+                "name": u.name,
+                "last_submit_time": (
+                    exam.submit_time.isoformat() if exam and exam.submit_time else None
+                ),
+                "last_score": exam.total_score if exam else None,
+                "is_passed": exam.is_passed if exam else None,
+                "attendance_status": att_status,
+                "absence_reason": absence,
+                "check_in_time": (
+                    att_record.checkin_time.isoformat()
+                    if att_record and att_record.checkin_time
+                    else None
+                ),
+                "absence_recorded_at": (
+                    abs_record.recorded_at.isoformat()
+                    if abs_record and abs_record.recorded_at
+                    else None
+                ),
+            }
+        )
+    return result
+
 
 # --- 總覽統計 ---
 @router.get("/overview")
@@ -1196,6 +1381,7 @@ import platform
 import os
 import sys
 import tempfile
+import json
 
 # 嘗試導入 fontTools 來處理 TTC 檔案
 try:
@@ -1573,6 +1759,193 @@ def report_print_preview(
     }
 
 
+def _draw_wrapped_text(
+    p,
+    text: str,
+    x: float,
+    y: float,
+    max_width: float,
+    font_name: str,
+    font_size: float,
+    line_height: float,
+) -> float:
+    """逐字換行繪製文字，回傳最終 y 位置。"""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    if not text:
+        return y
+    line = ""
+    for char in text:
+        test = line + char
+        if stringWidth(test, font_name, font_size) > max_width:
+            if line:
+                p.drawString(x, y, line)
+                y -= line_height
+            line = char
+        else:
+            line = test
+    if line:
+        p.drawString(x, y, line)
+        y -= line_height
+    return y
+
+
+def _render_dept_individual_page_with_answers(
+    p,
+    member: dict,
+    question_details: List[dict],
+    dept_name: str,
+    plan_title: str,
+    include_signature: bool,
+    width: float,
+    height: float,
+    chinese_font: str,
+    print_time_str: str,
+) -> None:
+    """
+    部門批次 individual 模式：完整版一人一頁（對齊個人查看詳情預覽成績單版型）。
+    - 封面：抬頭、基本資訊、成績/結果（有考試才顯示）、雙欄簽名（在頁底）
+    - 答題明細：第 2 頁起，逐題呈現（無考試則無此部分）
+    """
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    has_exam = member.get("last_score") is not None
+    plab = (plan_title or "")[:32]
+    margin_l = 40
+    body_w = width - margin_l - 40
+
+    # ── 封面 ──
+    y = height - 40
+
+    # 抬頭
+    p.setFont(chinese_font, 14)
+    p.drawString(margin_l, y, f"{plab} 教育訓練測驗成績單" if plab else "教育訓練測驗成績單")
+    p.setFont(chinese_font, 10)
+    p.drawString(width - 180, y, f"列印時間：{print_time_str}")
+    y -= 26
+
+    # 基本資訊（9pt）
+    p.setFont(chinese_font, 9)
+    p.drawString(margin_l, y, f"考生姓名：{str(member.get('name', ''))[:18]}  員工編號：{str(member.get('emp_id', ''))[:12]}")
+    y -= 14
+    dept_str = (dept_name or "")[:16]
+    p.drawString(margin_l, y, f"部門：{dept_str}  訓練計畫：{plab[:28]}")
+    y -= 14
+
+    if has_exam:
+        st = member.get("last_submit_time") or ""
+        st_str = st[:16].replace("T", " ").replace("-", "/") if st else "-"
+        score = member.get("last_score", "-")
+        result_str = "通過" if member.get("is_passed") else "未通過"
+        p.setFillColor(colors.black)
+        p.drawString(margin_l, y, f"測驗日期：{st_str}  總分：{score}  結果：")
+        result_color = colors.HexColor("#16a34a") if member.get("is_passed") else colors.HexColor("#dc2626")
+        p.setFillColor(result_color)
+        result_x = margin_l + stringWidth(f"測驗日期：{st_str}  總分：{score}  結果：", chinese_font, 9)
+        p.drawString(result_x, y, result_str)
+        p.setFillColor(colors.black)
+    y -= 16
+
+    # 分隔線
+    p.setStrokeColor(colors.HexColor("#374151"))
+    p.line(margin_l, y, width - 40, y)
+    p.setStrokeColor(colors.black)
+    y -= 8
+
+    # 封面底部雙欄簽名（固定在 y=80，呼叫前確保空間）
+    if include_signature:
+        _pdf_draw_dual_signature_employee_date(p, 80, width, height, chinese_font)
+
+    # ── 答題明細（有考試才渲染，第 2 頁起）──
+    if not question_details:
+        return
+
+    p.showPage()
+    y = height - 40
+
+    p.setFont(chinese_font, 12)
+    p.drawString(margin_l, y, "答題詳情 / Answer Details")
+    y -= 24
+
+    for q in question_details:
+        content_text = str(q.get("content") or "")
+        q_type = str(q.get("question_type") or "")
+        q_num = q.get("question_number", "")
+        is_correct = bool(q.get("is_correct"))
+        earned = q.get("earned_points", 0)
+        pts = q.get("points", 0)
+        user_ans = str(q.get("user_answer") or "未作答")
+        correct_ans = str(q.get("correct_answer") or "-")
+
+        # 解析選項 JSON
+        options: dict = {}
+        raw_opts = q.get("options")
+        if raw_opts:
+            try:
+                options = json.loads(raw_opts) if isinstance(raw_opts, str) else raw_opts
+            except (json.JSONDecodeError, TypeError):
+                options = {}
+
+        # 估算此題高度：題頭 + 題目行數 + 選項數 + 答案行
+        content_lines_est = max(1, len(content_text) // 40 + 1)
+        opts_lines = len(options)
+        est_h = 14 + content_lines_est * 13 + opts_lines * 12 + 14 + 12
+
+        if y - est_h < 60:
+            p.showPage()
+            y = height - 40
+
+        # 題頭：第 N 題  [題型]  正確/錯誤  得分
+        correct_mark = "✓" if is_correct else "✗"
+        hdr_color = colors.HexColor("#16a34a") if is_correct else colors.HexColor("#dc2626")
+        p.setFont(chinese_font, 9)
+        p.setFillColor(hdr_color)
+        p.drawString(margin_l, y, f"第 {q_num} 題  [{q_type}]  {correct_mark}  {earned}/{pts} 分")
+        p.setFillColor(colors.black)
+        y -= 13
+
+        # 題目內容（換行）
+        p.setFont(chinese_font, 9)
+        y = _draw_wrapped_text(p, content_text, margin_l + 8, y, body_w - 8, chinese_font, 9, 12)
+        y -= 2
+
+        # 選項
+        if options:
+            p.setFont(chinese_font, 8)
+            for key, val in options.items():
+                opt_line = f"  {key}. {val}"
+                y = _draw_wrapped_text(p, opt_line, margin_l + 12, y, body_w - 12, chinese_font, 8, 11)
+            y -= 2
+
+        # 考生答案 / 正確答案
+        p.setFont(chinese_font, 8)
+        ans_color = colors.HexColor("#16a34a") if is_correct else colors.HexColor("#dc2626")
+
+        # 展開答案說明
+        def _expand_ans(ans_str: str) -> str:
+            parts = [a.strip() for a in ans_str.split(",") if a.strip()]
+            expanded = []
+            for a in parts:
+                label = options.get(a, "")
+                expanded.append(f"{a}（{label}）" if label else a)
+            return ", ".join(expanded) if expanded else ans_str
+
+        user_ans_exp = _expand_ans(user_ans) if options else user_ans
+        correct_ans_exp = _expand_ans(correct_ans) if options else correct_ans
+
+        p.setFillColor(ans_color)
+        p.drawString(margin_l + 8, y, f"您的答案：{user_ans_exp[:40]}")
+        p.setFillColor(colors.HexColor("#15803d"))
+        p.drawString(margin_l + 8 + 260, y, f"正確答案：{correct_ans_exp[:40]}")
+        p.setFillColor(colors.black)
+        y -= 14
+
+        # 題目間隔
+        p.setStrokeColor(colors.HexColor("#e5e7eb"))
+        p.line(margin_l, y + 2, width - 40, y + 2)
+        p.setStrokeColor(colors.black)
+        y -= 6
+
+
 def _pdf_draw_dual_signature_employee_date(
     p, y: float, width: float, height: float, chinese_font: str
 ) -> float:
@@ -1657,48 +2030,72 @@ def _pdf_draw_exam_history_table_zebra(
     return y
 
 
+def _render_one_individual_score_page(
+    p,
+    row: dict,
+    dept_name_fallback: str,
+    plan_title_override: str,
+    include_signature: bool,
+    width: float,
+    height: float,
+    chinese_font: str,
+    print_time_str: Optional[str] = None,
+) -> None:
+    """
+    單人考卷成績單頁面（共用於個人歷程 individual 與部門批次 individual）。
+    呼叫前已呼叫 showPage() 或確認為第一頁；y 由此函數內部管理。
+    """
+    y = height - 40
+    plab = (row.get("plan_title") or plan_title_override or "")[:32]
+    p.setFont(chinese_font, 14)
+    p.drawString(40, y, f"{plab} 教育訓練測驗成績單" if plab else "教育訓練測驗成績單")
+    if print_time_str:
+        p.setFont(chinese_font, 10)
+        p.drawString(width - 180, y, f"列印時間：{print_time_str}")
+    y -= 26
+    p.setFont(chinese_font, 9)
+    p.drawString(
+        40, y,
+        f"考生姓名：{str(row.get('name', ''))[:18]}  員工編號：{str(row.get('emp_id', ''))[:12]}",
+    )
+    y -= 14
+    dept_str = (row.get("dept_name") or dept_name_fallback or "")[:16]
+    p.drawString(40, y, f"部門：{dept_str}  訓練計畫：{plab[:28]}")
+    y -= 14
+    st = row.get("submit_time")
+    st_str = st[:19].replace("T", " ") if st else "-"
+    p.drawString(
+        40, y,
+        f"測驗日期：{st_str}  總分：{row.get('total_score', '')}  "
+        f"結果：{'通過' if row.get('is_passed') else '未通過'}",
+    )
+    y -= 18
+    if include_signature:
+        y -= 6
+        _pdf_draw_dual_signature_employee_date(p, y, width, height, chinese_font)
+
+
 def _render_personal_exam_individual_to_buffer(
     db: Session,
     items: List[dict],
     include_employee_signature: bool,
     personal_plan_title: Optional[str],
 ) -> BytesIO:
-    """
-    個人歷程列印、individual：每次考試一頁（摘要），多頁一 PDF。答題明細以系統查看為準（T13 階段二可再擴充）。
-    """
+    """個人歷程列印 individual：每次考試一頁，版式同部門批次考卷成績單。"""
     chinese_font = register_chinese_fonts()
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+    now_str = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y/%m/%d %H:%M")
     sorted_items = sorted(items, key=lambda r: (r.get("submit_time") or ""))
     for idx, row in enumerate(sorted_items):
         if idx > 0:
             p.showPage()
-        y = height - 40
-        plab = (row.get("plan_title") or personal_plan_title or "")[:32]
-        p.setFont(chinese_font, 14)
-        title = f"{plab} 教育訓練測驗成績單" if plab else "教育訓練測驗成績單"
-        p.drawString(40, y, title)
-        y -= 26
-        p.setFont(chinese_font, 9)
-        p.drawString(40, y, f"考生姓名：{str(row.get('name', ''))[:18]}  員工編號：{str(row.get('emp_id', ''))[:12]}")
-        y -= 14
-        p.drawString(40, y, f"部門：{str(row.get('dept_name') or '')[:16]}  訓練計畫：{str(row.get('plan_title') or '')[:28]}")
-        y -= 14
-        st = row.get("submit_time")
-        st_str = (st[:19].replace("T", " ") if st else "-")
-        p.drawString(
-            40,
-            y,
-            f"測驗日期：{st_str}  總分：{row.get('total_score', '')}  結果："
-            f"{'通過' if row.get('is_passed') else '未通過'}",
+        _render_one_individual_score_page(
+            p, row, "", personal_plan_title or "",
+            include_employee_signature, width, height, chinese_font,
+            print_time_str=now_str,
         )
-        y -= 18
-        p.setFont(chinese_font, 7)
-        p.drawString(40, y, "答題明細與成績單完整版面請至系統【查看詳情】；本 PDF 依每次考試分頁列印摘要。")
-        y -= 20
-        if include_employee_signature:
-            y = _pdf_draw_dual_signature_employee_date(p, y, width, height, chinese_font)
     p.save()
     buffer.seek(0)
     return buffer
@@ -1907,4 +2304,461 @@ def report_print_pdf(
         buffer,
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=report_print.pdf"}
+    )
+
+
+def _render_dept_plan_pdf_to_buffer(
+    members: List[dict],
+    plan_title: str,
+    dept_name: str,
+    print_mode: str,
+    include_signature: bool,
+    db: Optional[Session] = None,
+    exam_record_map: Optional[dict] = None,
+) -> "BytesIO":
+    """
+    部門計畫批次列印 PDF。
+    - individual：每人一頁，版型與個人查看詳情預覽成績單一致（封面＋答題明細）。
+    - list：成績清單（字體 9pt、列高 18、zebra、結果紅綠色、簽名僅在底部一次雙欄）。
+    """
+    chinese_font = register_chinese_fonts()
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    now_str = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y/%m/%d %H:%M")
+
+    if print_mode == "individual":
+        for idx, m in enumerate(members):
+            if idx > 0:
+                p.showPage()
+
+            # 取得此人最後一次考試的答題明細
+            question_details: List[dict] = []
+            if db is not None and exam_record_map is not None:
+                record = exam_record_map.get(m["emp_id"])
+                if record is not None:
+                    exam_details_q = (
+                        db.query(models.ExamDetail, models.Question)
+                        .join(models.Question, models.ExamDetail.question_id == models.Question.id)
+                        .filter(models.ExamDetail.record_id == record.id)
+                        .all()
+                    )
+                    for ed, q in exam_details_q:
+                        question_details.append({
+                            "question_number": len(question_details) + 1,
+                            "question_id": q.id,
+                            "content": q.content,
+                            "question_type": q.question_type,
+                            "options": q.options,
+                            "correct_answer": q.answer,
+                            "user_answer": ed.user_answer,
+                            "is_correct": ed.is_correct,
+                            "points": q.points,
+                            "earned_points": q.points if ed.is_correct else 0,
+                        })
+                    question_details.sort(key=lambda x: x["question_id"])
+
+            _render_dept_individual_page_with_answers(
+                p, m, question_details, dept_name, plan_title,
+                include_signature, width, height, chinese_font,
+                print_time_str=now_str,
+            )
+
+    else:  # list mode
+        y = height - 40
+        p.setFont(chinese_font, 14)
+        p.drawString(
+            40, y,
+            f"{plan_title} 教育訓練成績清單" if plan_title else "教育訓練成績清單",
+        )
+        p.setFont(chinese_font, 10)
+        p.drawString(width - 180, y, f"列印時間：{now_str}")
+        y -= 22
+        p.setFont(chinese_font, 9)
+        p.drawString(40, y, f"部門：{dept_name}  人數：{len(members)}")
+        y -= 16
+        p.line(40, y + 8, width - 40, y + 8)
+        y -= 8
+
+        # 欄位定義（字體 9pt，列高 26；text_vcenter=6 使文字垂直置中）
+        headers = ["序號", "員編", "姓名", "分數", "結果", "出席狀態"]
+        x_pos = [40, 64, 100, 158, 190, 232]
+        row_h = 26
+        text_vcenter = 6  # 列底 y-4，列頂 y+22，置中基線 ≈ y+6
+        hdr_font = 9
+        content_font = 9
+
+        def draw_header():
+            nonlocal y
+            p.setFillColor(colors.HexColor("#e8eaf6"))
+            p.rect(38, y - 4, width - 76, row_h, fill=1, stroke=0)
+            p.setFillColor(colors.black)
+            p.setFont(chinese_font, hdr_font)
+            for i, h in enumerate(headers):
+                p.drawString(x_pos[i], y + text_vcenter, h)
+            y -= row_h
+            p.line(40, y + 2, width - 40, y + 2)
+            y -= 2
+
+        draw_header()
+
+        for seq, m in enumerate(members, 1):
+            if y < 80:
+                p.showPage()
+                y = height - 40
+                draw_header()
+            # zebra
+            fill_c = colors.HexColor("#f3f4f6") if seq % 2 == 0 else colors.white
+            p.setFillColor(fill_c)
+            p.rect(38, y - 4, width - 76, row_h, fill=1, stroke=0)
+
+            has_exam = m.get("last_score") is not None
+            score_str = str(m.get("last_score")) if has_exam else "-"
+            result_str = ("通過" if m.get("is_passed") else "未通過") if has_exam else "未考試"
+            att_status = (m.get("attendance_status") or "")[:20]
+
+            # 出席狀態時間（check_in_time 或 absence_recorded_at），同列顯示
+            raw_time = m.get("check_in_time") or m.get("absence_recorded_at")
+            att_time_str = ""
+            if raw_time:
+                att_time_str = raw_time[:16].replace("T", " ").replace("-", "/")
+            att_combined = att_status + (" " + att_time_str if att_time_str else "")
+
+            # 結果欄顏色
+            if result_str in ("未考試", "未通過"):
+                result_color = colors.HexColor("#dc2626")
+            else:
+                result_color = colors.HexColor("#16a34a")
+
+            p.setFillColor(colors.black)
+            p.setFont(chinese_font, content_font)
+            p.drawString(x_pos[0], y + text_vcenter, str(seq))
+            p.drawString(x_pos[1], y + text_vcenter, str(m.get("emp_id", ""))[:10])
+            p.drawString(x_pos[2], y + text_vcenter, str(m.get("name", ""))[:6])
+            p.drawString(x_pos[3], y + text_vcenter, score_str)
+
+            p.setFillColor(result_color)
+            p.drawString(x_pos[4], y + text_vcenter, result_str[:4])
+            p.setFillColor(colors.black)
+
+            # 出席狀態：狀態文字 + 時間，同一列左右排列
+            p.drawString(x_pos[5], y + text_vcenter, att_combined[:36])
+
+            y -= row_h
+
+        # 簽名僅在整份清單底部一次，雙欄樣式
+        if include_signature:
+            y -= 8
+            _pdf_draw_dual_signature_employee_date(p, y, width, height, chinese_font)
+
+    p.save()
+    buffer.seek(0)
+    return buffer
+
+
+@router.post("/dept-plan/individual-print-data")
+def dept_individual_print_data(
+    dept_id: int = Body(...),
+    plan_id: int = Body(...),
+    dept_name: str = Body(""),
+    plan_title: str = Body(""),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report"),
+):
+    """
+    部門 individual 列印資料（JSON）。
+    回傳每位成員的完整成績詳情，格式與 /exam/record/{id}/detail 相同，
+    供前端 scoreCardPrintHtml.buildBatchPrintHtml 產生與個人路徑同源的 HTML 列印。
+    """
+    allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
+    users_q = db.query(models.User).filter(
+        models.User.dept_id == dept_id,
+        models.User.status == "active",
+    )
+    if allowed_emp_ids is not None:
+        if not allowed_emp_ids:
+            raise HTTPException(status_code=403, detail="無可視範圍")
+        users_q = users_q.filter(models.User.emp_id.in_(allowed_emp_ids))
+    users = users_q.order_by(models.User.name).all()
+    if not users:
+        raise HTTPException(status_code=404, detail="此部門無成員資料")
+
+    emp_ids = [u.emp_id for u in users]
+
+    # 取各人最後一次考試記錄
+    last_subq = (
+        db.query(
+            models.ExamRecord.emp_id,
+            func.max(models.ExamRecord.submit_time).label("last_submit_time"),
+        )
+        .filter(
+            models.ExamRecord.plan_id == plan_id,
+            models.ExamRecord.emp_id.in_(emp_ids),
+        )
+        .group_by(models.ExamRecord.emp_id)
+        .subquery()
+    )
+    exam_rows = (
+        db.query(models.ExamRecord)
+        .join(
+            last_subq,
+            and_(
+                models.ExamRecord.emp_id == last_subq.c.emp_id,
+                models.ExamRecord.submit_time == last_subq.c.last_submit_time,
+                models.ExamRecord.plan_id == plan_id,
+            ),
+        )
+        .all()
+    )
+    exam_map = {r.emp_id: r for r in exam_rows}
+
+    # 出席/缺席記錄（與 dept_plan_print_pdf 相同）
+    att_rows = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.plan_id == plan_id,
+            models.AttendanceRecord.emp_id.in_(emp_ids),
+        )
+        .all()
+    )
+    att_dict = {r.emp_id: r for r in att_rows}
+    reason_code_map = {
+        "sick_leave": "病假", "business_trip": "出差",
+        "official_leave": "公假", "other": "其他",
+    }
+    abs_rows = (
+        db.query(models.AttendanceAbsenceReason)
+        .filter(
+            models.AttendanceAbsenceReason.plan_id == plan_id,
+            models.AttendanceAbsenceReason.emp_id.in_(emp_ids),
+        )
+        .all()
+    )
+    abs_label_map: dict = {}
+    for r in abs_rows:
+        label = reason_code_map.get(r.reason_code, r.reason_code)
+        if r.reason_code == "other" and r.reason_text:
+            label = r.reason_text
+        abs_label_map[r.emp_id] = label
+
+    # 部門名稱、計畫資訊
+    dept_obj = db.query(models.Department).filter(models.Department.id == dept_id).first()
+    dept_name_resolved = dept_obj.name if dept_obj else dept_name
+    plan_obj = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    passing_score = plan_obj.passing_score if plan_obj else 60
+    plan_title_resolved = plan_obj.title if plan_obj else plan_title
+
+    result = []
+    for u in users:
+        exam = exam_map.get(u.emp_id)
+        att_record = att_dict.get(u.emp_id)
+        absence = abs_label_map.get(u.emp_id)
+        if exam:
+            att_status = "已考試"
+        elif att_record:
+            att_status = "已報到/未完成"
+        else:
+            reason_part = f"（{absence}）" if absence else ""
+            att_status = f"未應考{reason_part}"
+
+        if exam:
+            exam_details_q = (
+                db.query(models.ExamDetail, models.Question)
+                .join(models.Question, models.ExamDetail.question_id == models.Question.id)
+                .filter(models.ExamDetail.record_id == exam.id)
+                .all()
+            )
+            question_details = []
+            for ed, q in exam_details_q:
+                question_details.append({
+                    "question_id": q.id,
+                    "question_number": len(question_details) + 1,
+                    "content": q.content,
+                    "question_type": q.question_type,
+                    "options": q.options,
+                    "correct_answer": q.answer,
+                    "user_answer": ed.user_answer,
+                    "is_correct": ed.is_correct,
+                    "points": q.points,
+                    "earned_points": q.points if ed.is_correct else 0,
+                })
+            question_details.sort(key=lambda x: x["question_id"])
+
+            duration = None
+            if exam.start_time and exam.submit_time:
+                duration = round((exam.submit_time - exam.start_time).total_seconds(), 0)
+
+            detail = {
+                "record_id": exam.id,
+                "basic_info": {
+                    "emp_id": u.emp_id,
+                    "name": u.name,
+                    "dept_name": dept_name_resolved,
+                    "plan_id": plan_id,
+                    "plan_title": plan_title_resolved,
+                    "training_date": None,
+                    "end_date": None,
+                    "passing_score": passing_score,
+                    "total_score": exam.total_score,
+                    "is_passed": exam.is_passed,
+                    "start_time": exam.start_time.isoformat() if exam.start_time else None,
+                    "submit_time": exam.submit_time.isoformat() if exam.submit_time else None,
+                    "duration": duration,
+                    "attempts": exam.attempts,
+                },
+                "question_details": question_details,
+                "history": [],
+            }
+            result.append({"has_exam": True, "attendance_status": att_status, "detail": detail})
+        else:
+            result.append({
+                "has_exam": False,
+                "attendance_status": att_status,
+                "name": u.name,
+                "emp_id": u.emp_id,
+                "dept_name": dept_name_resolved,
+                "plan_title": plan_title_resolved,
+                "detail": None,
+            })
+
+    return result
+
+
+@router.post("/dept-plan/pdf")
+def dept_plan_print_pdf(
+    dept_id: int = Body(...),
+    dept_name: str = Body(""),
+    plan_id: int = Body(...),
+    plan_title: str = Body(""),
+    print_mode: str = Body("list"),
+    include_signature: bool = Body(False),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report"),
+):
+    """部門計畫批次列印 PDF（以每人最後一次考試為準，未考試者標示出席狀態）。"""
+    allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
+
+    users_q = db.query(models.User).filter(
+        models.User.dept_id == dept_id,
+        models.User.status == "active",
+    )
+    if allowed_emp_ids is not None:
+        if not allowed_emp_ids:
+            raise HTTPException(status_code=403, detail="無可視範圍")
+        users_q = users_q.filter(models.User.emp_id.in_(allowed_emp_ids))
+
+    users = users_q.order_by(models.User.name).all()
+    if not users:
+        raise HTTPException(status_code=404, detail="此部門無成員資料")
+
+    emp_ids = [u.emp_id for u in users]
+
+    last_subq = (
+        db.query(
+            models.ExamRecord.emp_id,
+            func.max(models.ExamRecord.submit_time).label("last_submit_time"),
+        )
+        .filter(
+            models.ExamRecord.plan_id == plan_id,
+            models.ExamRecord.emp_id.in_(emp_ids),
+        )
+        .group_by(models.ExamRecord.emp_id)
+        .subquery()
+    )
+    exam_rows = (
+        db.query(models.ExamRecord)
+        .join(
+            last_subq,
+            and_(
+                models.ExamRecord.emp_id == last_subq.c.emp_id,
+                models.ExamRecord.submit_time == last_subq.c.last_submit_time,
+                models.ExamRecord.plan_id == plan_id,
+            ),
+        )
+        .all()
+    )
+    exam_map = {r.emp_id: r for r in exam_rows}
+
+    att_rows = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.plan_id == plan_id,
+            models.AttendanceRecord.emp_id.in_(emp_ids),
+        )
+        .all()
+    )
+    att_dict = {r.emp_id: r for r in att_rows}
+
+    reason_code_map = {
+        "sick_leave": "病假",
+        "business_trip": "出差",
+        "official_leave": "公假",
+        "other": "其他",
+    }
+    abs_rows = (
+        db.query(models.AttendanceAbsenceReason)
+        .filter(
+            models.AttendanceAbsenceReason.plan_id == plan_id,
+            models.AttendanceAbsenceReason.emp_id.in_(emp_ids),
+        )
+        .all()
+    )
+    abs_label_map: dict = {}
+    abs_obj_map: dict = {}
+    for r in abs_rows:
+        label = reason_code_map.get(r.reason_code, r.reason_code)
+        if r.reason_code == "other" and r.reason_text:
+            label = r.reason_text
+        abs_label_map[r.emp_id] = label
+        abs_obj_map[r.emp_id] = r
+
+    members = []
+    for u in users:
+        exam = exam_map.get(u.emp_id)
+        att_record = att_dict.get(u.emp_id)
+        absence = abs_label_map.get(u.emp_id)
+        abs_record = abs_obj_map.get(u.emp_id)
+        if exam:
+            att_status = "已考試"
+        elif att_record:
+            att_status = "已報到/未完成"
+        else:
+            reason_part = f"（{absence}）" if absence else ""
+            att_status = f"未應考{reason_part}"
+        members.append(
+            {
+                "emp_id": u.emp_id,
+                "name": u.name,
+                "last_submit_time": (
+                    exam.submit_time.isoformat() if exam and exam.submit_time else None
+                ),
+                "last_score": exam.total_score if exam else None,
+                "is_passed": exam.is_passed if exam else None,
+                "attendance_status": att_status,
+                "check_in_time": (
+                    att_record.checkin_time.isoformat()
+                    if att_record and att_record.checkin_time
+                    else None
+                ),
+                "absence_recorded_at": (
+                    abs_record.recorded_at.isoformat()
+                    if abs_record and abs_record.recorded_at
+                    else None
+                ),
+            }
+        )
+
+    buffer = _render_dept_plan_pdf_to_buffer(
+        members, plan_title, dept_name, print_mode, include_signature,
+        db=db, exam_record_map=exam_map,
+    )
+    now_ts = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d_%H%M%S")
+    mode_label = "考卷成績單" if print_mode == "individual" else "成績清單"
+    safe_plan = (plan_title or "計畫")[:20].replace("/", "_").replace("\\", "_")
+    safe_dept = (dept_name or "部門")[:10].replace("/", "_").replace("\\", "_")
+    filename = f"{safe_plan}_{safe_dept}_{mode_label}_{now_ts}.pdf"
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )

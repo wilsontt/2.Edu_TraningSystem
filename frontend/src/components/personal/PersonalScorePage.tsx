@@ -112,10 +112,11 @@ export default function PersonalScorePage() {
         setIsAdmin(user.role === 'Admin');
         const hasMenuReport = Array.isArray(user.functions) && user.functions.includes('menu:report');
         // 顯示「部門成績」規則：
-        // Admin，或具 menu:report 且角色資料可視範圍為「成員所屬部門（department）」。
-        // 不要求一定有額外勾選部門，因為自己部門本來就屬於可視範圍。
+        // Admin，或具 menu:report 且角色資料可視範圍為部門（department）或跨部門（all）。
         const canViewTeamReport =
-          user.role === 'Admin' || (hasMenuReport && user.role_scope_type === 'department');
+          user.role === 'Admin' ||
+          (hasMenuReport &&
+            (user.role_scope_type === 'department' || user.role_scope_type === 'all'));
         setHasReportPermission(canViewTeamReport);
         
         // 如果是 Admin，載入使用者列表

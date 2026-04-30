@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Download, Users, FileText, CheckCircle, TrendingUp, AlertCircle, RefreshCw, Calendar, Timer, Target, Repeat, X, ChevronDown, ChevronRight, Filter, TrendingDown, Eye, BarChart3, Search } from "lucide-react";
+import { Download, Users, FileText, CheckCircle, TrendingUp, AlertCircle, RefreshCw, Calendar, Timer, Target, Repeat, X, ChevronDown, ChevronRight, Filter, TrendingDown, Eye, BarChart3, Search, PrinterIcon } from "lucide-react";
 import Pagination from '../common/Pagination';
 import ScorePrintFlow from '../common/ScorePrintFlow';
+import DeptMemberScoreModal from './DeptMemberScoreModal';
 import { API_BASE_URL } from '../../api';
 import clsx from 'clsx';
 import { format } from "date-fns";
@@ -206,6 +207,7 @@ export default function ReportDashboard() {
   const [retakeUsers, setRetakeUsers] = useState<{ count: number; users: RetakeUser[] }>({ count: 0, users: [] });
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false); // 表格區域局部載入狀態
+  const [outerTab, setOuterTab] = useState<'stats' | 'performance'>('performance');
   const [activeTab, setActiveTab] = useState<'department' | 'plan' | 'print'>('department');
   
   // 部門/計畫績效表分頁狀態
@@ -234,6 +236,9 @@ export default function ReportDashboard() {
   const [printSortDir, setPrintSortDir] = useState<'asc' | 'desc'>('asc');
   const [printPreviewPage, setPrintPreviewPage] = useState(1);
   const [printPreviewPageSize, setPrintPreviewPageSize] = useState(10);
+  const [deptModalOpen, setDeptModalOpen] = useState(false);
+  const [deptModalId, setDeptModalId] = useState(0);
+  const [deptModalName, setDeptModalName] = useState('');
 
   const toggleExpandRow = async (itemId: number) => {
     if (!itemId) return;
@@ -680,8 +685,10 @@ export default function ReportDashboard() {
             <BarChart3 className="w-7 h-7 text-white" />
           </div>
           <div>
-            <h2 className="text-3xl font-black tracking-tight text-gray-900">成績中心 統計報表</h2>
-            <p className="text-gray-500 font-medium">總覽與分析訓練成效</p>
+            <h2 className="text-3xl font-black tracking-tight text-gray-900">成績中心</h2>
+            <p className="text-gray-500 font-medium">
+              {outerTab === 'stats' ? '總覽與分析訓練成效' : '部門績效表現與明細查詢'}
+            </p>
           </div>
         </div>
         <div className="flex gap-3">
@@ -702,6 +709,34 @@ export default function ReportDashboard() {
         </div>
       </div>
 
+      {/* 外層頁籤：統計報表 / 部門績效表現 */}
+      <div className="flex space-x-1 bg-gray-100 p-1.5 rounded-xl w-fit border border-gray-200">
+        <button
+          onClick={() => setOuterTab('performance')}
+          className={clsx(
+            'px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer',
+            outerTab === 'performance'
+              ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100'
+              : 'text-gray-500 hover:text-indigo-600 hover:bg-white/50'
+          )}
+        >
+          部門績效表現
+        </button>
+        <button
+          onClick={() => setOuterTab('stats')}
+          className={clsx(
+            'px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer',
+            outerTab === 'stats'
+              ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100'
+              : 'text-gray-500 hover:text-indigo-600 hover:bg-white/50'
+          )}
+        >
+          成績中心 統計報表
+        </button>
+      </div>
+
+      {outerTab === 'stats' && (
+      <>
       {/* T1.4: KPI 卡片優化 */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {/* 原有 4 個 KPI 卡片（優化版） */}
@@ -1003,8 +1038,11 @@ export default function ReportDashboard() {
           </div>
         </div>
       )}
+      </>
+      )}
 
       {/* 分頁籤與時間篩選器 */}
+      {outerTab === 'performance' && (
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-bold text-gray-700 whitespace-nowrap">訓練計畫狀態</span>
@@ -1206,6 +1244,7 @@ export default function ReportDashboard() {
                       {includeAdvanced && (
                         <th className="px-6 py-4 text-right text-sm font-bold text-gray-500">成長率</th>
                       )}
+                      <th className="px-6 py-4 text-center text-sm font-bold text-gray-500">部門成員成績批次列印</th>
                     </>
                   )}
                   {activeTab === 'plan' && (
@@ -1297,6 +1336,24 @@ export default function ReportDashboard() {
                                 )}
                               </td>
                             )}
+                            <td className="px-6 py-4 text-center">
+                              {(item as DepartmentStat).dept_id && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeptModalId((item as DepartmentStat).dept_id!);
+                                    setDeptModalName(item.name);
+                                    setDeptModalOpen(true);
+                                  }}
+                                  title={`開啟 ${item.name} 成員成績批次列印`}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 hover:border-indigo-400 transition-colors cursor-pointer"
+                                >
+                                  <PrinterIcon className="h-3.5 w-3.5" />
+                                  批次列印
+                                </button>
+                              )}
+                            </td>
                           </>
                         )}
                         {activeTab === 'plan' && (
@@ -1330,7 +1387,8 @@ export default function ReportDashboard() {
                         <tr>
                           <td colSpan={activeTab === 'department' ? (includeAdvanced ? 8 : 6) : 8} className="px-6 py-4 bg-gray-50">
                             {activeTab === 'department' ? (
-                              <div className="space-y-4">
+                              <div className="flex justify-end">
+                              <div className="space-y-4 w-full max-w-3xl">
                                 {/* 部門詳情 */}
                                 {deptDetails[itemId] && (
                                   <div>
@@ -1340,20 +1398,20 @@ export default function ReportDashboard() {
                                         <thead className="bg-gray-100">
                                           <tr>
                                             <th className="px-4 py-2 text-left">姓名</th>
-                                            <th className="px-4 py-2 text-left">計畫</th>
-                                            <th className="px-4 py-2 text-right">分數</th>
-                                            <th className="px-4 py-2 text-right">是否通過</th>
+                                            <th className="pl-4 pr-[86px] py-2 text-left">計畫</th>
+                                            <th className="pl-4 pr-[30px] py-2 text-right">分數</th>
+                                            <th className="pl-4 pr-[30px] py-2 text-right">是否通過</th>
                                             <th className="px-4 py-2 text-right">提交時間</th>
-                                            <th className="px-4 py-2 text-center">操作</th>
+                                            <th className="pl-4 pr-[30px] py-2 text-center">操作</th>
                                           </tr>
                                         </thead>
                                         <tbody>
                                           {deptDetails[itemId].records.map((record: any, rIdx: number) => (
                                             <tr key={rIdx} className="border-b even:bg-gray-100">
                                               <td className="px-4 py-2">{record.name}</td>
-                                              <td className="px-4 py-2">{record.plan_title}</td>
-                                              <td className="px-4 py-2 text-right">{record.total_score}</td>
-                                              <td className="px-4 py-2 text-right">
+                                              <td className="pl-4 pr-[86px] py-2">{record.plan_title}</td>
+                                              <td className="pl-4 pr-[30px] py-2 text-right">{record.total_score}</td>
+                                              <td className="pl-4 pr-[30px] py-2 text-right">
                                                 {record.is_passed ? (
                                                   <span className="text-green-600">✓</span>
                                                 ) : (
@@ -1363,7 +1421,7 @@ export default function ReportDashboard() {
                                               <td className="px-4 py-2 text-right text-gray-500">
                                                 {record.submit_time ? new Date(record.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
                                               </td>
-                                                              <td className="px-4 py-2 text-center">
+                                                              <td className="pl-4 pr-[30px] py-2 text-center">
                                                                 {record.emp_id && (
                                                                   <Link
                                                                     to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || (item as DepartmentStat).name || '')}`}
@@ -1438,6 +1496,7 @@ export default function ReportDashboard() {
                                                     </div>
                                                   </div>
                                                 )}
+                              </div>
                               </div>
                             ) : (
                               <div className="space-y-4">
@@ -1659,6 +1718,15 @@ export default function ReportDashboard() {
           </div>
         )}
       </div>
+      )}
+
+      {/* 部門成員成績批次列印 Modal */}
+      <DeptMemberScoreModal
+        open={deptModalOpen}
+        onClose={() => setDeptModalOpen(false)}
+        deptId={deptModalId}
+        deptName={deptModalName}
+      />
 
       {/* KPI 詳細資訊 Modal */}
       {showKPIModal && selectedKPI && (
