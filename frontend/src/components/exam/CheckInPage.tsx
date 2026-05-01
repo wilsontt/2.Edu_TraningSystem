@@ -37,16 +37,17 @@ const CheckInPage = () => {
         // 獲取計畫資訊（可選）
         try {
           const plansRes = await api.get('/training/plans');
-          const plan = plansRes.data.find((p: any) => p.id === parseInt(planId));
+          const plan = plansRes.data.find((p: { id: number; title?: string }) => p.id === parseInt(planId));
           if (plan) {
             setPlanTitle(plan.title);
           }
         } catch {
           // 如果無法獲取計畫資訊，忽略
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Failed to load attendance status', err);
-        setError(err.response?.data?.detail || '無法載入報到狀態');
+        const apiErr = err as { response?: { data?: { detail?: string } } };
+        setError(apiErr.response?.data?.detail || '無法載入報到狀態');
         setAttendanceStatus({
           is_checked_in: false
         });
@@ -70,9 +71,10 @@ const CheckInPage = () => {
         is_checked_in: true,
         checkin_time: res.data.checkin_time || new Date().toISOString()
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to check in', err);
-      setError(err.response?.data?.detail || '報到失敗，請稍後再試');
+      const apiErr = err as { response?: { data?: { detail?: string } } };
+      setError(apiErr.response?.data?.detail || '報到失敗，請稍後再試');
     } finally {
       setCheckingIn(false);
     }

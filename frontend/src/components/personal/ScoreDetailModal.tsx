@@ -38,6 +38,7 @@ export default function ScoreDetailModal({
     if (isOpen && (recordId || historyId)) {
       fetchDetail();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, recordId, historyId]);
 
   useEffect(() => {

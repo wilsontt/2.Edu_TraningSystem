@@ -70,6 +70,41 @@ def delete_department(id: int, db: Session = Depends(get_db), current_user = che
     db.commit()
     return {"message": "刪除成功"}
 
+
+@router.get("/departments/{id}/users")
+def get_department_users(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:admin:dept"),
+):
+    """取得特定部門綁定的使用者列表（用於單位管理「查看成員」）"""
+    db_dept = db.query(models.Department).filter(models.Department.id == id).first()
+    if not db_dept:
+        raise HTTPException(status_code=404, detail="單位不存在")
+
+    users = (
+        db.query(models.User)
+        .options(joinedload(models.User.role))
+        .filter(models.User.dept_id == id)
+        .order_by(models.User.emp_id.asc())
+        .all()
+    )
+
+    return {
+        "department_id": db_dept.id,
+        "department_name": db_dept.name,
+        "user_count": len(users),
+        "users": [
+            {
+                "emp_id": user.emp_id,
+                "name": user.name,
+                "role": user.role.name if user.role else "",
+                "status": user.status or "inactive",
+            }
+            for user in users
+        ],
+    }
+
 # ----------------------------------------------------------------
 # 分類管理 (Category Management) - 權限: menu:plan / menu:admin
 # ----------------------------------------------------------------

@@ -49,6 +49,7 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
     if (isOpen && recordId) {
       fetchDetail();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, recordId]);
 
   useEffect(() => {

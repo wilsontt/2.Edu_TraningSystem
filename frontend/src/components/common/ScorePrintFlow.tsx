@@ -84,6 +84,7 @@ export default function ScorePrintFlow({
 
   useEffect(() => {
     if (usePlanHistoryWizard) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPlanHistoryStep(1);
     }
   }, [usePlanHistoryWizard, planHistoryWizardResetSignal]);

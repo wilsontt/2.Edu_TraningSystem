@@ -178,6 +178,7 @@ export default function ScoreCardPreview({
   isOpen,
   onClose,
   includeEmployeeSignature = true,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   printIncludeExamHistory: _printIncludeExamHistory = false,
 }: ScoreCardPreviewProps) {
 

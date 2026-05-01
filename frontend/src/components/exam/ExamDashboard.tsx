@@ -104,8 +104,9 @@ const ExamDashboard = () => {
             await api.post(`/exam/plan/${pendingStartExamId}/attendance/checkin`);
             setShowNotCheckedInModal(false);
             navigate(`/exam/run/${pendingStartExamId}`);
-        } catch (err: any) {
-            alert(err?.response?.data?.detail || '報到失敗，請稍後再試');
+        } catch (err: unknown) {
+            const apiErr = err as { response?: { data?: { detail?: string } } };
+            alert(apiErr?.response?.data?.detail || '報到失敗，請稍後再試');
         } finally {
             setQuickCheckInLoading(false);
         }

@@ -192,6 +192,25 @@ interface PrintPlanOption {
   training_date: string | null;
 }
 
+interface DeptDetailRecord {
+  emp_id?: string;
+  name: string;
+  plan_title: string;
+  total_score: number;
+  is_passed: boolean;
+  submit_time?: string;
+  dept_name?: string;
+}
+
+interface PlanDetailRecord {
+  emp_id?: string;
+  name: string;
+  dept_name: string;
+  total_score: number;
+  is_passed: boolean;
+  submit_time?: string;
+}
+
 // 成員成績列表欄寬設定（單位：ch）。後續若需調整欄寬，直接修改此處數值。
 // ※ actions 欄位以 em 計（按鈕寬度相對字型較穩定）
 const MEMBER_TABLE_COL_WIDTHS = {
@@ -238,8 +257,8 @@ export default function ReportDashboard() {
   const [planStatus, setPlanStatus] = useState<'active' | 'expired' | 'archived'>('active');
   const [expandedDept, setExpandedDept] = useState<number | null>(null);
   const [expandedPlan, setExpandedPlan] = useState<number | null>(null);
-  const [deptDetails, setDeptDetails] = useState<Record<number, any>>({});
-  const [planDetails, setPlanDetails] = useState<Record<number, any>>({});
+  const [deptDetails, setDeptDetails] = useState<Record<number, { records: DeptDetailRecord[] }>>({});
+  const [planDetails, setPlanDetails] = useState<Record<number, { records: PlanDetailRecord[] }>>({});
   const [printPreview, setPrintPreview] = useState<PrintPreviewItem[]>([]);
   const [selectedPrintEmpIds, setSelectedPrintEmpIds] = useState<Set<string>>(new Set());
   const [printPlanOptions, setPrintPlanOptions] = useState<PrintPlanOption[]>([]);
@@ -1433,7 +1452,7 @@ export default function ReportDashboard() {
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {deptDetails[itemId].records.map((record: any, rIdx: number) => (
+                                          {deptDetails[itemId].records.map((record: DeptDetailRecord, rIdx: number) => (
                                             <tr key={rIdx} className="border-b even:bg-gray-100">
                                               <td className="px-4 py-2 whitespace-nowrap overflow-hidden text-ellipsis">{record.name}</td>
                                               <td className="px-4 py-2 whitespace-nowrap overflow-hidden text-ellipsis">{record.plan_title}</td>
@@ -1544,7 +1563,7 @@ export default function ReportDashboard() {
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {planDetails[itemId].records.map((record: any, rIdx: number) => (
+                                          {planDetails[itemId].records.map((record: PlanDetailRecord, rIdx: number) => (
                                             <tr key={rIdx} className="border-b even:bg-gray-100">
                                               <td className="px-4 py-2">{record.name}</td>
                                               <td className="px-4 py-2">{record.dept_name}</td>

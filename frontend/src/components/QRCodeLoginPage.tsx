@@ -249,8 +249,7 @@ const QRCodeLoginPage: React.FC<QRCodeLoginPageProps> = ({ onLoginSuccess }) => 
                     if (lower.startsWith('admin')) {
                       value = 'admin';
                     } else if ('admin'.startsWith(lower)) {
-                      // 允許輸入 admin 的過程中
-                      value = value;
+                      // 允許輸入 admin 的過程中，value 保持不變
                     } else {
                       // 不是 admin 的開頭，清空
                       value = '';

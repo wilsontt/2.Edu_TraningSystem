@@ -195,6 +195,7 @@ const QRCodeManager = () => {
     // 初始載入 token 列表
     useEffect(() => {
         fetchTokens();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     return (

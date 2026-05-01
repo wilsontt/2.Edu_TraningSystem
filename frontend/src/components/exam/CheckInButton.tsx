@@ -25,9 +25,10 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
             const res = await api.get<AttendanceStatus>(`/exam/plan/${planId}/attendance/status`);
             setStatus(res.data);
             setError(null);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Failed to fetch attendance status', err);
-            setError(err.response?.data?.detail || '無法載入報到狀態');
+            const apiErr = err as { response?: { data?: { detail?: string } } };
+            setError(apiErr.response?.data?.detail || '無法載入報到狀態');
         } finally {
             setLoading(false);
         }
@@ -53,9 +54,10 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
             if (onCheckInSuccess) {
                 onCheckInSuccess();
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Failed to check in', err);
-            setError(err.response?.data?.detail || '報到失敗，請稍後再試');
+            const apiErr = err as { response?: { data?: { detail?: string } } };
+            setError(apiErr.response?.data?.detail || '報到失敗，請稍後再試');
         } finally {
             setCheckingIn(false);
         }
@@ -64,6 +66,7 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
     // 初始載入狀態
     useEffect(() => {
         fetchStatus();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [planId]);
 
     if (loading) {
