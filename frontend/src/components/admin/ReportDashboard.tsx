@@ -1255,7 +1255,7 @@ export default function ReportDashboard() {
                       {includeAdvanced && (
                         <th className="px-6 py-4 text-right text-sm font-bold text-gray-500">成長率</th>
                       )}
-                      <th className="px-6 py-4 text-center text-sm font-bold text-gray-500">部門成員成績批次列印</th>
+                      <th className="px-6 py-4 text-center text-sm font-bold text-gray-500 whitespace-nowrap">部門成員成績批次列印</th>
                     </>
                   )}
                   {activeTab === 'plan' && (
@@ -1396,7 +1396,7 @@ export default function ReportDashboard() {
                       {/* 展開詳情 */}
                       {isExpanded && itemId && (
                         <tr>
-                          <td colSpan={activeTab === 'department' ? (includeAdvanced ? 8 : 6) : 8} className="px-6 py-4 bg-gray-50">
+                          <td colSpan={activeTab === 'department' ? (includeAdvanced ? 9 : 7) : 9} className="px-6 py-4 bg-gray-50">
                             {activeTab === 'department' ? (
                               <div className="w-full flex justify-end">
                               <div className="space-y-4 w-full">
