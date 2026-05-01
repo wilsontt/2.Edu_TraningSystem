@@ -184,6 +184,17 @@ interface PrintPlanOption {
   training_date: string | null;
 }
 
+// 成員成績列表欄寬設定（單位：ch）。後續若需調整欄寬，直接修改此處數值。
+// ※ actions 欄位以 em 計（按鈕寬度相對字型較穩定）
+const MEMBER_TABLE_COL_WIDTHS = {
+  name:        15,  // 姓名（約 7–8 個中文字）
+  plan:        30,  // 計劃（約 15 個中文字）
+  score:       10,  // 分數
+  isPassed:    15,  // 是否通過
+  submittedAt: 20,  // 提交時間（數字字元寬）
+  actions:      8,  // 操作（em 為單位；容納按鈕）
+} as const;
+
 export default function ReportDashboard() {
   const [overview, setOverview] = useState<OverviewStats>({
     total_exams: 0,
@@ -1387,115 +1398,123 @@ export default function ReportDashboard() {
                         <tr>
                           <td colSpan={activeTab === 'department' ? (includeAdvanced ? 8 : 6) : 8} className="px-6 py-4 bg-gray-50">
                             {activeTab === 'department' ? (
-                              <div className="flex justify-end">
-                              <div className="space-y-4 w-full max-w-3xl">
-                                {/* 部門詳情 */}
+                              <div className="w-full flex justify-end">
+                              <div className="space-y-4 w-full">
+                                {/* 部門詳情 — 成員成績列表有專屬 wrapper 控制寬度，不影響下方圖表與 Top10 */}
                                 {deptDetails[itemId] && (
-                                  <div>
+                                  <div className="w-full ml-auto">
                                     <h4 className="font-bold text-gray-900 mb-2">成員成績列表</h4>
                                     <div className="overflow-x-auto">
-                                      <table className="w-full text-sm">
+                                      <table className="table-fixed w-full text-sm">
+                                        <colgroup>
+                                          <col style={{ width: `${MEMBER_TABLE_COL_WIDTHS.name}ch` }} />
+                                          <col style={{ width: `${MEMBER_TABLE_COL_WIDTHS.plan}ch` }} />
+                                          <col style={{ width: `${MEMBER_TABLE_COL_WIDTHS.score}ch` }} />
+                                          <col style={{ width: `${MEMBER_TABLE_COL_WIDTHS.isPassed}ch` }} />
+                                          <col style={{ width: `${MEMBER_TABLE_COL_WIDTHS.submittedAt}ch` }} />
+                                          <col style={{ width: `${MEMBER_TABLE_COL_WIDTHS.actions}em` }} />
+                                        </colgroup>
                                         <thead className="bg-gray-100">
                                           <tr>
                                             <th className="px-4 py-2 text-left">姓名</th>
-                                            <th className="pl-4 pr-[86px] py-2 text-left">計畫</th>
-                                            <th className="pl-4 pr-[30px] py-2 text-right">分數</th>
-                                            <th className="pl-4 pr-[30px] py-2 text-right">是否通過</th>
-                                            <th className="px-4 py-2 text-right">提交時間</th>
-                                            <th className="pl-4 pr-[30px] py-2 text-center">操作</th>
+                                            <th className="px-4 py-2 text-left">計畫</th>
+                                            <th className="px-4 py-2 text-right">分數</th>
+                                            <th className="px-4 py-2 text-right">是否通過</th>
+                                            <th className="px-4 py-2 text-center">提交時間</th>
+                                            <th className="px-4 py-2 text-center">操作</th>
                                           </tr>
                                         </thead>
                                         <tbody>
                                           {deptDetails[itemId].records.map((record: any, rIdx: number) => (
                                             <tr key={rIdx} className="border-b even:bg-gray-100">
-                                              <td className="px-4 py-2">{record.name}</td>
-                                              <td className="pl-4 pr-[86px] py-2">{record.plan_title}</td>
-                                              <td className="pl-4 pr-[30px] py-2 text-right">{record.total_score}</td>
-                                              <td className="pl-4 pr-[30px] py-2 text-right">
+                                              <td className="px-4 py-2 whitespace-nowrap overflow-hidden text-ellipsis">{record.name}</td>
+                                              <td className="px-4 py-2 whitespace-nowrap overflow-hidden text-ellipsis">{record.plan_title}</td>
+                                              <td className="px-4 py-2 text-right whitespace-nowrap">{record.total_score}</td>
+                                              <td className="px-4 py-2 text-right whitespace-nowrap">
                                                 {record.is_passed ? (
                                                   <span className="text-green-600">✓</span>
                                                 ) : (
                                                   <span className="text-red-600">✗</span>
                                                 )}
                                               </td>
-                                              <td className="px-4 py-2 text-right text-gray-500">
+                                              <td className="px-4 py-2 text-right text-gray-500 tabular-nums whitespace-nowrap">
                                                 {record.submit_time ? new Date(record.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
                                               </td>
-                                                              <td className="pl-4 pr-[30px] py-2 text-center">
-                                                                {record.emp_id && (
-                                                                  <Link
-                                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || (item as DepartmentStat).name || '')}`}
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
-                                                                  >
-                                                                    <Eye className="h-3 w-3 mr-1" />
-                                                                    查看個人成績
-                                                                  </Link>
-                                                                )}
-                                                              </td>
-                                                            </tr>
-                                                          ))}
-                                                        </tbody>
-                                                      </table>
-                                                    </div>
-                                                  </div>
+                                              <td className="px-4 py-2 text-center whitespace-nowrap">
+                                                {record.emp_id && (
+                                                  <Link
+                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || (item as DepartmentStat).name || '')}`}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
+                                                  >
+                                                    <Eye className="h-3 w-3 mr-1" />
+                                                    查看個人成績
+                                                  </Link>
                                                 )}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
                                                 
-                                                {/* 成績分布圖表 */}
-                                                {(item as DepartmentStat).score_distribution && (
-                                                  <div>
-                                                    <h4 className="font-bold text-gray-900 mb-3">成績分布</h4>
-                                                    <ResponsiveContainer width="100%" height={200}>
-                                                      <BarChart data={Object.entries((item as DepartmentStat).score_distribution!).map(([range, count]) => ({
-                                                        range,
-                                                        count
-                                                      }))}>
-                                                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e7ff" />
-                                                        <XAxis dataKey="range" />
-                                                        <YAxis />
-                                                        <Tooltip />
-                                                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                                                          {Object.entries((item as DepartmentStat).score_distribution!).map(([range]) => (
-                                                            <Cell 
-                                                              key={`cell-dist-${range}`} 
-                                                              fill={CHART_COLORS.distribution[range as keyof typeof CHART_COLORS.distribution] || '#4f46e5'} 
-                                                            />
-                                                          ))}
-                                                        </Bar>
-                                                      </BarChart>
-                                                    </ResponsiveContainer>
-                                                    {/* 圖例說明 */}
-                                                    <div className="flex flex-wrap justify-center gap-3 mt-3 text-xs">
-                                                      {Object.entries(CHART_COLORS.distribution).map(([range, color]) => (
-                                                        <div key={range} className="flex items-center gap-1.5">
-                                                          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
-                                                          <span className="text-gray-600 font-medium">{range}分</span>
-                                                        </div>
-                                                      ))}
-                                                    </div>
-                                                  </div>
-                                                )}
-                                                
-                                                {/* 個人排名 Top 10 */}
-                                                {(item as DepartmentStat).top_users && (item as DepartmentStat).top_users!.length > 0 && (
-                                                  <div>
-                                                    <h4 className="font-bold text-gray-900 mb-3">個人排名 Top 10</h4>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                      {(item as DepartmentStat).top_users!.map((user, uIdx) => (
-                                                        <div key={uIdx} className="flex items-center justify-between p-3 bg-white rounded-xl border border-indigo-100 hover:shadow-md transition-all duration-200">
-                                                          <div>
-                                                            <div className="font-bold text-sm">{user.name}</div>
-                                                            <div className="text-xs text-gray-500">{user.emp_id}</div>
-                                                          </div>
-                                                          <div className="text-right">
-                                                            <div className="font-black text-indigo-600">{user.avg_score}</div>
-                                                            <div className="text-xs text-gray-500 font-medium">{user.count} 次</div>
-                                                          </div>
-                                                        </div>
-                                                      ))}
-                                                    </div>
-                                                  </div>
-                                                )}
+                                {/* 成績分布圖表 */}
+                                {(item as DepartmentStat).score_distribution && (
+                                  <div>
+                                    <h4 className="font-bold text-gray-900 mb-3">成績分布</h4>
+                                    <ResponsiveContainer width="100%" height={200}>
+                                      <BarChart data={Object.entries((item as DepartmentStat).score_distribution!).map(([range, count]) => ({
+                                        range,
+                                        count
+                                      }))}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e7ff" />
+                                        <XAxis dataKey="range" />
+                                        <YAxis />
+                                        <Tooltip />
+                                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                                          {Object.entries((item as DepartmentStat).score_distribution!).map(([range]) => (
+                                            <Cell 
+                                              key={`cell-dist-${range}`} 
+                                              fill={CHART_COLORS.distribution[range as keyof typeof CHART_COLORS.distribution] || '#4f46e5'} 
+                                            />
+                                          ))}
+                                        </Bar>
+                                      </BarChart>
+                                    </ResponsiveContainer>
+                                    {/* 圖例說明 */}
+                                    <div className="flex flex-wrap justify-center gap-3 mt-3 text-xs">
+                                      {Object.entries(CHART_COLORS.distribution).map(([range, color]) => (
+                                        <div key={range} className="flex items-center gap-1.5">
+                                          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                                          <span className="text-gray-600 font-medium">{range}分</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* 個人排名 Top 10 */}
+                                {(item as DepartmentStat).top_users && (item as DepartmentStat).top_users!.length > 0 && (
+                                  <div>
+                                    <h4 className="font-bold text-gray-900 mb-3">個人排名 Top 10</h4>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {(item as DepartmentStat).top_users!.map((user, uIdx) => (
+                                        <div key={uIdx} className="flex items-center justify-between p-3 bg-white rounded-xl border border-indigo-100 hover:shadow-md transition-all duration-200">
+                                          <div>
+                                            <div className="font-bold text-sm">{user.name}</div>
+                                            <div className="text-xs text-gray-500">{user.emp_id}</div>
+                                          </div>
+                                          <div className="text-right">
+                                            <div className="font-black text-indigo-600">{user.avg_score}</div>
+                                            <div className="text-xs text-gray-500 font-medium">{user.count} 次</div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                               </div>
                             ) : (
@@ -1532,33 +1551,33 @@ export default function ReportDashboard() {
                                               <td className="px-4 py-2 text-right text-gray-500">
                                                 {record.submit_time ? new Date(record.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
                                               </td>
-                                                              <td className="px-4 py-2 text-center">
-                                                                {record.emp_id && (
-                                                                  <Link
-                                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || '')}`}
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
-                                                                  >
-                                                                    <Eye className="h-3 w-3 mr-1" />
-                                                                    查看個人成績
-                                                                  </Link>
-                                                                )}
-                                                              </td>
-                                                            </tr>
-                                                          ))}
-                                                        </tbody>
-                                                      </table>
-                                                    </div>
-                                                  </div>
+                                              <td className="px-4 py-2 text-center">
+                                                {record.emp_id && (
+                                                  <Link
+                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || '')}`}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
+                                                  >
+                                                    <Eye className="h-3 w-3 mr-1" />
+                                                    查看個人成績
+                                                  </Link>
                                                 )}
-                                              </div>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      )}
-                                    </>
-                                  );
-                                })}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
               </tbody>
             </table>
           </div>
