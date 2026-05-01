@@ -1,11 +1,17 @@
+"""
+題目解析器服務 (Question Parser Service)
+負責將特定格式的 TXT 純文字檔案解析成結構化的題目資料 (JSON/Dict)。
+支援單選、多選及是非題。
+"""
+
 import re
 from typing import List, Dict, Optional
 
 class TXTParser:
     """
     解析 TXT 檔案內容以產生考卷題目。
-    支援以下格式：
-
+    
+    支援格式範例：
     1. 單選題 (Single Choice):
        Q: 這是單選題目內容？
        A: 選項 1
@@ -29,6 +35,9 @@ class TXTParser:
 
     @staticmethod
     def parse_content(content: str) -> List[Dict]:
+        """
+        核心解析邏輯：將字串內容逐行分析並歸類為題目實體。
+        """
         questions = []
         lines = content.splitlines()
         
@@ -39,33 +48,30 @@ class TXTParser:
             line = line.strip()
             if not line:
                 continue
-                
+            
+            # 處理題幹 (Question Stem)
             if line.startswith("Q:"):
-                # 如果存在上一題，先儲存
+                # 如果存在上一題，則先執行封裝與儲存
                 if current_question:
-                    # 驗證並加入列表
                     if "content" in current_question and "answer" in current_question:
-                        # 1. 處理是非題 (無選項，答案為 Y/N)
+                        # 1. 處理是非題判定 (無顯式選項且答案為 Y/N 變體)
                         if not options and current_question["answer"].upper() in ['Y', 'N', 'T', 'F', 'YES', 'NO']:
                             current_question["type"] = "true_false"
                             options = {"Y": "是 (Yes)", "N": "否 (No)"}
-                            # 答案標準化
                             ans = current_question["answer"].upper()
                             if ans in ['T', 'YES']: ans = 'Y'
                             if ans in ['F', 'NO']: ans = 'N'
                             current_question["answer"] = ans
                         
-                        # 2. 判斷是否有選項
+                        # 2. 處理選擇題判定 (依據 ANS 格式區分單選或多選)
                         elif options:
                             ans = current_question["answer"].strip()
-                            # 如果答案包含逗號或長度大於1且為字母組合，視為多選
-                            # 例如 "A,B" 或 "AB"
+                            # 判斷多選：答案含逗號或多個大寫字母連寫 (如 AB)
                             if ',' in ans or (len(ans) > 1 and ans.isalpha() and ans.isupper()):
                                 current_question["type"] = "multiple"
                             else:
                                 current_question["type"] = "single"
                         
-                        # 3. 預設單選 (防呆)
                         else:
                             current_question["type"] = "single"
 
@@ -73,40 +79,40 @@ class TXTParser:
                         current_question["options"] = json.dumps(options, ensure_ascii=False)
                         questions.append(current_question)
                     
-                    # 重置
+                    # 重置暫存器以處理下一題
                     current_question = {}
                     options = {}
                 
                 current_question["content"] = line[2:].strip()
-                # 預設類型稍後依據選項決定
-                
+            
+            # 處理選項 (Options) - 支援 A: 選項、B：選項 (全半形)
             elif re.match(r'^[A-Z](:|：)', line):
                 key = line[0]
-                # 處理半形與全形冒號
                 split_char = ':' if ':' in line[:2] else '：'
-                # 取得選項內容，並移除空白
                 parts = line.split(split_char, 1)
                 if len(parts) > 1:
                     options[key] = parts[1].strip()
 
-            # 支援數字選項 1. 2. 防呆
-            elif line[0:2] in ["1.", "2.", "3.", "4."]:
-                key = chr(ord('A') + int(line[0]) - 1)
-                options[key] = line[2:].strip()
-                
+            # 處理答案 (Answer)
             elif line.startswith("ANS:"):
                 current_question["answer"] = line[4:].strip()
+            
+            # 處理配分 (Score)
             elif line.startswith("SCORE:"):
                 try:
                     current_question["points"] = int(line[6:].strip())
                 except ValueError:
-                    current_question["points"] = 0 # 解析錯誤時預設為 0
-            elif line.startswith("HINT:") or line.startswith("HINT："):  # 支援半形和全形冒號
+                    current_question["points"] = 0 
+            
+            # 處理提示 (Hint)
+            elif line.startswith("HINT:") or line.startswith("HINT："):
                 hint_text = line[5:].strip() if line.startswith("HINT:") else line[6:].strip()
                 current_question["hint"] = hint_text
+            
+            # 處理難度 (Level)
             elif line.startswith("LEVEL:") or line.startswith("LEVEL：") or line.startswith("Level:") or line.startswith("Level："):
                 raw = line.split(":", 1)[-1].split("：", 1)[-1].strip()
-                # 標準化為 E/M/H（Easy/Medium/Hard 取首字母）
+                # 標準化為 E/M/H
                 if raw.upper() in ("E", "M", "H"):
                     current_question["level"] = raw.upper()
                 elif raw.lower().startswith("easy"):
@@ -118,9 +124,9 @@ class TXTParser:
                 else:
                     current_question["level"] = raw or None
 
-        # 加入最後一題
+        # 封裝並加入最後一題 (迴圈結束後的殘留資料)
         if current_question and "content" in current_question:
-            if "answer" in current_question: # 確保必要欄位存在
+            if "answer" in current_question:
                 if not options and current_question["answer"].upper() in ['Y', 'N', 'T', 'F', 'YES', 'NO']:
                     current_question["type"] = "true_false"
                     options = {"Y": "是 (Yes)", "N": "否 (No)"}
@@ -145,6 +151,7 @@ class TXTParser:
 
     @staticmethod
     def parse_file(file_path: str) -> List[Dict]:
+        """讀取實體檔案內容並進行解析"""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()

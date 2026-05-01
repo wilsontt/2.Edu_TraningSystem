@@ -1,3 +1,8 @@
+/**
+ * 單位管理元件 (Department Manager Component)
+ * 負責組織架構中部門/單位的 CRUD 操作，並顯示各部門的人員統計數據。
+ */
+
 import { useState, useEffect, useMemo } from 'react';
 import { AxiosError } from 'axios';
 import { Plus, Edit2, Trash2, Check, X, Building2, Search, Loader2, AlertCircle, Users } from 'lucide-react';

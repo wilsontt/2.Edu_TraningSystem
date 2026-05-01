@@ -1,3 +1,8 @@
+"""
+系統管理路由 (Admin Router)
+負責處理組織架構 (部門、職務)、使用者帳號、角色權限以及課程分類的核心 CRUD 操作。
+"""
+
 from fastapi import APIRouter, HTTPException, Depends, Body
 from sqlalchemy.orm import Session, joinedload
 from typing import List
@@ -7,11 +12,15 @@ from .auth import check_permission
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-# --- 單位管理 (CRUD) ---
+# ----------------------------------------------------------------
+# 單位管理 (Department Management) - 權限: menu:admin:dept
+# ----------------------------------------------------------------
+
 @router.get("/departments", response_model=List[schemas.Department])
 def get_departments(db: Session = Depends(get_db), current_user = check_permission("menu:admin:dept")):
+    """獲取所有部門列表，並統計各部門的人員數量狀態"""
     departments = db.query(models.Department).all()
-    # 新增統計數據
+    # 計算每個部門的總人數、在職人數及停用人數
     for dept in departments:
         dept.user_count = len(dept.users)
         dept.active_user_count = len([u for u in dept.users if (u.status or "").strip().lower() == "active"])
@@ -20,6 +29,7 @@ def get_departments(db: Session = Depends(get_db), current_user = check_permissi
 
 @router.post("/departments", response_model=schemas.Department)
 def create_department(dept: schemas.DepartmentCreate, db: Session = Depends(get_db), current_user = check_permission("menu:admin:dept")):
+    """新增部門"""
     db_dept = models.Department(name=dept.name)
     db.add(db_dept)
     try:
@@ -32,6 +42,7 @@ def create_department(dept: schemas.DepartmentCreate, db: Session = Depends(get_
 
 @router.put("/departments/{id}", response_model=schemas.Department)
 def update_department(id: int, dept: schemas.DepartmentCreate, db: Session = Depends(get_db), current_user = check_permission("menu:admin:dept")):
+    """更新部門名稱"""
     db_dept = db.query(models.Department).filter(models.Department.id == id).first()
     if not db_dept:
         raise HTTPException(status_code=404, detail="單位不存在")
@@ -46,11 +57,12 @@ def update_department(id: int, dept: schemas.DepartmentCreate, db: Session = Dep
 
 @router.delete("/departments/{id}")
 def delete_department(id: int, db: Session = Depends(get_db), current_user = check_permission("menu:admin:dept")):
+    """刪除部門 (僅限無任何關聯人員的部門)"""
     db_dept = db.query(models.Department).filter(models.Department.id == id).first()
     if not db_dept:
         raise HTTPException(status_code=404, detail="單位不存在")
     
-    # 檢查是否有使用者關連
+    # 安全檢查：若有使用者關聯則禁止刪除
     if db_dept.users:
         raise HTTPException(status_code=400, detail="該單位尚有使用者，無法刪除")
     
@@ -58,34 +70,13 @@ def delete_department(id: int, db: Session = Depends(get_db), current_user = che
     db.commit()
     return {"message": "刪除成功"}
 
-# --- 單位使用者管理 ---
-@router.get("/departments/{id}/users")
-def get_department_users(id: int, db: Session = Depends(get_db), current_user = check_permission("menu:admin:dept")):
-    """獲取特定部門的所有使用者"""
-    db_dept = db.query(models.Department).filter(models.Department.id == id).first()
-    if not db_dept:
-        raise HTTPException(status_code=404, detail="單位不存在")
-    
-    users = []
-    for user in db_dept.users:
-        users.append({
-            "emp_id": user.emp_id,
-            "name": user.name,
-            "role": user.role.name if user.role else "未設定",
-            "status": user.status
-        })
-    
-    return {
-        "department_id": id,
-        "department_name": db_dept.name,
-        "user_count": len(users),
-        "users": users
-    }
+# ----------------------------------------------------------------
+# 分類管理 (Category Management) - 權限: menu:plan / menu:admin
+# ----------------------------------------------------------------
 
-# --- 分類管理 (CRUD) ---
 @router.get("/categories/main", response_model=List[schemas.MainCategory])
 def get_main_categories(db: Session = Depends(get_db), current_user = check_permission("menu:plan")):
-    """獲取所有大項目清單（含其下的細項目）"""
+    """獲取大項目清單 (含下屬細項目)"""
     return db.query(models.MainCategory).all()
 
 @router.post("/categories/main", response_model=schemas.MainCategory)
@@ -193,6 +184,10 @@ def get_job_titles(db: Session = Depends(get_db), current_user=check_permission(
     return db.query(models.JobTitle).order_by(models.JobTitle.sort_order, models.JobTitle.id).all()
 
 
+# ----------------------------------------------------------------
+# 職務管理 (Job Title Management) - 權限: menu:admin:jobtitle
+# ----------------------------------------------------------------
+
 @router.post("/job-titles", response_model=schemas.JobTitle)
 def create_job_title(body: schemas.JobTitleCreate, db: Session = Depends(get_db), current_user=check_permission("menu:admin:jobtitle")):
     """新增職務"""
@@ -269,7 +264,10 @@ def delete_job_title(id: int, db: Session = Depends(get_db), current_user=check_
     return {"message": "刪除成功"}
 
 
-# --- User Management ---
+# ----------------------------------------------------------------
+# 人員管理 (User Management) - 權限: menu:admin:user
+# ----------------------------------------------------------------
+
 @router.get("/users", response_model=List[schemas.UserDetail])
 def get_users(db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
     """取得所有使用者"""
@@ -344,7 +342,10 @@ def delete_user(emp_id: str, db: Session = Depends(get_db), current_user = check
     
     return {"message": "使用者已刪除"}
 
-# --- Role Management ---
+# ----------------------------------------------------------------
+# 角色管理 (Role Management) - 權限: menu:admin:role
+# ----------------------------------------------------------------
+
 @router.get("/roles", response_model=List[schemas.Role])
 def get_roles(db: Session = Depends(get_db), current_user = check_permission("menu:admin:role")):
     """取得所有角色"""

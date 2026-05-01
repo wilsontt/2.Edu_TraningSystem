@@ -1,3 +1,8 @@
+"""
+考卷工坊路由 (Exam Router)
+負責處理考卷題目的上傳解析、題庫管理、教材存放以及考卷工坊專用的計畫查詢。
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
@@ -14,34 +19,42 @@ from .auth import check_permission
 
 router = APIRouter(prefix="/admin/exams", tags=["exams"])
 
+# ----------------------------------------------------------------
+# 教材上傳目錄配置 (Material Upload Configuration)
+# ----------------------------------------------------------------
+
 BASE_UPLOAD_DIR = Path("data/materials")
 
 def get_upload_dir(year: str, plan_id: int) -> Path:
+    """獲取教材存放的實體路徑 (按年份與計畫 ID 分層)"""
     return BASE_UPLOAD_DIR / str(year) / str(plan_id)
+
+# ----------------------------------------------------------------
+# 考卷工坊計畫列表 (Exam Studio Plans List)
+# ----------------------------------------------------------------
 
 @router.get("/plans", response_model=List[schemas.TrainingPlan])
 def list_plans_for_exam_studio(
     status: Optional[str] = Query(
         None,
-        description="狀態篩選: active, expired, archived, all (預設: 不過濾狀態，只過濾封存)",
+        description="狀態篩選: active, expired, archived, all",
     ),
     year: Optional[str] = Query(None, description="年份篩選"),
     dept_id: Optional[int] = Query(None, description="單位篩選"),
-    category_id: Optional[int] = Query(None, description="分類篩選 (sub_category_id)"),
+    category_id: Optional[int] = Query(None, description="分類篩選"),
     db: Session = Depends(get_db),
     current_user=check_permission("menu:exam"),
 ):
     """
-    考卷工坊專用：取得訓練計畫清單。
-
-    為了避免考卷工坊使用者只有 menu:exam 權限卻無法呼叫 /training/plans（需要 menu:plan），
-    這裡提供等價查詢並沿用相同的 status 篩選定義。
+    獲取考卷工坊專用的計畫清單
+    為持有 menu:exam 權限的使用者提供計畫查詢能力，並支援複雜的篩選邏輯。
     """
     from datetime import date
 
     query = db.query(models.TrainingPlan)
     today = date.today()
 
+    # 執行計畫狀態篩選邏輯
     if status == "active":
         query = query.filter(
             models.TrainingPlan.is_archived == False,
@@ -55,8 +68,7 @@ def list_plans_for_exam_studio(
     elif status == "archived":
         query = query.filter(models.TrainingPlan.is_archived == True)
     elif status == "all":
-        # 不過濾封存狀態
-        pass
+        pass # 不篩選
     else:
         query = query.filter(models.TrainingPlan.is_archived == False)
 
@@ -73,6 +85,10 @@ def list_plans_for_exam_studio(
         .all()
     )
 
+# ----------------------------------------------------------------
+# 教材與題目上傳 (Material & Question Upload)
+# ----------------------------------------------------------------
+
 @router.post("/upload")
 async def upload_material(
     plan_id: int = Form(...),
@@ -81,12 +97,12 @@ async def upload_material(
     current_user = check_permission("menu:exam") 
 ):
     """
-    上傳並匯入考卷題目 (TXT)
-    流程:
-    1. 驗證檔案格式
-    2. 解析題目內容
-    3. 若解析成功，儲存題目至資料庫
-    4. 備份原始檔案
+    上傳並自動解析考卷題目 (僅支援 .txt 格式)
+    流程：
+    1. 驗證檔案格式與計畫存在性。
+    2. 使用 TXTParser 解析題目 (題幹、選項、答案、配分)。
+    3. 解析成功後儲存至 Questions 表，並同步至全域題庫。
+    4. 將原始 TXT 檔案備份至伺服器指定目錄。
     """
     # 1. 驗證檔案
     if not file.filename.lower().endswith('.txt'):

@@ -1,3 +1,8 @@
+"""
+報表與統計模組路由 (Report Router)
+負責處理管理端的成績統計、部門績效分析、訓練計畫概覽以及 PDF 成績單的批次導出邏輯。
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_, or_, extract, select, Integer

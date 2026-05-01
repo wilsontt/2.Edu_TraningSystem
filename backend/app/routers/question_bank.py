@@ -1,3 +1,8 @@
+"""
+題庫管理路由 (Question Bank Router)
+負責處理全域題庫的查詢、編輯、刪除，以及從題庫批次匯入題目至特定訓練計畫的邏輯。
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import desc

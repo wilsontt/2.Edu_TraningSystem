@@ -1,3 +1,8 @@
+/**
+ * 考試中心首頁 (Exam Dashboard Component)
+ * 學員端的主要進入點，顯示所有可參加的考試、已過期計畫以及已完成的成績摘要，並提供報到功能。
+ */
+
 import { useState, useEffect } from 'react';
 import { BookOpen, Clock, CheckCircle, AlertCircle, ChevronRight, Loader2, GraduationCap, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';

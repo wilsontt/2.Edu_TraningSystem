@@ -1,3 +1,11 @@
+/**
+ * 成績中心儀表板 (Report Dashboard Component)
+ * 系統最核心的數據統計頁面，提供：
+ * 1. 總體統計指標 (及格率、平均分等)。
+ * 2. 計畫與部門維度的績效分析。
+ * 3. 成績單批次列印與導出功能。
+ */
+
 import { useState, useEffect, useMemo } from 'react';
 import { Download, Users, FileText, CheckCircle, TrendingUp, AlertCircle, RefreshCw, Calendar, Timer, Target, Repeat, X, ChevronDown, ChevronRight, Filter, TrendingDown, Eye, BarChart3, Search, PrinterIcon } from "lucide-react";
 import Pagination from '../common/Pagination';

@@ -3,7 +3,11 @@ from sqlalchemy.orm import relationship, backref
 from .database import Base
 import datetime
 
-# 角色與功能的關聯表
+# ----------------------------------------------------------------
+# 多對多關聯中間表 (Many-to-Many Association Tables)
+# ----------------------------------------------------------------
+
+# 角色與功能的關聯表：定義哪些角色擁有哪些系統功能的操作權限
 role_functions = Table(
     "role_functions",
     Base.metadata,
@@ -11,7 +15,7 @@ role_functions = Table(
     Column("function_id", Integer, ForeignKey("system_functions.id")),
 )
 
-# 訓練計畫與受課單位的關聯表 (Many-to-Many)
+# 訓練計畫與受課單位的關聯表：一個計畫可發佈給多個部門，一個部門可參與多個計畫
 plan_target_departments = Table(
     "plan_target_departments",
     Base.metadata,
@@ -19,7 +23,7 @@ plan_target_departments = Table(
     Column("dept_id", Integer, ForeignKey("departments.id")),
 )
 
-# 訓練計畫與個人受課對象的關聯表 (Many-to-Many)
+# 訓練計畫與個人受課對象的關聯表：一個計畫可單獨發佈給特定人員
 plan_target_users = Table(
     "plan_target_users",
     Base.metadata,
@@ -27,28 +31,36 @@ plan_target_users = Table(
     Column("emp_id", String, ForeignKey("users.emp_id")),
 )
 
+# ----------------------------------------------------------------
+# 組織架構模型 (Organization Models)
+# ----------------------------------------------------------------
+
 class JobTitle(Base):
-    """職務（可增減）：主管、稽核、行政助理、倉儲作業、總稽核、工程師等"""
+    """職務模型：定義人員的職稱（如：工程師、主管、倉儲作業等）"""
     __tablename__ = "job_titles"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    sort_order = Column(Integer, default=0)
+    name = Column(String, unique=True, index=True) # 職稱名稱
+    sort_order = Column(Integer, default=0) # 顯示排序
     users = relationship("User", back_populates="job_title")
 
 
 class Department(Base):
+    """部門/單位模型：定義組織內的各個部門"""
     __tablename__ = "departments"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
+    name = Column(String, unique=True, index=True) # 部門名稱
     users = relationship("User", back_populates="department")
     training_plans = relationship("TrainingPlan", back_populates="location")
 
 class Role(Base):
+    """角色模型：RBAC 權限管理的核心角色（如：Admin, User, Manager）"""
     __tablename__ = "roles"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
+    name = Column(String, unique=True, index=True) # 角色名稱
     users = relationship("User", back_populates="role")
+    # 關聯系統功能 (多對多)
     functions = relationship("SystemFunction", secondary=role_functions, back_populates="roles")
+    # 管理權限範圍：定義此角色可管理的部門範圍
     department_scopes = relationship(
         "RoleDepartmentScope",
         back_populates="role",
@@ -62,6 +74,7 @@ class Role(Base):
 
 
 class RoleDepartmentScope(Base):
+    """角色部門權限範圍類型：all(全公司), department(所屬部門), self(僅個人)"""
     __tablename__ = "role_department_scope_map"
     role_id = Column(Integer, ForeignKey("roles.id"), primary_key=True)
     scope_type = Column(String, nullable=False, default="self")  # all | department | self
@@ -69,6 +82,7 @@ class RoleDepartmentScope(Base):
 
 
 class RoleDepartmentScopeDept(Base):
+    """特定管理部門關聯：當 scope_type 為自定義部門時使用"""
     __tablename__ = "role_department_scope_depts"
     role_id = Column(Integer, ForeignKey("roles.id"), primary_key=True)
     dept_id = Column(Integer, ForeignKey("departments.id"), primary_key=True)
@@ -77,25 +91,27 @@ class RoleDepartmentScopeDept(Base):
     department = relationship("Department")
 
 class SystemFunction(Base):
+    """系統功能/選單模型：定義選單、按鈕等功能節點與權限代碼"""
     __tablename__ = "system_functions"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
-    code = Column(String, unique=True, index=True) # 如 menu:exam, btn:ai_gen
-    parent_id = Column(Integer, ForeignKey("system_functions.id"), nullable=True)
-    path = Column(String, nullable=True)
+    name = Column(String) # 功能名稱 (如：考試中心)
+    code = Column(String, unique=True, index=True) # 功能唯一代碼 (如：menu:exam)
+    parent_id = Column(Integer, ForeignKey("system_functions.id"), nullable=True) # 支援樹狀結構
+    path = Column(String, nullable=True) # 前端路由路徑
     roles = relationship("Role", secondary=role_functions, back_populates="functions")
     children = relationship("SystemFunction", 
         backref=backref("parent", remote_side=[id])
     )
 
 class User(Base):
+    """使用者模型：儲存人員基本資料與其關聯之部門、角色、職務"""
     __tablename__ = "users"
-    emp_id = Column(String, primary_key=True, index=True) # 員工編號
-    name = Column(String)
-    dept_id = Column(Integer, ForeignKey("departments.id"))
-    role_id = Column(Integer, ForeignKey("roles.id"))
-    job_title_id = Column(Integer, ForeignKey("job_titles.id"), nullable=True)  # 職務
-    status = Column(String, default="active")
+    emp_id = Column(String, primary_key=True, index=True) # 員工編號 (登入唯一識別)
+    name = Column(String) # 姓名
+    dept_id = Column(Integer, ForeignKey("departments.id")) # 所屬部門
+    role_id = Column(Integer, ForeignKey("roles.id")) # 系統角色
+    job_title_id = Column(Integer, ForeignKey("job_titles.id"), nullable=True) # 職稱
+    status = Column(String, default="active") # 帳號狀態 (active/inactive)
     
     department = relationship("Department", back_populates="users")
     role = relationship("Role", back_populates="users")
@@ -103,13 +119,19 @@ class User(Base):
     exam_records = relationship("ExamRecord", back_populates="user")
     attendance_records = relationship("AttendanceRecord", back_populates="user")
 
+# ----------------------------------------------------------------
+# 訓練管理模型 (Training Models)
+# ----------------------------------------------------------------
+
 class MainCategory(Base):
+    """訓練課程大項目 (如：安衛訓練、專業技能)"""
     __tablename__ = "main_categories"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True)
     sub_categories = relationship("SubCategory", back_populates="main_category")
 
 class SubCategory(Base):
+    """訓練課程細項目 (如：消防演練、作業環境監測)"""
     __tablename__ = "sub_categories"
     id = Column(Integer, primary_key=True, index=True)
     main_id = Column(Integer, ForeignKey("main_categories.id"))
@@ -118,66 +140,74 @@ class SubCategory(Base):
     training_plans = relationship("TrainingPlan", back_populates="sub_category")
 
 class TrainingPlan(Base):
+    """訓練計畫核心：定義計畫內容、對象、及格標準及時間"""
     __tablename__ = "training_plans"
     id = Column(Integer, primary_key=True, index=True)
     sub_category_id = Column(Integer, ForeignKey("sub_categories.id"))
-    dept_id = Column(Integer, ForeignKey("departments.id")) # 開課/上課地點
-    title = Column(String)
-    training_date = Column(Date) # 開始日期
-    end_date = Column(Date, nullable=True) # 結束日期
-    year = Column(String)
-    timer_enabled = Column(Boolean, default=False)
-    time_limit = Column(Integer, default=0)
-    passing_score = Column(Integer, default=60) # 及格分數
+    dept_id = Column(Integer, ForeignKey("departments.id")) # 開課地點/單位
+    title = Column(String) # 計畫標題
+    training_date = Column(Date) # 計畫開始日期
+    end_date = Column(Date, nullable=True) # 計畫結束日期
+    year = Column(String) # 年度 (統計用)
+    timer_enabled = Column(Boolean, default=False) # 是否啟用限時考試
+    time_limit = Column(Integer, default=0) # 時限 (分鐘)
+    passing_score = Column(Integer, default=60) # 及格門檻
     
     sub_category = relationship("SubCategory", back_populates="training_plans")
-    location = relationship("Department", back_populates="training_plans") # 開課單位
-    target_departments = relationship("Department", secondary=plan_target_departments, backref="target_plans") # 受課單位
-    target_users = relationship("User", secondary=plan_target_users, backref="target_plans") # 個人受課對象
+    location = relationship("Department", back_populates="training_plans")
+    target_departments = relationship("Department", secondary=plan_target_departments, backref="target_plans")
+    target_users = relationship("User", secondary=plan_target_users, backref="target_plans")
     questions = relationship("Question", back_populates="training_plan")
     exam_records = relationship("ExamRecord", back_populates="training_plan")
     attendance_records = relationship("AttendanceRecord", back_populates="training_plan")
-    expected_attendance = Column(Integer, nullable=True)  # 應到人數（可手動修改，預設為受課部門人數）
-    is_archived = Column(Boolean, default=False, nullable=False)  # 是否已封存
+    expected_attendance = Column(Integer, nullable=True)  # 應到人數
+    is_archived = Column(Boolean, default=False, nullable=False)  # 是否封存
+
+# ----------------------------------------------------------------
+# 題目與考試模型 (Exam Models)
+# ----------------------------------------------------------------
 
 class Question(Base):
+    """考卷題目：隸屬於特定訓練計畫的題目內容"""
     __tablename__ = "questions"
     id = Column(Integer, primary_key=True, index=True)
     plan_id = Column(Integer, ForeignKey("training_plans.id"))
-    content = Column(Text)
-    question_type = Column(String) # 單選/是非/多選
-    options = Column(Text) # JSON 選項字串
-    answer = Column(String)
-    points = Column(Integer, default=10)
-    hint = Column(Text, nullable=True) # 提示內容（可選）
-    level = Column(String(20), nullable=True) # 題目難易度 E/M/H（可選）
+    content = Column(Text) # 題目本文
+    question_type = Column(String) # 題型 (single/multiple/true_false)
+    options = Column(Text) # JSON 格式選項
+    answer = Column(String) # 正確答案
+    points = Column(Integer, default=10) # 該題配分
+    hint = Column(Text, nullable=True) # 題目提示
+    level = Column(String(20), nullable=True) # 難易度
     
     training_plan = relationship("TrainingPlan", back_populates="questions")
 
 class QuestionBank(Base):
+    """全域題庫：可用於跨計畫匯入的獨立題目庫"""
     __tablename__ = "question_bank"
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
-    question_type = Column(String, nullable=False) # 題型: single(單選), multiple(多選), true_false(是非)
-    options = Column(Text, nullable=True) # JSON 字串
+    question_type = Column(String, nullable=False)
+    options = Column(Text, nullable=True)
     answer = Column(String, nullable=False)
-    tags = Column(Text, nullable=True) # JSON 字串陣列
-    hint = Column(Text, nullable=True) # 提示內容（可選）
-    level = Column(String(20), nullable=True) # 題目難易度 E/M/H（可選）
+    tags = Column(Text, nullable=True) # JSON 格式標籤
+    hint = Column(Text, nullable=True)
+    level = Column(String(20), nullable=True)
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 class ExamRecord(Base):
+    """考試總記錄：員工單次計畫的最終作答總結"""
     __tablename__ = "exam_records"
     id = Column(Integer, primary_key=True, index=True)
     emp_id = Column(String, ForeignKey("users.emp_id"))
     plan_id = Column(Integer, ForeignKey("training_plans.id"))
-    total_score = Column(Integer)
-    is_passed = Column(Boolean)
-    start_time = Column(DateTime)
-    submit_time = Column(DateTime)
-    attempts = Column(Integer, default=1)
+    total_score = Column(Integer) # 總得分
+    is_passed = Column(Boolean) # 是否及格
+    start_time = Column(DateTime) # 開始作答時間
+    submit_time = Column(DateTime) # 提交時間
+    attempts = Column(Integer, default=1) # 作答次數
     
     user = relationship("User", back_populates="exam_records")
     training_plan = relationship("TrainingPlan", back_populates="exam_records")
@@ -185,55 +215,59 @@ class ExamRecord(Base):
     history = relationship("ExamHistory", back_populates="exam_record")
 
 class ExamHistory(Base):
+    """考試歷史軌跡：紀錄使用者多次作答的歷史快照"""
     __tablename__ = "exam_history"
     id = Column(Integer, primary_key=True, index=True)
     record_id = Column(Integer, ForeignKey("exam_records.id"))
     submit_time = Column(DateTime, default=datetime.datetime.utcnow)
     total_score = Column(Integer)
     is_passed = Column(Boolean)
-    details = Column(Text, nullable=True) # JSON 字串，儲存考試快照
+    details = Column(Text, nullable=True) # 該次作答的完整 JSON 快照
     
     exam_record = relationship("ExamRecord", back_populates="history")
 
 class ExamDetail(Base):
+    """考試每題詳情：紀錄使用者對單一題目的答案與對錯"""
     __tablename__ = "exam_details"
     id = Column(Integer, primary_key=True, index=True)
     record_id = Column(Integer, ForeignKey("exam_records.id"))
     question_id = Column(Integer, ForeignKey("questions.id"))
-    user_answer = Column(String)
-    is_correct = Column(Boolean)
+    user_answer = Column(String) # 使用者填寫答案
+    is_correct = Column(Boolean) # 是否答對
     
     record = relationship("ExamRecord", back_populates="details")
 
 class AttendanceRecord(Base):
+    """報到紀錄：員工於訓練開始前的報到資訊"""
     __tablename__ = "attendance_records"
     id = Column(Integer, primary_key=True, index=True)
     emp_id = Column(String, ForeignKey("users.emp_id"))
     plan_id = Column(Integer, ForeignKey("training_plans.id"))
-    checkin_time = Column(DateTime, default=datetime.datetime.utcnow)  # 報到時間
-    ip_address = Column(String, nullable=True)  # 報到時的 IP（可選）
+    checkin_time = Column(DateTime, default=datetime.datetime.utcnow) # 報到時間
+    ip_address = Column(String, nullable=True)
     
     user = relationship("User", back_populates="attendance_records")
     training_plan = relationship("TrainingPlan", back_populates="attendance_records")
 
 
 class AttendanceAbsenceReason(Base):
-    """未報到原因記錄：主管或有權限者填寫未到者原因（病假、出差、公假、其他）"""
+    """未到原因說明：針對應到而未報到的人員，紀錄理由 (病假、出差等)"""
     __tablename__ = "attendance_absence_reasons"
     id = Column(Integer, primary_key=True, index=True)
     plan_id = Column(Integer, ForeignKey("training_plans.id"), nullable=False)
     emp_id = Column(String, ForeignKey("users.emp_id"), nullable=False)
-    reason_code = Column(String(50), nullable=False)  # sick_leave, business_trip, official_leave, other
-    reason_text = Column(String(500), nullable=True)   # 選「其他」時必填
+    reason_code = Column(String(50), nullable=False) # 原因代碼 (sick_leave/official_leave...)
+    reason_text = Column(String(500), nullable=True) # 詳細描述
     recorded_by = Column(String, ForeignKey("users.emp_id"), nullable=False)
     recorded_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class LoginToken(Base):
+    """QRcode 登入 Token：用於生成限時有效的登入 QRcode"""
     __tablename__ = "login_tokens"
     id = Column(Integer, primary_key=True, index=True)
-    token = Column(String, unique=True, index=True)  # 動態產生的 token
-    created_by = Column(String, ForeignKey("users.emp_id"))  # 建立者（Admin）
+    token = Column(String, unique=True, index=True)
+    created_by = Column(String, ForeignKey("users.emp_id"))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    expires_at = Column(DateTime)  # 過期時間（例如：24小時後）
-    used_at = Column(DateTime, nullable=True)  # 使用時間
-    is_used = Column(Boolean, default=False)  # 是否已使用
+    expires_at = Column(DateTime) # 過期時間
+    used_at = Column(DateTime, nullable=True)
+    is_used = Column(Boolean, default=False)

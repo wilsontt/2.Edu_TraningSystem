@@ -1,3 +1,8 @@
+/**
+ * 主應用程式元件 (Main App Component)
+ * 負責全域狀態管理 (使用者資訊、登入狀態)、路由配置 (React Router) 以及響應式導覽列 (Navbar)。
+ */
+
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { LayoutDashboard, BookOpen, PenTool, BarChart3, Settings, LogOut, ChevronDown, Menu, X, ClipboardList } from 'lucide-react';
@@ -26,6 +31,10 @@ import { CrownBrand } from '@shared-ui/crown-brand';
 import { NavCalendarCluster, PortalTopNav } from '@shared-ui/portal-nav';
 import logoUrl from '@shared-ui/crown-brand/assets/CROWN_logo.png';
 
+/**
+ * 導覽列元件 (Navbar Component)
+ * 依據使用者的權限 (user.functions) 動態顯示可存取的選單項目。
+ */
 const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
   const location = useLocation();
   const [isAdminOpen, setIsAdminOpen] = useState(false);
@@ -34,7 +43,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const functions = user.functions || [];
 
-  // 點擊外部區域時關閉下拉選單
+  // 點擊外部區域時自動關閉下拉選單
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (adminDropdownRef.current && !adminDropdownRef.current.contains(event.target as Node)) {
@@ -54,6 +63,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     };
   }, [isAdminOpen, isMobileMenuOpen]);
 
+  // 主選單項目：定義名稱、路徑、圖示及對應的權限代碼 (code)
   const navItems = [
     { name: '考試中心', path: '/', icon: <LayoutDashboard className="w-4 h-4" />, code: 'menu:home' },
     { name: '訓練計畫', path: '/plans', icon: <BookOpen className="w-4 h-4" />, code: 'menu:plan' },
@@ -62,6 +72,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     { name: '成績中心', path: '/reports', icon: <BarChart3 className="w-4 h-4" />, code: 'menu:report' },
   ].filter(item => user.role === 'Admin' || functions.includes(item.code));
 
+  // 系統管理子選單 (Admin Sub-items)
   const adminSubItems = [
     { name: '單位管理', path: '/admin/departments', code: 'menu:admin:dept' },
     { name: '分類管理', path: '/admin/categories', code: 'menu:admin' },
@@ -73,7 +84,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     { name: 'QRcode 管理', path: '/admin/qrcode', code: 'menu:admin' },
   ].filter(item => functions.includes(item.code));
 
-  // 只有擁有 menu:admin 權限的用戶才顯示系統管理選單
+  // 判斷是否具備進入管理後台的權限
   const hasAdminAccess = functions.includes('menu:admin');
 
 

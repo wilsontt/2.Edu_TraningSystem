@@ -1,3 +1,13 @@
+"""
+考試中心路由 (Exam Center Router)
+負責處理學員端的考試流程，包括：
+1. 我的考試列表 (區分進行中、已過期、已封存)。
+2. 報到狀態檢查與報到執行。
+3. 開始考試 (發放不含答案的題目)。
+4. 提交答案 (自動評分、記錄歷程、更新通過狀態)。
+5. 成績單預覽與 PDF 導出。
+"""
+
 from fastapi import APIRouter, HTTPException, Depends, Query, Body, Request as FastAPIRequest
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload

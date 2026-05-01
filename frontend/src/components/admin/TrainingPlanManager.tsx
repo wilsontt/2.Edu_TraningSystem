@@ -1,9 +1,22 @@
+/**
+ * 訓練計畫管理元件 (Training Plan Manager)
+ * 這是系統中最核心的管理介面之一，整合了：
+ * 1. 計畫列表 (含分頁、搜尋、篩選、封存)
+ * 2. 計畫新增與編輯彈窗 (支援多部門、多人員指定)
+ * 3. 報到統計詳情 (包含應到/實到人次、未到原因編輯)
+ * 4. QRcode 管理與考試導向連結
+ */
+
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { AxiosError } from 'axios';
 import { Plus, Calendar, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Archive, MoreVertical } from 'lucide-react';
 import api from '../../api';
 import Pagination from '../common/Pagination';
 import BulkAbsenceReasonModal from '../attendance/BulkAbsenceReasonModal';
+
+// ----------------------------------------------------------------
+// 型別定義 (Type Definitions)
+// ----------------------------------------------------------------
 
 interface SubCategory {
   id: number;
@@ -109,7 +122,13 @@ const ABSENCE_REASON_OPTIONS: Array<{ code: string; label: string }> = [
   { code: 'cancel_leave', label: '取消請假' },
 ];
 
+/**
+ * 主要管理元件實作 (Main Management Component)
+ */
 const TrainingPlanManager = () => {
+  // ----------------------------------------------------------------
+  // 狀態管理 (State Management)
+  // ----------------------------------------------------------------
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [allPlans, setAllPlans] = useState<TrainingPlan[]>([]); // 保存所有計畫用於提取年份選項
   const [loading, setLoading] = useState(true);

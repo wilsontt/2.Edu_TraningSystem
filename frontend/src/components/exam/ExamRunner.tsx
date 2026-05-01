@@ -1,3 +1,8 @@
+/**
+ * 考試進行元件 (Exam Runner Component)
+ * 負責處理線上考試的核心流程，包含題目載入、倒數計時、作答暫存、提交評分及結果顯示。
+ */
+
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle, Send, Loader2, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react';

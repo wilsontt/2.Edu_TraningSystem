@@ -1,3 +1,8 @@
+/**
+ * 考卷工坊元件 (Exam Studio Component)
+ * 負責處理考試題目的生命週期管理，包含 TXT 上傳解析、題目編輯、題庫匯入以及教材存放。
+ */
+
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download, Lightbulb, ChevronUp, ChevronDown, X } from 'lucide-react';
 import { AxiosError } from 'axios';

@@ -1,3 +1,8 @@
+"""
+訓練計畫模組路由 (Training Router)
+負責處理訓練計畫的建立、更新、查詢、受課對象管理以及報到紀錄的核心邏輯。
+"""
+
 from fastapi import APIRouter, HTTPException, Depends, Request, Query, Body
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_, and_, select
@@ -17,14 +22,20 @@ from ..access_scope import get_scope_emp_ids, intersect_emp_ids
 
 router = APIRouter(prefix="/training", tags=["training"])
 
-# --- 訓練計畫管理 ---
+# ----------------------------------------------------------------
+# 訓練計畫管理 (Training Plan Management)
+# ----------------------------------------------------------------
+
 @router.post("/plans", response_model=schemas.TrainingPlan)
 def create_training_plan(
     plan: schemas.TrainingPlanCreate,
     db: Session = Depends(get_db),
     current_user = check_permission("menu:plan")
 ):
-    """建立新的訓練計畫"""
+    """
+    建立新的訓練計畫
+    自動從訓練日期提取年份，並處理多部門或特定人員的受課對象綁定。
+    """
     # 從 training_date 提取年份
     year = str(plan.training_date.year)
     
@@ -51,7 +62,7 @@ def create_training_plan(
         expected_attendance=plan.expected_attendance
     )
     
-    # 處理受課單位
+    # 處理受課單位 (Many-to-Many)
     if plan.target_dept_ids:
         target_depts = db.query(models.Department).filter(models.Department.id.in_(plan.target_dept_ids)).all()
         db_plan.target_departments = target_depts
@@ -59,9 +70,9 @@ def create_training_plan(
         # 預設為開課單位
         db_plan.target_departments = [dept]
     
-    # 處理個人受課對象
-    if plan.target_user_ids:
-        target_users = db.query(models.User).filter(models.User.emp_id.in_(plan.target_user_ids)).all()
+    # 處理個人受課對象 (Many-to-Many)
+    if plan_target_user_ids := plan.target_user_ids:
+        target_users = db.query(models.User).filter(models.User.emp_id.in_(plan_target_user_ids)).all()
         db_plan.target_users = target_users
     
     db.add(db_plan)

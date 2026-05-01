@@ -1,7 +1,16 @@
+"""
+Pydantic 資料模型定義 (Pydantic Schemas)
+負責定義所有 API 請求 (Request) 與回應 (Response) 的資料結構、類型校驗及序列化規則。
+"""
+
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 from datetime import date, datetime
 import re
+
+# ----------------------------------------------------------------
+# 部門與職務相關模型 (Department & JobTitle Schemas)
+# ----------------------------------------------------------------
 
 # --- 部門資料結構 ---
 class DepartmentBase(BaseModel):
@@ -41,6 +50,10 @@ class JobTitle(JobTitleBase):
     class Config:
         from_attributes = True
 
+
+# ----------------------------------------------------------------
+# 訓練分類與計畫模型 (Category & TrainingPlan Schemas)
+# ----------------------------------------------------------------
 
 # --- 分類資料結構 ---
 class SubCategoryBase(BaseModel):
@@ -94,6 +107,10 @@ class TrainingPlan(TrainingPlanBase):
     
     class Config:
         from_attributes = True
+
+# ----------------------------------------------------------------
+# 用戶、角色與權限模型 (User, Role & Permission Schemas)
+# ----------------------------------------------------------------
 
 # --- 用戶與認證擴充 ---
 class UserBase(BaseModel):
@@ -205,6 +222,10 @@ class RoleDepartmentScopeResponse(BaseModel):
     role_id: int
     scope_type: str
     dept_ids: List[int] = []
+
+# ----------------------------------------------------------------
+# 考題、題庫與報到模型 (Question, Bank & Attendance Schemas)
+# ----------------------------------------------------------------
 
 # 更新遞迴模型的向前參照
 # --- 考題資料結構 ---
@@ -333,6 +354,10 @@ class AbsenceReasonBulkUpdate(BaseModel):
     reason_code: str  # sick_leave, business_trip, official_leave, other
     reason_text: Optional[str] = None  # 選 other 時必填
 
+
+# ----------------------------------------------------------------
+# QRcode 登入與 Token 相關模型 (QRCode & Token Schemas)
+# ----------------------------------------------------------------
 
 # --- 登入 Token 資料結構 ---
 class LoginTokenBase(BaseModel):

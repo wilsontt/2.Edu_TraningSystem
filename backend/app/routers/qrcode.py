@@ -1,3 +1,8 @@
+"""
+QRcode 登入模組路由 (QRCode Router)
+負責處理 QRcode 登入權杖 (Token) 的生成、驗證，以及支援行動端掃碼後的快速身分驗證流程。
+"""
+
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from typing import List

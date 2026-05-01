@@ -1,3 +1,8 @@
+/**
+ * 人員管理元件 (User Manager Component)
+ * 負責處理全公司帳號的維護，包含人員資訊編輯、角色指派、所屬部門調整以及帳號狀態 (停用/啟用) 控制。
+ */
+
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { AxiosError } from 'axios';
 import { Search, Edit2, Check, X, User as UserIcon, Shield, Building2, Loader2, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown, Trash2 } from 'lucide-react';

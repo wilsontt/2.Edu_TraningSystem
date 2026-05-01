@@ -1,3 +1,8 @@
+"""
+認證模組路由 (Authentication Router)
+負責處理使用者註冊、登入、圖形驗證碼生成、以及 JWT 身份驗證的核心邏輯。
+"""
+
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 # from captcha.image import ImageCaptcha # Removed in favor of PIL
@@ -19,10 +24,18 @@ from fastapi.security import OAuth2PasswordBearer
 from .. import auth_utils
 from typing import List
 
+# OAuth2 密碼模式規範，tokenUrl 定義了獲取 Token 的路徑
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
-# Dependency: 獲取當前用戶
+# ----------------------------------------------------------------
+# 身份驗證依賴 (Authentication Dependencies)
+# ----------------------------------------------------------------
+
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """
+    依賴項：獲取當前登入用戶
+    驗證 JWT Token 是否有效，並從資料庫中提取完整的用戶資訊及權限。
+    """
     payload = auth_utils.verify_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="無效的認證憑證")
@@ -31,7 +44,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     if not emp_id:
         raise HTTPException(status_code=401, detail="無效的認證憑證")
     
-    # 預先載入角色、功能與職務（職務用於未報到原因權限：部門主管）
+    # 預先載入角色、功能與職務，提升權限檢查效率
     user = db.query(models.User).options(
         joinedload(models.User.role).joinedload(models.Role.functions),
         joinedload(models.User.job_title),
@@ -44,16 +57,20 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Pydantic 模型的請求資料
+# ----------------------------------------------------------------
+# 請求結構與校驗 (Request Schemas & Validators)
+# ----------------------------------------------------------------
+
 class RegisterRequest(BaseModel):
-    emp_id: str = Field(..., min_length=1, max_length=10, description="員工編號，必須是1-10碼的數字")
-    name: str = Field(..., min_length=1, max_length=20, description="姓名，最長20個字符")
+    """註冊請求結構"""
+    emp_id: str = Field(..., min_length=1, max_length=10, description="員工編號")
+    name: str = Field(..., min_length=1, max_length=20, description="姓名")
     dept_id: int
     
     @field_validator('emp_id')
     @classmethod
     def validate_emp_id(cls, v: str) -> str:
-        """驗證員工編號必須是1-10碼的數字，或特殊帳號 admin"""
+        """驗證員工編號格式"""
         v_lower = v.lower()
         if v_lower != 'admin' and not re.match(r'^[0-9]{1,10}$', v):
             raise ValueError('員工編號必須是1-10碼的數字')
@@ -62,34 +79,38 @@ class RegisterRequest(BaseModel):
     @field_validator('name')
     @classmethod
     def validate_name(cls, v: str) -> str:
-        """驗證姓名長度"""
         v = v.strip()
         if len(v) == 0:
             raise ValueError('姓名不能為空')
-        if len(v) > 20:
-            raise ValueError('姓名最長20個字符')
         return v
 
 class LoginRequest(BaseModel):
-    emp_id: str = Field(..., min_length=1, max_length=10, description="員工編號，必須是1-10碼的數字")
+    """登入請求結構 (工號 + 驗證碼)"""
+    emp_id: str = Field(..., min_length=1, max_length=10)
     captcha_id: str
     answer: str
     
     @field_validator('emp_id')
     @classmethod
     def validate_emp_id(cls, v: str) -> str:
-        """驗證員工編號必須是1-10碼的數字，或特殊帳號 admin"""
         v_lower = v.lower()
         if v_lower != 'admin' and not re.match(r'^[0-9]{1,10}$', v):
             raise ValueError('員工編號必須是1-10碼的數字')
         return v_lower if v_lower == 'admin' else v
 
-# 暫存驗證碼答案 (正式環境建議用 Redis)
+# 暫存驗證碼答案 (正式環境建議用 Redis 處理過期與分散式儲存)
 captcha_store = {}
+
+# ----------------------------------------------------------------
+# 認證端點 (Authentication Endpoints)
+# ----------------------------------------------------------------
 
 @router.get("/departments", response_model=List[schemas.Department])
 def get_public_departments(db: Session = Depends(get_db)):
-    """公開的部門列表 API (供註冊使用)"""
+    """
+    獲取公開部門列表
+    供未登入使用者在註冊時選擇。
+    """
     return db.query(models.Department).all()
 
 # ... (imports) ...
