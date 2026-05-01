@@ -1,52 +1,56 @@
 # 測試程式目錄
 
-本目錄存放所有測試程式，包括：
-- API 測試腳本
-- 單元測試
-- 整合測試
-- 其他驗證測試程式
+本目錄存放**可執行**之測試腳本（API、解析器、報表等）。測試說明、手冊與審查報告請置於 **`1.docs/reviews/`**；棕地迭代之任務單與驗收追溯請見 **`1.docs/交付實作文件/README.md`**。
 
-## 測試文件組織規範
+---
 
-### 測試程式位置
-- **所有測試程式** → `tests/` 目錄
-- **測試文件/報告** → `1.docs/reviews/` 目錄
+## 檔案說明
 
-### 檔案說明
+| 檔案 | 用途 |
+|------|------|
+| `test_new_apis.py` | 新 API 端點自動化測試（需後端已啟動） |
+| `test_new_apis.sh` | 同上之 Shell 版本（需設定或修改 TOKEN） |
+| `test_error_detail.py` | 錯誤回應細節測試 |
+| `test_exam_upload.py` | 考試上傳流程 |
+| `test_parser.py` | 題目 TXT 解析器 |
+| `test_report.py` | 報表相關 |
 
-#### API 測試
-- `test_new_apis.py` - 測試新建立的 API 端點（自動化測試）
-- `test_new_apis.sh` - 測試新建立的 API 端點（Shell 腳本）
-- `test_error_detail.py` - 詳細錯誤測試腳本
+---
 
-#### 功能測試
-- `test_exam_upload.py` - 考試上傳功能測試
-- `test_parser.py` - 題目解析器測試
-- `test_report.py` - 報表功能測試
+## 執行方式
 
-## 使用方式
+### Python（需後端運行於預設埠）
 
-### 執行 Python 測試
 ```bash
-# 確保後端服務已啟動
 cd backend
 export PYTHONPATH=$PYTHONPATH:.
 .venv/bin/python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-# 在另一個終端執行測試
+另開終端：
+
+```bash
 cd tests
 python3 test_new_apis.py
 ```
 
-### 執行 Shell 測試
+### Shell
+
 ```bash
-# 需要先設定 TOKEN 環境變數或修改腳本中的 TOKEN
+cd tests
 chmod +x test_new_apis.sh
+# 依腳本要求設定 TOKEN 或改寫腳本內變數後執行
 ./test_new_apis.sh
 ```
 
+---
+
 ## 注意事項
 
-1. 所有測試程式應放在此目錄
-2. 測試產生的報告和文件應放在 `1.docs/reviews/` 目錄
-3. 測試臨時文件（如測試資料庫、測試上傳檔案）應在 `.gitignore` 中排除
+1. 測試程式集中於本目錄；文件與報告放 `1.docs/reviews/`。  
+2. 臨時資料庫或上傳測試檔應排除於版本庫（`.gitignore`）。  
+3. 前端目前以手動與瀏覽器驗證為主；自動化可後續於 `frontend/` 增補。
+
+---
+
+**最後更新**：2026-05-01
