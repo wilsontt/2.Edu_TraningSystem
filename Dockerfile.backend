@@ -10,9 +10,14 @@ RUN ln -sf /data /app/data
 # 抑制 pip 以 root 執行之警告（Docker build 環境可安全忽略）
 ENV PIP_ROOT_USER_ACTION=ignore
 
-# 字型（驗證碼）、編譯工具（部分 Python 套件需編譯）
+# 字型（驗證碼 + PDF 繁中）、編譯工具（部分 Python 套件需編譯）
+# fonts-wqy-microhei 安裝至 /usr/share/fonts/truetype/wqy/wqy-microhei.ttc
+# fonts-noto-cjk     安裝至 /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+# 兩者對應 register_chinese_fonts() 的 Linux font_paths，確保容器內 PDF 能正確嵌入繁中字型
 RUN apt-get update && apt-get install -y --no-install-recommends \
   fonts-dejavu-core \
+  fonts-wqy-microhei \
+  fonts-noto-cjk \
   build-essential \
   && rm -rf /var/lib/apt/lists/*
 

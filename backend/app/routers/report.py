@@ -1522,10 +1522,10 @@ def register_chinese_fonts():
         # Linux 字體路徑
         else:
             font_paths = [
-                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",  # 文泉驛微米黑
-                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # 文泉驛正黑
-                "/usr/share/fonts/truetype/arphic/uming.ttc",  # AR PL UMing
-                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",  # Noto Sans CJK
+                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",  # 文泉驛微米黑（fonts-wqy-microhei）
+                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # 文泉驛正黑（fonts-wqy-zenhei）
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Noto CJK（fonts-noto-cjk，Debian bookworm 安裝於 opentype/）
+                "/usr/share/fonts/truetype/arphic/uming.ttc",  # AR PL UMing（fonts-arphic-uming）
             ]
             
             for path in font_paths:

@@ -131,6 +131,21 @@ npm run dev
 4. **遷移**：表結構變更請依 [資料庫遷移指南](1.docs/資料庫遷移/MIGRATION_GUIDE.md) 處理。  
 5. **結構說明**：全表欄位與關聯見 [education_training.db 結構分析](1.docs/資料庫結構分析/education_training_db_結構分析.md)。  
 
+### Docker 與成績 PDF 字型
+
+本系統有**兩種成績輸出**，字型來源不同，視覺差異屬預期：
+
+| 輸出 | 觸發方式 | 字型來源 |
+|------|----------|----------|
+| **考卷成績單**（HTML 列印） | 批次列印精靈 → individual 路徑 → 瀏覽器列印 | 使用者**客戶端**作業系統字型（`CHINESE_FONT_STACK`，見 `frontend/src/components/personal/scoreCardPrintHtml.ts`） |
+| **考試成績清單**（ReportLab PDF） | 批次列印精靈 → list 路徑 → 後端 PDF | **後端容器**內字型（`register_chinese_fonts()`，見 `backend/app/routers/report.py`） |
+
+**Docker 部署注意事項**：
+
+- `Dockerfile.backend` 在 `apt-get` 安裝 `fonts-wqy-microhei`（路徑：`/usr/share/fonts/truetype/wqy/wqy-microhei.ttc`）與 `fonts-noto-cjk`（路徑：`/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc`），確保容器內 PDF 能嵌入繁體中文字型。  
+- 若未安裝 CJK 字型，`register_chinese_fonts()` 會退回 Helvetica，導致 PDF 中文亂碼或欄位對不齊。  
+- 兩種輸出字型本質上不同（客戶端 vs. 容器），輕微視覺差異屬正常；異常指標為「PDF 中文無法閱讀或欄位嚴重錯位」。
+
 ---
 
 ## 七、開發進度摘要
