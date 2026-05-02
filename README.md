@@ -27,6 +27,7 @@
 | **考卷工坊** | TXT 題目上傳與解析、題庫維護、從題庫匯入、教材上傳與預覽。 |
 | **考試中心** | 依訓練計畫應考、作答、提交、即時評分、重考機制；行動優先響應式介面。 |
 | **成績中心** | 管理端報表含**外層雙頁籤**（統計報表／部門績效表現）；部門路徑含手風琴展開、**部門成員成績批次列印**（三步驟精靈、名單含出席／請假時間）；`individual` 與個人「成績詳情 → 預覽成績單 → 列印」**同源 HTML**；`list` 為後端 PDF；展開區成員表以 **`ch` 欄寬常數** 集中維護。個人端成績總覽、學習分析、歷程與 PDF 導出維持既有能力。 |
+| **系統管理** | 單位、分類、人員、角色、權限、功能清單、職務等後台維運；與 RBAC 選單連動。 |
 
 ---
 
@@ -35,7 +36,7 @@
 ### 環境需求
 
 - **後端**：Python 3.x、虛擬環境（建議 `.venv`）
-- **前端**：Node.js 18+、npm 或等效套件管理員
+- **前端**：**Node.js 20+**（建議與生產建置一致：**Node.js 22**，見 `Dockerfile.frontend`）、npm 或等效套件管理員
 
 ### 1. 資料庫初始化（僅首次或資料庫不存在時）
 
@@ -65,7 +66,16 @@ npm install
 npm run dev
 ```
 
-- 開發站：<http://localhost:5173>（或 Vite 顯示的區網網址）
+- 開發站：<http://localhost:5173/training/>（或 Vite 顯示的區網網址；路徑須含 **`/training/`** 前綴；埠占用時 Vite 會遞延下一埠，`strictPort: false`）
+- 品質與建置：`npm run lint`（ESLint）、`npm run build`（`tsc -b` + Vite 產出）、`npm run preview`（預覽建置結果）
+
+**前端路由與 API 代理**（`frontend/vite.config.ts`）：
+
+| 項目 | 說明 |
+|------|------|
+| **SPA `base`** | `/training/` — 靜態資源與路由前綴 |
+| **開發代理** | 瀏覽器請求 `/training/api/...` 轉發至 `http://localhost:8000/api/...`（`rewrite` 會去掉路徑中的 `/training` 再送後端） |
+| **`server.fs.allow`** | 已允許讀取**企業入口網站儲存庫根目錄**（供同層 `0.shared-ui` 被 Vite 掃描與編譯） |
 
 後端啟動時會自動建立不存在的資料表，但**不會**寫入基礎資料；首次使用請先執行步驟 1。
 
@@ -77,9 +87,11 @@ npm run dev
 
 | 層級 | 技術 |
 |------|------|
-| **前端** | React 19、TypeScript、Vite、Tailwind CSS、React Router、Axios、Lucide React、Framer Motion、Recharts |
-| **後端** | FastAPI、SQLAlchemy、Pydantic、python-jose、Pillow、ReportLab、qrcode、python-multipart |
+| **前端** | React 19、TypeScript **5.9**、**Vite 7**、**Tailwind CSS v4**（`@tailwindcss/vite` 外掛）、React Router v7、Axios、Lucide React、Framer Motion、Recharts、**date-fns**、**clsx**、**tailwind-merge**、**class-variance-authority**（CVA）、**ESLint 9**（`npm run lint`） |
+| **後端** | FastAPI、**Uvicorn**、SQLAlchemy、Pydantic、**Passlib（bcrypt）**、python-jose、Pillow（登入驗證碼圖像）、**ReportLab**（管理端成績清單等 PDF）、qrcode、python-multipart |
 | **資料庫** | SQLite（`data/education_training.db`） |
+
+**依賴補註**：`backend/requirements.txt` 另列 **pypdf**、**fonttools**、**pydantic-settings**、**pandas**、**captcha**、**google-generativeai** 等，與主程式 `import` **未必**一一對應（若未使用可日後自依賴清單移除）。T4 **雲端 AI 出題**已**取消**；**google-generativeai** 目前非產品必備路徑。實際執行以已安裝套件與程式碼為準。
 
 ### 4.2 目錄結構
 
@@ -91,6 +103,18 @@ npm run dev
 | **frontend/** | React 應用、頁面與元件、API、樣式 |
 | **data/** | SQLite 資料庫、教材與上傳檔案目錄 |
 | **tests/** | 測試腳本 |
+
+### 4.3 企業共用前端（`@shared-ui`）
+
+本專案透過 Vite **`resolve.alias['@shared-ui']`** 指向**企業入口網站儲存庫根目錄**下的 **`0.shared-ui/`**（由 `frontend/vite.config.ts` 以 `../../0.shared-ui` 解析，相對路徑自 `frontend/` 起算）。
+
+| 項目 | 說明 |
+|------|------|
+| **用途** | 與企業入口共用頂導覽、品牌列等 UI（例如 `PortalTopNav`、`NavCalendarCluster`、`CrownBrand`），見 `frontend/src/App.tsx` |
+| **React 單例** | 別名強制 `react`／`react-dom` 解析至本專案 `node_modules`，並 **`dedupe`**，避免與 shared-ui 各帶一份 React 造成執行期錯誤 |
+| **Docker 建置** | `Dockerfile.frontend` 於建置脈絡 **COPY `0.shared-ui`** 與本專案目錄同層；單獨 clone 本子目錄而未帶上層 `0.shared-ui` 時，需調整建置脈絡或改採已編譯產物策略 |
+
+> 若本機僅有「教育訓練」子目錄而無企業根目錄與 `0.shared-ui`，Vite 可能無法解析 `@shared-ui`；請依實際儲存庫配置取得完整目錄樹。
 
 ---
 
@@ -152,13 +176,13 @@ npm run dev
 
 依 [3.tasks.md](0.standards/1.綠地專案文件/3.tasks.md) 與棕地計畫：
 
-| 區塊 | 狀態（2026-05-01） |
+| 區塊 | 狀態（2026-05-02） |
 |------|-------------------|
 | **T1～T3** | 基礎環境、認證 RBAC、訓練行政 — 已於產品線運作 |
-| **T4 考卷工坊** | TXT 解析、題庫、教材上傳等 — 已上線；**AI 出題／草稿編輯器** 仍屬規劃中（見綠地計畫與 `plans/`） |
+| **T4 考卷工坊** | TXT 解析、題庫、教材上傳等 — 已上線；**雲端 AI 出題已取消**（見 [棕地 T4 計畫](1.docs/plans/T4_Exam_Studio_Implementation_Plan.md)、綠地 [3.tasks.md](0.standards/1.綠地專案文件/3.tasks.md)） |
 | **T5～T7** | 考試中心、系統管理與報表、UX — 已上線 |
 | **棕地成績中心（2026-04～05）** | 部門績效外層頁籤、成員批次列印（list PDF／individual 與個人預覽同源）、展開成員表欄寬與版面 — **已結案**；追溯見 [交付實作文件 README](1.docs/交付實作文件/README.md)、[T13 測試問題補註](0.standards/2.棕地專案/T13%20增修功能實作PLAN_測試問題.md) 檔首 |
-| **歷史 Phase 3 任務清單** | [2.成績中心開發任務.md](0.standards/2.棕地專案/2.成績中心開發任務.md) 內 `- [ ]` 為**歷史規劃**，未與現況逐條同步，請以程式與交付文件為準 |
+| **歷史 Phase 3 任務清單** | [2.成績中心開發任務.md](0.standards/2.棕地專案/2.成績中心開發任務.md) 內 `- [ ]` 為**歷史規劃**，未與現況逐條同步；檔首 **2026-05-02 實作對照補註** 列有 `report.py` 已落地之統計 API，請以程式與交付文件為準 |
 
 綠地階段性「驗收報告」目錄若仍為佔位，屬流程文件尚未填寫；棕地本波驗收以交付實作文件為準。見 [系統建置與驗證報告 README](1.docs/系統建置與驗證報告/README.md)。
 
@@ -176,7 +200,7 @@ npm run dev
 
 ---
 
-**最後更新**：2026-05-01
+**最後更新**：2026-05-02（技術棧、`/training/` 與代理、`@shared-ui`、T4 敘述、環境需求對齊實作）
 
 ---
 
@@ -185,6 +209,7 @@ npm run dev
 ### 2026-05（成績中心棕地）
 
 - 部門成績路徑：統計報表／部門績效表現雙頁籤、部門成員批次列印與個人成績單同源、清單 PDF 版面與簽名規格收斂、展開成員表欄寬常數化與寬度控制局部化。詳見 [交付實作文件](1.docs/交付實作文件/README.md)。
+- 本 README：對齊 `vite.config.ts`（`/training/`、`/training/api` 代理、`fs.allow`、`@shared-ui`）、`package.json`／`Dockerfile.frontend` 之 Node 與前端依賴、T4 雲端 AI 已取消、後端依賴補註。
 
 ### 2026-03～04（節選）
 
