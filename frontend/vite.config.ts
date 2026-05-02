@@ -11,10 +11,17 @@ const sharedUiRoot = path.resolve(enterprisePortalRoot, '0.shared-ui')
 // https://vite.dev/config/
 export default defineConfig({
   base: '/training/',
+  // 注意：
+  // 1) import 必須放在檔案頂層，不能誤寫在 defineConfig 物件內（會出現「必須是 ','」語法錯誤）
+  // 2) 透過 alias + dedupe 強制 shared-ui 與主專案共用同一份 react/react-dom，
+  //    避免 Docker build 後執行期出現 Cannot read properties of null (reading 'useState')
   resolve: {
     alias: {
       '@shared-ui': sharedUiRoot,
+      react: path.resolve(trainingFrontendRoot, 'node_modules/react'),
+      'react-dom': path.resolve(trainingFrontendRoot, 'node_modules/react-dom'),
     },
+    dedupe: ['react', 'react-dom'],
   },
   plugins: [
     react(),
