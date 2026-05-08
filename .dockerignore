@@ -1,0 +1,58 @@
+# 2.教育訓練教材及線上考卷/.dockerignore
+# 適用 service：training-backend（build.context 為本目錄）
+# 注意：training-frontend 之 build.context 為 repo 根，受 repo 根 .dockerignore 控制
+
+# === IDE / AI 工具 ===
+.cursor/
+.cursorignore
+.gemini/
+.vscode/
+.idea/
+.specify/
+.claude/
+CLAUDE.md
+
+# === VCS / OS ===
+.git/
+.gitignore
+.dockerignore
+.DS_Store
+._*
+*.log
+
+# === Frontend 產物（backend 不需要） ===
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# === Python 產物 ===
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# === 環境檔 ===
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# === 文件 ===
+1.docs/
+docs/
+README.md
+**/README.md
+
+# === 上傳資料／備份（敏感、勿入映像） ===
+data/
+
+# === 打包／壓縮檔 ===
+*.tar.gz
+*.tgz
+*.zip

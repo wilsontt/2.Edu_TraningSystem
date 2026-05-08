@@ -13,6 +13,7 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/2.教育訓練教材及線上考卷/frontend/dist /usr/share/nginx/html
+RUN chmod -R a+r /usr/share/nginx/html
 COPY 2.教育訓練教材及線上考卷/nginx/default.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
