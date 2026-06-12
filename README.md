@@ -4,7 +4,7 @@
 
 ![React](https://img.shields.io/badge/React-19+-61DAFB?logo=react&logoColor=black) ![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?logo=typescript&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi&logoColor=white) ![Python](https://img.shields.io/badge/Python-3+-3776AB?logo=python&logoColor=white) ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4+-38B2AC?logo=tailwind-css&logoColor=white) ![Vite](https://img.shields.io/badge/Vite-7+-646CFF?logo=vite&logoColor=white)
 
-企業內部**教育訓練與線上考卷**系統，支援不定期訓練、新進訓後測驗、報到管理、成績統計與 RBAC 權限管理。徽章使用依 [徽章使用規範](0.standards/1.綠地專案文件/徽章使用規範.md)。
+企業內部**教育訓練與線上考卷**系統，支援不定期訓練、新進訓後測驗、報到管理、成績統計與 RBAC 權限管理。徽章使用依 [徽章使用規範](1.docs/01-綠地專案/徽章使用規範.md)。
 
 ---
 
@@ -13,7 +13,7 @@
 | 項目 | 說明 |
 |------|------|
 | **目的** | 提供教育訓練計畫管理、考卷出題與上傳、線上作答與評分、成績查詢與 PDF 成績單，並支援 QRcode 登入／報到與角色權限控管。 |
-| **範圍** | 前端 React SPA、後端 FastAPI REST API、SQLite 單機版資料庫；文件與規範位於 `0.standards/`、`1.docs/`。 |
+| **範圍** | 前端 React SPA、後端 FastAPI REST API、SQLite 單機版資料庫；所有文件與規範統一位於 `1.docs/`（依 00-專案總覽／01-綠地專案／02-棕地專案 分層）。 |
 
 ---
 
@@ -45,7 +45,7 @@ cd backend
 .venv/bin/python3 -c "from app.init_db import init_db; init_db()"
 ```
 
-> ⚠️ 會建立所有資料表並寫入基礎資料（角色、部門、選單等）。若資料庫已存在請先備份。詳見 [資料庫遷移指南](1.docs/資料庫遷移/MIGRATION_GUIDE.md)。
+> ⚠️ 會建立所有資料表並寫入基礎資料（角色、部門、選單等）。若資料庫已存在請先備份。詳見 [資料庫遷移指南](1.docs/00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md)。
 
 ### 2. 後端
 
@@ -97,12 +97,11 @@ npm run dev
 
 | 目錄 | 說明 |
 |------|------|
-| **0.standards/** | 專案憲章、綠地／棕地規範、規格／計畫／任務、架構與使用說明 |
-| **1.docs/** | 開發文件索引、架構分析、驗收流程、實作計畫、**交付實作文件**（棕地迭代任務與驗收追溯）、報告、測試與修復記錄、資料庫遷移 |
+| **1.docs/** | 全專案文件中心，分三層：`00-專案總覽/`（跨階段架構、權限、資料庫、驗收流程）、`01-綠地專案/`（憲章／規格／計畫／任務等 SDD 規格集）、`02-棕地專案/`（T 系列計畫、開發與修復記錄、交付實作文件、驗證報告）；另含 `系統測試/`、`logs/` |
 | **backend/** | FastAPI 應用（`app/`）、路由／模型／服務；`restore_training_data.py` 為資料恢復腳本 |
 | **frontend/** | React 應用、頁面與元件、API、樣式 |
-| **data/** | SQLite 資料庫、教材與上傳檔案目錄 |
-| **tests/** | 測試腳本 |
+| **data/** | SQLite 資料庫、教材（`data/教材/`）與上傳檔案目錄 |
+| **tests/** | 測試腳本與 `fixtures/`（匯入範本、考卷題目來源） |
 
 ### 4.3 企業共用前端（`@shared-ui`）
 
@@ -120,28 +119,27 @@ npm run dev
 
 ## 五、規範與文件索引
 
-本專案依 **規格驅動開發 (SDD)**：規格 → 計畫 → 任務 → 執行 → 驗收。核心規範見 [專案憲章](0.standards/1.綠地專案文件/0.專案憲章.md)。
+本專案依 **規格驅動開發 (SDD)**：規格 → 計畫 → 任務 → 執行 → 驗收。核心規範見 [專案憲章](1.docs/01-綠地專案/0.專案憲章.md)。
 
 ### 綠地專案（新功能）
 
-- [1.spec.md](0.standards/1.綠地專案文件/1.spec.md) — 使用者故事與需求  
-- [2.plan.md](0.standards/1.綠地專案文件/2.plan.md) — 技術計畫  
-- [3.tasks.md](0.standards/1.綠地專案文件/3.tasks.md) — 開發任務清單  
+- [1.spec.md](1.docs/01-綠地專案/1.spec.md) — 使用者故事與需求  
+- [2.plan.md](1.docs/01-綠地專案/2.plan.md) — 技術計畫  
+- [3.tasks.md](1.docs/01-綠地專案/3.tasks.md) — 開發任務清單  
 
 ### 棕地專案（既有功能增強）
 
-- [成績中心功能計劃](0.standards/2.棕地專案/1.成績中心功能計劃.md)  
-- [成績中心開發任務](0.standards/2.棕地專案/2.成績中心開發任務.md)  
-- [專案架構分析](0.standards/2.棕地專案/0.專案架構分析.md)  
+- [成績中心功能計劃](1.docs/02-棕地專案/規格與計畫/1.成績中心功能計劃.md)  
+- [成績中心開發任務](1.docs/02-棕地專案/規格與計畫/2.成績中心開發任務.md)  
+- [專案架構分析](1.docs/02-棕地專案/規格與計畫/0.專案架構分析.md)  
 
 ### 開發與驗收
 
-- [0.standards 說明與入口](0.standards/README.md) — 專案概述、快速啟動、文件索引  
-- [專案系統架構分析](0.standards/專案系統架構分析.md) — 系統架構、流程、資料庫、技術棧  
-- [專案使用說明](0.standards/專案使用說明.md) — 使用情境、操作步驟、常見問題  
-- [1.docs 開發文件目錄](1.docs/README.md) — 架構分析、角色權限說明、計畫、報告、測試記錄  
-- [交付實作文件索引](1.docs/交付實作文件/README.md) — 成績中心棕地迭代（2026-04～05）任務單與完成狀態  
-- [驗收報告建立流程](1.docs/驗收報告建立流程.md) — 任務驗收清單、報告格式與存放規則  
+- [1.docs 文件中心索引](1.docs/README.md) — 三層文件總索引（總覽／綠地／棕地）  
+- [專案系統架構分析](1.docs/00-專案總覽/專案系統架構分析.md) — 系統架構、流程、資料庫、技術棧  
+- [專案使用說明](1.docs/00-專案總覽/專案使用說明.md) — 使用情境、操作步驟、常見問題  
+- [交付實作文件索引](1.docs/02-棕地專案/交付實作文件/README.md) — 成績中心棕地迭代（2026-04～05）任務單與完成狀態  
+- [驗收報告建立流程](1.docs/00-專案總覽/驗收報告建立流程.md) — 任務驗收清單、報告格式與存放規則  
 
 ---
 
@@ -151,9 +149,9 @@ npm run dev
 
 1. **備份**：任何資料庫操作前請備份 `data/education_training.db`（建議檔名含時間戳）。  
 2. **初始化**：僅在首次或無資料庫時執行 `init_db()`；否則可能覆寫或遺失資料。  
-3. **恢復**：可參考 [資料庫資料遺失與恢復記錄](1.docs/reviews/2025-01-09-資料庫資料遺失與恢復記錄.md) 與 `backend/restore_training_data.py`。  
-4. **遷移**：表結構變更請依 [資料庫遷移指南](1.docs/資料庫遷移/MIGRATION_GUIDE.md) 處理。  
-5. **結構說明**：全表欄位與關聯見 [education_training.db 結構分析](1.docs/資料庫結構分析/education_training_db_結構分析.md)。  
+3. **恢復**：可參考 [資料庫資料遺失與恢復記錄](1.docs/02-棕地專案/reviews/2025-01-09-資料庫資料遺失與恢復記錄.md) 與 `backend/restore_training_data.py`。  
+4. **遷移**：表結構變更請依 [資料庫遷移指南](1.docs/00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md) 處理。  
+5. **結構說明**：全表欄位與關聯見 [education_training.db 結構分析](1.docs/00-專案總覽/資料庫結構分析/education_training_db_結構分析.md)。  
 
 ### Docker 與成績 PDF 字型
 
@@ -174,17 +172,17 @@ npm run dev
 
 ## 七、開發進度摘要
 
-依 [3.tasks.md](0.standards/1.綠地專案文件/3.tasks.md) 與棕地計畫：
+依 [3.tasks.md](1.docs/01-綠地專案/3.tasks.md) 與棕地計畫：
 
 | 區塊 | 狀態（2026-05-02） |
 |------|-------------------|
 | **T1～T3** | 基礎環境、認證 RBAC、訓練行政 — 已於產品線運作 |
-| **T4 考卷工坊** | TXT 解析、題庫、教材上傳等 — 已上線；**雲端 AI 出題已取消**（見 [棕地 T4 計畫](1.docs/plans/T4_Exam_Studio_Implementation_Plan.md)、綠地 [3.tasks.md](0.standards/1.綠地專案文件/3.tasks.md)） |
+| **T4 考卷工坊** | TXT 解析、題庫、教材上傳等 — 已上線；**雲端 AI 出題已取消**（見 [棕地 T4 計畫](1.docs/02-棕地專案/plans/T4_Exam_Studio_Implementation_Plan.md)、綠地 [3.tasks.md](1.docs/01-綠地專案/3.tasks.md)） |
 | **T5～T7** | 考試中心、系統管理與報表、UX — 已上線 |
-| **棕地成績中心（2026-04～05）** | 部門績效外層頁籤、成員批次列印（list PDF／individual 與個人預覽同源）、展開成員表欄寬與版面 — **已結案**；追溯見 [交付實作文件 README](1.docs/交付實作文件/README.md)、[T13 測試問題補註](0.standards/2.棕地專案/T13%20增修功能實作PLAN_測試問題.md) 檔首 |
-| **歷史 Phase 3 任務清單** | [2.成績中心開發任務.md](0.standards/2.棕地專案/2.成績中心開發任務.md) 內 `- [ ]` 為**歷史規劃**，未與現況逐條同步；檔首 **2026-05-02 實作對照補註** 列有 `report.py` 已落地之統計 API，請以程式與交付文件為準 |
+| **棕地成績中心（2026-04～05）** | 部門績效外層頁籤、成員批次列印（list PDF／individual 與個人預覽同源）、展開成員表欄寬與版面 — **已結案**；追溯見 [交付實作文件 README](1.docs/02-棕地專案/交付實作文件/README.md)、[T13 測試問題補註](1.docs/02-棕地專案/規格與計畫/T13%20增修功能實作PLAN_測試問題.md) 檔首 |
+| **歷史 Phase 3 任務清單** | [2.成績中心開發任務.md](1.docs/02-棕地專案/規格與計畫/2.成績中心開發任務.md) 內 `- [ ]` 為**歷史規劃**，未與現況逐條同步；檔首 **2026-05-02 實作對照補註** 列有 `report.py` 已落地之統計 API，請以程式與交付文件為準 |
 
-綠地階段性「驗收報告」目錄若仍為佔位，屬流程文件尚未填寫；棕地本波驗收以交付實作文件為準。見 [系統建置與驗證報告 README](1.docs/系統建置與驗證報告/README.md)。
+綠地階段性「驗收報告」目錄若仍為佔位，屬流程文件尚未填寫；棕地本波驗收以交付實作文件為準。見 [系統建置與驗證報告 README](1.docs/02-棕地專案/系統建置與驗證報告/README.md)。
 
 ---
 
@@ -192,11 +190,11 @@ npm run dev
 
 | 類型 | 連結 |
 |------|------|
-| 憲章與規範 | [專案憲章](0.standards/1.綠地專案文件/0.專案憲章.md) |
-| 架構與使用 | [專案系統架構分析](0.standards/專案系統架構分析.md)、[專案使用說明](0.standards/專案使用說明.md) |
-| 開發與交付追溯 | [1.docs 目錄](1.docs/README.md)、[交付實作文件索引](1.docs/交付實作文件/README.md)、[專案架構分析](1.docs/專案架構分析.md)、[角色與權限架構](1.docs/角色與權限管理架構說明.md) |
-| 資料庫 | [遷移指南](1.docs/資料庫遷移/MIGRATION_GUIDE.md)、[資料遺失與恢復記錄](1.docs/reviews/2025-01-09-資料庫資料遺失與恢復記錄.md) |
-| 驗收與測試 | [驗收報告建立流程](1.docs/驗收報告建立流程.md)、[測試與修復記錄](1.docs/reviews/README.md)、[tests 目錄](tests/README.md) |
+| 憲章與規範 | [專案憲章](1.docs/01-綠地專案/0.專案憲章.md) |
+| 架構與使用 | [專案系統架構分析](1.docs/00-專案總覽/專案系統架構分析.md)、[專案使用說明](1.docs/00-專案總覽/專案使用說明.md) |
+| 開發與交付追溯 | [1.docs 目錄](1.docs/README.md)、[交付實作文件索引](1.docs/02-棕地專案/交付實作文件/README.md)、[專案架構分析](1.docs/00-專案總覽/專案架構分析.md)、[角色與權限架構](1.docs/00-專案總覽/角色與權限管理架構說明.md) |
+| 資料庫 | [遷移指南](1.docs/00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md)、[資料遺失與恢復記錄](1.docs/02-棕地專案/reviews/2025-01-09-資料庫資料遺失與恢復記錄.md) |
+| 驗收與測試 | [驗收報告建立流程](1.docs/00-專案總覽/驗收報告建立流程.md)、[測試與修復記錄](1.docs/02-棕地專案/reviews/README.md)、[tests 目錄](tests/README.md) |
 
 ---
 
@@ -208,7 +206,7 @@ npm run dev
 
 ### 2026-05（成績中心棕地）
 
-- 部門成績路徑：統計報表／部門績效表現雙頁籤、部門成員批次列印與個人成績單同源、清單 PDF 版面與簽名規格收斂、展開成員表欄寬常數化與寬度控制局部化。詳見 [交付實作文件](1.docs/交付實作文件/README.md)。
+- 部門成績路徑：統計報表／部門績效表現雙頁籤、部門成員批次列印與個人成績單同源、清單 PDF 版面與簽名規格收斂、展開成員表欄寬常數化與寬度控制局部化。詳見 [交付實作文件](1.docs/02-棕地專案/交付實作文件/README.md)。
 - 本 README：對齊 `vite.config.ts`（`/training/`、`/training/api` 代理、`fs.allow`、`@shared-ui`）、`package.json`／`Dockerfile.frontend` 之 Node 與前端依賴、T4 雲端 AI 已取消、後端依賴補註。
 
 ### 2026-03～04（節選）
@@ -218,4 +216,4 @@ npm run dev
 - 考卷工坊／題庫：全選與批次刪除。
 - 考試中心：未報到時「立即報到」引導。
 - 系統管理：職務管理權限節點、權限未儲存提示、人員姓名編輯與停用帳號顯示切換。
-- 已匯入 `0.standards/倉儲人員.txt`（排除重複後新增 96 筆）。
+- 已匯入 `tests/fixtures/倉儲人員匯入.txt`（排除重複後新增 96 筆）。

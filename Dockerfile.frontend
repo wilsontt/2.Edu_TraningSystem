@@ -6,6 +6,10 @@ WORKDIR /app
 
 COPY 2.教育訓練教材及線上考卷 /app/2.教育訓練教材及線上考卷
 COPY 0.shared-ui /app/0.shared-ui
+# shared-ui 位於 /app/0.shared-ui，不在 frontend 的 node_modules 上層；
+# tsc(bundler) 解析 react / date-fns 時會從 shared-ui 檔案目錄向上找 node_modules，
+# 故此目錄必須先安裝依賴，否則 build 期報 TS2307/TS2875（同 deploy/Dockerfile.nginx）。
+RUN cd /app/0.shared-ui && npm ci
 
 WORKDIR /app/2.教育訓練教材及線上考卷/frontend
 RUN npm ci --include=dev

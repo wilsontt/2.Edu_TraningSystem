@@ -3,7 +3,10 @@ FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 COPY backend/ ./
-COPY data/ /data/
+# 注意：不在此 COPY data/。
+#   1) data/ 已被本目錄 .dockerignore 排除（敏感、勿入映像），COPY 會 build 失敗。
+#   2) 執行期 compose 以 volume ${DATA_ROOT}/training:/data 提供資料，會覆蓋映像內 /data。
+# 因此 db 與 materials 改於部署前種入 host volume（見部署手冊「training 資料種子」）。
 # database.py 使用 ../data，exam 使用 data/materials；建立 symlink 使兩者皆指向 /data
 RUN ln -sf /data /app/data
 
