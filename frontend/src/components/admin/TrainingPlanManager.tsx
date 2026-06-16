@@ -1576,7 +1576,16 @@ const TrainingPlanManager = () => {
                           onClick={async () => {
                             try {
                               setGeneratingQRCode(true);
-                              const res = await api.post(`/training/plans/${selectedPlanId}/checkin-qrcode/generate`);
+                              const res = await api.post(
+                                `/training/plans/${selectedPlanId}/checkin-qrcode/generate`,
+                                {},
+                                {
+                                  headers: {
+                                    // 傳遞前端 URL（含 /training 等部署子路徑），供後端組合報到連結，避免掃碼 404
+                                    'X-Frontend-URL': `${window.location.origin}${import.meta.env.BASE_URL || '/'}`.replace(/\/$/, '')
+                                  }
+                                }
+                              );
                               setCheckinQRCode(res.data);
                             } catch (err: unknown) {
                               if (err instanceof AxiosError) {

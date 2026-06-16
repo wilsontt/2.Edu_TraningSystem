@@ -3,6 +3,16 @@ import { QrCode, RefreshCw, Loader2, Clock, X, Copy, Check, Eye, Trash2 } from '
 import api from '../../api';
 import { AxiosError } from 'axios';
 
+/**
+ * 取得前端對外的基礎 URL（含部署子路徑，例如 /training/）。
+ * 前端部署在 Vite base（import.meta.env.BASE_URL）之下，QRcode 連結必須包含此前綴，
+ * 否則手機掃碼後會打到網站根目錄而出現 404。
+ */
+const getFrontendBaseUrl = (): string => {
+    const base = import.meta.env.BASE_URL || '/';
+    return `${window.location.origin}${base}`.replace(/\/$/, '');
+};
+
 interface QRCodeGenerateResponse {
     token: string;
     qrcode_url: string;  // Base64 圖片
@@ -62,8 +72,8 @@ const QRCodeManager = () => {
             // 或者可以通過自定義 header 傳遞
             const res = await api.post<QRCodeGenerateResponse>('/admin/qrcode/login/generate', {}, {
                 headers: {
-                    // 明確傳遞前端 URL（如果需要的話）
-                    'X-Frontend-URL': `${window.location.protocol}//${window.location.host}`
+                    // 明確傳遞前端 URL（含 /training 等部署子路徑），供後端組合 QRcode 連結
+                    'X-Frontend-URL': getFrontendBaseUrl()
                 }
             });
             setCurrentQRCode(res.data);
@@ -82,7 +92,7 @@ const QRCodeManager = () => {
     // 複製登入連結（使用傳入的 URL 或根據 token 構建）
     const handleCopyLoginUrl = async (urlOrToken: string, isToken: boolean = false) => {
         const urlToCopy = isToken 
-            ? `${window.location.protocol}//${window.location.host}/auth/login/qrcode/${urlOrToken}`
+            ? `${getFrontendBaseUrl()}/auth/login/qrcode/${urlOrToken}`
             : urlOrToken;
         
         try {
@@ -152,7 +162,7 @@ const QRCodeManager = () => {
                 {}, 
                 {
                     headers: {
-                        'X-Frontend-URL': `${window.location.protocol}//${window.location.host}`
+                        'X-Frontend-URL': getFrontendBaseUrl()
                     }
                 }
             );
@@ -248,7 +258,7 @@ const QRCodeManager = () => {
                                 </span>
                                 <button
                                     onClick={() => {
-                                        const urlToCopy = currentQRCode.login_url || `${window.location.protocol}//${window.location.host}/auth/login/qrcode/${currentQRCode.token}`;
+                                        const urlToCopy = currentQRCode.login_url || `${getFrontendBaseUrl()}/auth/login/qrcode/${currentQRCode.token}`;
                                         handleCopyLoginUrl(urlToCopy, false);
                                     }}
                                     className="flex items-center gap-1 px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors"

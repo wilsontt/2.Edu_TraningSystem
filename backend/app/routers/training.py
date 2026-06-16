@@ -847,12 +847,17 @@ def generate_checkin_qrcode(
     if frontend_url:
         base_url = frontend_url.rstrip("/")
     else:
-        # 自動從請求中推斷前端 URL
-        host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
-        scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
-        base_url = f"{scheme}://{host}"
-        if "/api" in base_url:
-            base_url = base_url.split("/api")[0]
+        # 其次使用前端明確傳遞的 URL（含 /training 等部署子路徑），避免掃碼後缺少前綴而 404
+        explicit_frontend_url = request.headers.get("x-frontend-url")
+        if explicit_frontend_url:
+            base_url = explicit_frontend_url.rstrip("/")
+        else:
+            # 自動從請求中推斷前端 URL
+            host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+            scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+            base_url = f"{scheme}://{host}"
+            if "/api" in base_url:
+                base_url = base_url.split("/api")[0]
     
     # 報到 URL：前端路由，用戶掃描後會導向報到頁面
     # 用戶需要先登入才能報到（如果未登入會導向登入頁面）
