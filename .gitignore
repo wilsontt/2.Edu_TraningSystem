@@ -45,6 +45,7 @@ test_materials/
 *.test.sqlite3
 test_output/
 test_results/
+1.docs/系統測試/20260618/
 
 # Temporary files
 temp/
