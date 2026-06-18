@@ -108,6 +108,13 @@ class TrainingPlan(TrainingPlanBase):
     class Config:
         from_attributes = True
 
+class TrainingFormUserOption(BaseModel):
+    """訓練計畫表單：個人授課對象選項（僅在職人員）"""
+    emp_id: str
+    name: str
+    dept_id: Optional[int] = None
+    dept_name: str = "未知"
+
 # ----------------------------------------------------------------
 # 用戶、角色與權限模型 (User, Role & Permission Schemas)
 # ----------------------------------------------------------------

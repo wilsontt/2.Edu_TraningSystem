@@ -22,6 +22,94 @@ from ..access_scope import get_scope_emp_ids, intersect_emp_ids
 
 router = APIRouter(prefix="/training", tags=["training"])
 
+_ADMIN_ROLE_NAMES = frozenset({"Admin", "System Admin", "系統管理", "系統管理者"})
+
+
+def _user_has_function_code(current_user: models.User, code: str) -> bool:
+    """判斷使用者是否擁有指定功能代碼（Admin 視為全部擁有）。"""
+    if not current_user or not current_user.role:
+        return False
+    if (current_user.role.name or "").strip() in _ADMIN_ROLE_NAMES:
+        return True
+    return any(f.code == code for f in (current_user.role.functions or []))
+
+
+def _apply_plan_list_audience_scope(query, db: Session, current_user: models.User):
+    """
+    訓練計畫列表可視範圍：
+    - 持有 menu:plan：回傳全部（僅依 status／年份等業務篩選）
+    - 僅持有 menu:attendance-overview 等：沿用受訓對象 ∩ scope 規則
+    """
+    if _user_has_function_code(current_user, "menu:plan"):
+        return query
+
+    visible_emp_ids = get_scope_emp_ids(db, current_user, active_only=True)
+    if visible_emp_ids is not None:
+        if not visible_emp_ids:
+            return query.filter(False)
+
+        dept_visible_plan_ids = (
+            select(models.plan_target_departments.c.plan_id)
+            .join(models.User, models.User.dept_id == models.plan_target_departments.c.dept_id)
+            .where(
+                models.User.status == "active",
+                models.User.emp_id.in_(visible_emp_ids),
+            )
+        )
+        user_visible_plan_ids = (
+            select(models.plan_target_users.c.plan_id)
+            .where(models.plan_target_users.c.emp_id.in_(visible_emp_ids))
+        )
+        query = query.filter(
+            models.TrainingPlan.id.in_(dept_visible_plan_ids.union(user_visible_plan_ids))
+        )
+    return query
+
+
+def _resolve_visible_emp_ids_for_attendance(db: Session, current_user: models.User) -> Optional[List[str]]:
+    """報到統計可視名單：menu:plan 視為全域，其餘套用 Hybrid scope。"""
+    if _user_has_function_code(current_user, "menu:plan"):
+        return None
+    return get_scope_emp_ids(db, current_user, active_only=True)
+
+
+# ----------------------------------------------------------------
+# 訓練計畫表單選項 (Form Options — menu:plan)
+# ----------------------------------------------------------------
+
+@router.get("/form-options/departments", response_model=List[schemas.Department])
+def get_training_form_departments(
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:plan"),
+):
+    """訓練計畫表單：部門下拉（開課單位、授課單位）。"""
+    return db.query(models.Department).order_by(models.Department.name.asc()).all()
+
+
+@router.get("/form-options/users", response_model=List[schemas.TrainingFormUserOption])
+def get_training_form_users(
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:plan"),
+):
+    """訓練計畫表單：個人授課對象（僅在職帳號）。"""
+    users = (
+        db.query(models.User)
+        .options(joinedload(models.User.department))
+        .filter(models.User.status == "active")
+        .order_by(models.User.emp_id.asc())
+        .all()
+    )
+    return [
+        schemas.TrainingFormUserOption(
+            emp_id=u.emp_id,
+            name=u.name,
+            dept_id=u.dept_id,
+            dept_name=u.department.name if u.department else "未知",
+        )
+        for u in users
+    ]
+
+
 # ----------------------------------------------------------------
 # 訓練計畫管理 (Training Plan Management)
 # ----------------------------------------------------------------
@@ -70,9 +158,12 @@ def create_training_plan(
         # 預設為開課單位
         db_plan.target_departments = [dept]
     
-    # 處理個人受課對象 (Many-to-Many)
+    # 處理個人受課對象 (Many-to-Many，僅在職人員)
     if plan_target_user_ids := plan.target_user_ids:
-        target_users = db.query(models.User).filter(models.User.emp_id.in_(plan_target_user_ids)).all()
+        target_users = db.query(models.User).filter(
+            models.User.emp_id.in_(plan_target_user_ids),
+            models.User.status == "active",
+        ).all()
         db_plan.target_users = target_users
     
     db.add(db_plan)
@@ -122,9 +213,12 @@ def update_training_plan(
          # 正常情況不應發生，若無提供則略過
         pass
     
-    # 處理個人受課對象
+    # 處理個人受課對象（僅在職人員）
     if plan_update.target_user_ids is not None:
-        target_users = db.query(models.User).filter(models.User.emp_id.in_(plan_update.target_user_ids)).all()
+        target_users = db.query(models.User).filter(
+            models.User.emp_id.in_(plan_update.target_user_ids),
+            models.User.status == "active",
+        ).all()
         db_plan.target_users = target_users
     
     try:
@@ -144,10 +238,9 @@ def get_training_plans(
     db: Session = Depends(get_db),
     current_user=check_any_permission(["menu:plan", "menu:attendance-overview"]),
 ):
-    """獲取訓練計畫清單，支援狀態、年份、單位、分類篩選
-    
-    預設行為：只過濾掉已封存的計畫，不過濾過期狀態（為了向後兼容）
-    使用 status 參數可以進一步篩選狀態
+    """獲取訓練計畫清單，支援狀態、年份、單位、分類篩選。
+
+    持有 menu:plan 者回傳全部計畫（僅業務篩選）；僅 menu:attendance-overview 者仍套用受訓對象可視範圍。
     """
     query = db.query(models.TrainingPlan)
     
@@ -188,27 +281,7 @@ def get_training_plans(
     if category_id:
         query = query.filter(models.TrainingPlan.sub_category_id == category_id)
     
-    # 套用可視範圍：只保留受訓名單（受課部門 + 個人受課）與可視員工有交集的計畫
-    visible_emp_ids = get_scope_emp_ids(db, current_user, active_only=True)
-    if visible_emp_ids is not None:
-        if not visible_emp_ids:
-            return []
-
-        dept_visible_plan_ids = (
-            select(models.plan_target_departments.c.plan_id)
-            .join(models.User, models.User.dept_id == models.plan_target_departments.c.dept_id)
-            .where(
-                models.User.status == "active",
-                models.User.emp_id.in_(visible_emp_ids),
-            )
-        )
-        user_visible_plan_ids = (
-            select(models.plan_target_users.c.plan_id)
-            .where(models.plan_target_users.c.emp_id.in_(visible_emp_ids))
-        )
-        query = query.filter(
-            models.TrainingPlan.id.in_(dept_visible_plan_ids.union(user_visible_plan_ids))
-        )
+    query = _apply_plan_list_audience_scope(query, db, current_user)
 
     # 使用 joinedload 載入 sub_category 關聯，避免 N+1 查詢問題
     return query.options(joinedload(models.TrainingPlan.sub_category)).order_by(models.TrainingPlan.training_date.desc()).all()
@@ -315,8 +388,8 @@ def get_attendance_stats(
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
     
-    # 依 Hybrid 規則取得可視名單（None=all）
-    visible_emp_ids = get_scope_emp_ids(db, current_user, active_only=True)
+    # menu:plan 視為全域；其餘依 Hybrid scope（None=all）
+    visible_emp_ids = _resolve_visible_emp_ids_for_attendance(db, current_user)
 
     # 收集該計畫應到名單（部門 + 個人受課對象）
     all_target_user_ids = set()

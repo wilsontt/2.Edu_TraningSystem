@@ -258,21 +258,19 @@ const TrainingPlanManager = () => {
         const [plansRes, catsRes, deptsRes, usersRes, allPlansRes] = await Promise.all([
           api.get(`/training/plans?${params.toString()}`),
           api.get('/admin/categories/main'),
-          api.get('/admin/departments'),
-          api.get('/admin/users'),
-          // 獲取所有未封存的計畫用於提取年份選項（不套用篩選）
+          api.get('/training/form-options/departments'),
+          api.get('/training/form-options/users'),
           api.get(`/training/plans?status=${statusMap[activeTab]}`)
         ]);
         setPlans(plansRes.data);
-        setAllPlans(allPlansRes.data); // 保存所有計畫用於提取年份選項
+        setAllPlans(allPlansRes.data);
         setCategories(catsRes.data);
         setDepartments(deptsRes.data);
-        // 處理使用者列表（含 dept_id 供受課單位勾選時自動勾選個人受訓對象）
-        const usersList = usersRes.data.map((u: {emp_id: string; name: string; department?: {id: number; name: string}}) => ({
+        const usersList = usersRes.data.map((u: { emp_id: string; name: string; dept_name: string; dept_id: number | null }) => ({
           emp_id: u.emp_id,
           name: u.name,
-          dept_name: u.department?.name || '未知',
-          dept_id: u.department?.id ?? null
+          dept_name: u.dept_name || '未知',
+          dept_id: u.dept_id ?? null
         }));
         setUsers(usersList);
         
