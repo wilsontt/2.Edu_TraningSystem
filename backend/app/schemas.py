@@ -384,9 +384,9 @@ class LoginToken(LoginTokenBase):
         from_attributes = True
 
 class QRCodeGenerateResponse(BaseModel):
-    token: str
+    """方案 A：登入 QRcode 僅含登入頁固定 URL，不再回傳一次性 token 或過期時間。"""
     qrcode_url: str  # Base64 編碼的圖片
-    expires_at: datetime
+    login_url: str   # 登入頁完整 URL（供複製/檢視）
 
 class QRCodeTokenValidate(BaseModel):
     valid: bool

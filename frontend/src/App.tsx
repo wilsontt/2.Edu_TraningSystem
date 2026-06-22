@@ -22,7 +22,6 @@ import QRCodeManager from './components/admin/QRCodeManager';
 import ExamDashboard from './components/exam/ExamDashboard';
 import ExamRunner from './components/exam/ExamRunner';
 import PersonalScorePage from './components/personal/PersonalScorePage';
-import QRCodeLoginPage from './components/QRCodeLoginPage';
 import CheckInPage from './components/exam/CheckInPage';
 import AttendanceOverviewPage from './components/attendance/AttendanceOverviewPage';
 import type { User } from './types';
@@ -287,7 +286,8 @@ const App = () => {
     <Router basename="/training">
       <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
         <Routes>
-          <Route path="/auth/login/qrcode/:token" element={<QRCodeLoginPage onLoginSuccess={(u: User) => setUser(u)} />} />
+          {/* 方案 A：廢止 QRcode 一次性 token 流程；舊 QR（含 UUID）掃碼後一律導向登入頁。 */}
+          <Route path="/auth/login/qrcode/:token" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={
             !user ? (
               <LoginPage onLoginSuccess={(u: User) => setUser(u)} />

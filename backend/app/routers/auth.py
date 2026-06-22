@@ -376,9 +376,13 @@ async def verify_captcha(captcha_id: str, answer: str):
 
 # --- QRcode 登入功能 ---
 
-@router.get("/login/qrcode/{token}", response_model=schemas.QRCodeTokenValidate)
+@router.get("/login/qrcode/{token}", response_model=schemas.QRCodeTokenValidate, deprecated=True)
 def validate_qrcode_token(token: str, db: Session = Depends(get_db)):
-    """驗證 QRcode token 是否有效且未過期（不檢查 is_used，允許多人使用）"""
+    """[已棄用] QRcode 一次性 token 驗證。
+
+    方案 A 後不再產生 token QR（前端改掃碼進入登入頁），此端點僅為相容舊有 token 而保留。
+    驗證 token 是否有效且未過期（不檢查 is_used，允許多人使用）。
+    """
     login_token = db.query(models.LoginToken).filter(models.LoginToken.token == token).first()
     
     if not login_token:
@@ -400,13 +404,17 @@ def validate_qrcode_token(token: str, db: Session = Depends(get_db)):
         "expires_at": login_token.expires_at
     }
 
-@router.post("/login/qrcode/{token}")
+@router.post("/login/qrcode/{token}", deprecated=True)
 async def login_with_qrcode(
     token: str,
     req: schemas.QRCodeLoginRequest,
     db: Session = Depends(get_db)
 ):
-    """使用 QRcode token 快速登入（仍需輸入驗證碼，但同一 QRcode 可被多人使用）"""
+    """[已棄用] 使用 QRcode 一次性 token 登入。
+
+    方案 A 後改為掃碼進入一般登入頁（員工編號 + 驗證碼），此端點僅為相容舊有 token 而保留。
+    仍需輸入驗證碼，且同一 QRcode 可被多人使用。
+    """
     # 1. 驗證 QRcode token（只檢查是否存在和是否過期，不檢查 is_used）
     login_token = db.query(models.LoginToken).filter(models.LoginToken.token == token).first()
     
