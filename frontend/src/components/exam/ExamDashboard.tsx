@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { BookOpen, Clock, CheckCircle, AlertCircle, ChevronRight, Loader2, GraduationCap, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../api';
 import CheckInButton from './CheckInButton';
 
@@ -22,15 +22,25 @@ interface ExamItem {
 
 const ExamDashboard = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [exams, setExams] = useState<ExamItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [pendingStartExamId, setPendingStartExamId] = useState<number | null>(null);
     const [showNotCheckedInModal, setShowNotCheckedInModal] = useState(false);
     const [quickCheckInLoading, setQuickCheckInLoading] = useState(false);
 
+    // SPA 來回導航修復（建議事項 #6 / Wave 0）：
+    // 返回考試中心（pathname 為 '/'）時重新抓取考試列表，避免資料殘留導致按鈕需 F5 才能操作；
+    // 離開考試中心時清除殘留彈窗與暫存狀態，避免返回後全螢幕浮層阻擋點擊。
     useEffect(() => {
-        fetchExams();
-    }, []);
+        if (location.pathname === '/') {
+            fetchExams();
+        } else {
+            setShowNotCheckedInModal(false);
+            setPendingStartExamId(null);
+            setQuickCheckInLoading(false);
+        }
+    }, [location]);
 
     const fetchExams = async () => {
         try {
@@ -183,8 +193,9 @@ const ExamDashboard = () => {
                             {/* 報到按鈕區域 - 僅在 active 狀態時顯示 */}
                             {exam.status === 'active' && (
                                 <div className="pt-4 border-t border-indigo-100/50">
-                                    <CheckInButton 
+                                    <CheckInButton
                                         planId={exam.plan_id}
+                                        refreshKey={location.key}
                                         onCheckInSuccess={() => {
                                             // 報到成功後可以選擇自動進入考試或重新載入列表
                                             // 這裡我們先不自動進入，讓用戶點擊卡片進入

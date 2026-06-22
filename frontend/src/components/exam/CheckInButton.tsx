@@ -5,6 +5,8 @@ import api from '../../api';
 interface CheckInButtonProps {
     planId: number;
     onCheckInSuccess?: () => void;
+    /** 父層導航返回時變更此值（如 location.key），用以觸發報到狀態重新抓取（建議事項 #6 / Wave 0）。 */
+    refreshKey?: string | number;
 }
 
 interface AttendanceStatus {
@@ -12,7 +14,7 @@ interface AttendanceStatus {
     checkin_time?: string;
 }
 
-const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess }) => {
+const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess, refreshKey }) => {
     const [status, setStatus] = useState<AttendanceStatus | null>(null);
     const [loading, setLoading] = useState(false);
     const [checkingIn, setCheckingIn] = useState(false);
@@ -63,11 +65,11 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess 
         }
     };
 
-    // 初始載入狀態
+    // 初始載入狀態；refreshKey 變更（父層導航返回）時亦重新抓取，避免返回後狀態殘留。
     useEffect(() => {
         fetchStatus();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [planId]);
+    }, [planId, refreshKey]);
 
     if (loading) {
         return (
