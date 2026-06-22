@@ -273,6 +273,44 @@ class LoginToken(Base):
     is_used = Column(Boolean, default=False)
 
 
+class MaterialType(Base):
+    """教材類型主檔（操作手冊、法規與標準等）；slug 用於 NAS 子目錄。"""
+    __tablename__ = "material_types"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True)          # 類型名稱
+    slug = Column(String, unique=True)          # 目錄用識別
+    sort_order = Column(Integer, default=0)     # 排序
+    max_file_bytes = Column(Integer, nullable=True)  # 該類型單檔上限；null 用系統預設
+    is_active = Column(Boolean, default=True)
+
+
+class TeachingMaterial(Base):
+    """教材目錄卡（DB 中繼資料）；實體檔存於 NAS（見教材 PLAN §5.2.2）。"""
+    __tablename__ = "teaching_materials"
+    id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(Integer, ForeignKey("training_plans.id"), index=True)
+    title = Column(String)
+    material_type_id = Column(Integer, ForeignKey("material_types.id"))
+    description = Column(String, nullable=True)
+    tags = Column(Text, nullable=True)              # JSON 字串（格式同題庫）
+    original_filename = Column(String)             # 上傳原始檔名（下載檔名來源）
+    stored_filename = Column(String)              # NAS 檔名，例 42.pdf
+    storage_path = Column(String)                 # 相對 MATERIALS_ROOT 的完整路徑
+    file_format = Column(String)                  # pdf、docx、md、txt 等
+    file_size_bytes = Column(Integer)
+    year = Column(String)                         # 由計畫帶入
+    sub_category_id = Column(Integer, nullable=True)  # 計畫分類快照，供跨計畫篩選
+    uploaded_by = Column(String)                  # emp_id
+    uploaded_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+    is_active = Column(Boolean, default=True, index=True)
+    deactivated_at = Column(DateTime, nullable=True)
+    deactivated_by = Column(String, nullable=True)
+    replaced_by_id = Column(Integer, ForeignKey("teaching_materials.id"), nullable=True)
+    replaces_id = Column(Integer, ForeignKey("teaching_materials.id"), nullable=True)
+
+    material_type = relationship("MaterialType")
+
+
 class FileTransferAuditLog(Base):
     """檔案傳輸稽核：記錄考卷／教材之上傳、下載、刪除等傳輸行為（見建議事項 PLAN §7.1）。"""
     __tablename__ = "file_transfer_audit_logs"

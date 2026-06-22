@@ -59,6 +59,8 @@ app.include_router(exam_center.router, prefix="/api")     # 考試中心 (作答
 from .routers import question_bank
 app.include_router(question_bank.router, prefix="/api")   # 全域題庫管理
 app.include_router(qrcode.router, prefix="/api")          # QRcode 生成相關
+from .routers import teaching_materials
+app.include_router(teaching_materials.router, prefix="/api")  # 教材庫 (上傳/搜尋/下載)
 
 # ----------------------------------------------------------------
 # 基礎端點 (Base Endpoints)

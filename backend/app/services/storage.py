@@ -175,3 +175,26 @@ def service_credentials() -> SmbCredentials:
         password=s.exam_smb_password,
         root=s.materials_root,
     )
+
+
+def interactive_credentials(nas_username: str, nas_password: str) -> SmbCredentials:
+    """教材 interactive 模式 credentials（伺服器／共享來自設定，帳密由使用者當次提供）。"""
+    s = get_settings()
+    if not s.smb_configured:
+        raise StorageUnavailable("NAS 共享尚未設定（需 SMB_SERVER／SMB_SHARE）")
+    if not (nas_username and nas_password):
+        raise StorageUnavailable("缺少 NAS 帳號或密碼")
+    return SmbCredentials(
+        server=s.smb_server,
+        share=s.smb_share,
+        username=nas_username,
+        password=nas_password,
+        root=s.materials_root,
+    )
+
+
+def verify_credentials(creds: SmbCredentials) -> None:
+    """驗證 credentials 可連線（連線後立即關閉）；失敗拋 StorageUnavailable。"""
+    storage = SmbStorage(creds)
+    storage.connect()
+    storage.disconnect()

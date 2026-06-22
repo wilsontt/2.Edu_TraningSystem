@@ -126,7 +126,25 @@ def init_db():
             print("Created default admin user: admin")
         else:
             print(f"Admin user already exists: {admin_user.emp_id}")
-        
+
+        # 7. 建立預設教材類型（Wave 3；冪等）
+        default_material_types = [
+            ("操作手冊", "操作手冊", 52428800, 10),
+            ("維護手冊", "維護手冊", 52428800, 20),
+            ("法規與標準", "法規與標準", 31457280, 30),
+            ("公告通知", "公告通知", 31457280, 40),
+            ("簡報教材", "簡報教材", 20971520, 50),
+            ("測驗參考", "測驗參考", 20971520, 60),
+            ("其他", "其他", 20971520, 99),
+        ]
+        for name, slug, max_bytes, order in default_material_types:
+            exists = db.query(models.MaterialType).filter(models.MaterialType.slug == slug).first()
+            if not exists:
+                db.add(models.MaterialType(
+                    name=name, slug=slug, max_file_bytes=max_bytes, sort_order=order, is_active=True
+                ))
+        db.commit()
+
         print("Database initialized successfully!")
         
     except Exception as e:

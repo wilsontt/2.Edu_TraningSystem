@@ -32,6 +32,22 @@ class Settings(BaseSettings):
     exam_smb_username: str = ""   # EXAM_SMB_USERNAME
     exam_smb_password: str = ""   # EXAM_SMB_PASSWORD
 
+    # 教材上傳／下載限額（見教材 PLAN §5.4）
+    teaching_material_max_file_bytes: int = 52_428_800           # 50MB 全系統硬上限
+    teaching_material_max_batch_upload_count: int = 5            # 單次上傳檔數
+    teaching_material_max_batch_upload_bytes: int = 104_857_600  # 100MB 單次上傳總量
+    teaching_material_max_batch_download_count: int = 10         # 批次下載檔數
+    teaching_material_max_batch_download_bytes: int = 209_715_200  # 200MB 批次下載總量
+    exam_txt_max_file_bytes: int = 5_242_880                     # 5MB 考卷 TXT 專用
+
+    # NAS interactive 短時 session token 有效秒數（教材傳輸；密碼不存 DB）
+    nas_session_ttl_seconds: int = 600  # 10 分鐘
+
+    @property
+    def smb_configured(self) -> bool:
+        """SMB 伺服器與共享是否已設定（interactive 模式前提）。"""
+        return bool(self.smb_server and self.smb_share)
+
     @property
     def exam_smb_configured(self) -> bool:
         """考卷 service 模式是否具備最小可連線設定。"""

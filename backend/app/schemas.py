@@ -414,3 +414,98 @@ class CheckInQRCodeResponse(BaseModel):
     checkin_url: str  # 報到 URL（供複製使用）
 
 SystemFunction.update_forward_refs()
+
+
+# ----------------------------------------------------------------
+# 教材庫相關模型 (Teaching Material Schemas) — Wave 3
+# ----------------------------------------------------------------
+
+class MaterialTypeBase(BaseModel):
+    name: str
+    slug: str
+    sort_order: int = 0
+    max_file_bytes: Optional[int] = None
+    is_active: bool = True
+
+
+class MaterialTypeCreate(MaterialTypeBase):
+    pass
+
+
+class MaterialTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    sort_order: Optional[int] = None
+    max_file_bytes: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class MaterialType(MaterialTypeBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
+class TeachingMaterial(BaseModel):
+    id: int
+    plan_id: int
+    title: str
+    material_type_id: int
+    description: Optional[str] = None
+    tags: Optional[str] = None
+    original_filename: str
+    stored_filename: str
+    storage_path: str
+    file_format: str
+    file_size_bytes: int
+    year: str
+    sub_category_id: Optional[int] = None
+    uploaded_by: str
+    uploaded_at: datetime
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class TeachingMaterialList(BaseModel):
+    items: List[TeachingMaterial]
+    total: int
+    page: int
+    size: int
+    total_pages: int
+
+
+class TeachingMaterialUpdate(BaseModel):
+    title: Optional[str] = None
+    material_type_id: Optional[int] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+class ConflictCheckResponse(BaseModel):
+    has_conflict: bool
+    existing: Optional[dict] = None  # { id, title, original_filename, uploaded_at }
+
+
+class UploadResult(BaseModel):
+    succeeded: List[dict]  # { id, original_filename }
+    failed: List[dict]     # { original_filename, reason }
+
+
+class NasSessionVerifyRequest(BaseModel):
+    nas_username: str
+    nas_password: str
+
+
+class NasSessionVerifyResponse(BaseModel):
+    nas_session_token: str
+    expires_in: int
+
+
+class BatchDownloadRequest(BaseModel):
+    ids: List[int]
+    nas_username: Optional[str] = None
+    nas_password: Optional[str] = None
+    nas_session_token: Optional[str] = None
