@@ -151,12 +151,14 @@ def create_training_plan(
     )
     
     # 處理受課單位 (Many-to-Many)
+    # 規則：有受課單位 → 用之；否則若有個人受課對象 → 僅個人（不綁單位）；皆無 → 預設開課單位
     if plan.target_dept_ids:
         target_depts = db.query(models.Department).filter(models.Department.id.in_(plan.target_dept_ids)).all()
         db_plan.target_departments = target_depts
-    else:
-        # 預設為開課單位
+    elif not plan.target_user_ids:
+        # 既無受課單位也無個人受課對象 → 預設為開課單位
         db_plan.target_departments = [dept]
+    # else：僅指定個人受課對象，不綁定任何受課單位
     
     # 處理個人受課對象 (Many-to-Many，僅在職人員)
     if plan_target_user_ids := plan.target_user_ids:
@@ -205,13 +207,17 @@ def update_training_plan(
     db_plan.passing_score = plan_update.passing_score
     db_plan.expected_attendance = plan_update.expected_attendance
     
-    # 若有提供受課單位則更新
+    # 受課單位：依規則重設（與建立一致）；修正「取消所有受課單位卻未清除」的問題
     if plan_update.target_dept_ids:
         target_depts = db.query(models.Department).filter(models.Department.id.in_(plan_update.target_dept_ids)).all()
         db_plan.target_departments = target_depts
-    elif not db_plan.target_departments:
-         # 正常情況不應發生，若無提供則略過
-        pass
+    elif plan_update.target_user_ids:
+        # 僅個人受課對象 → 清除受課單位
+        db_plan.target_departments = []
+    else:
+        # 既無受課單位也無個人受課對象 → 預設為開課單位
+        default_dept = db.query(models.Department).filter(models.Department.id == plan_update.dept_id).first()
+        db_plan.target_departments = [default_dept] if default_dept else []
     
     # 處理個人受課對象（僅在職人員）
     if plan_update.target_user_ids is not None:

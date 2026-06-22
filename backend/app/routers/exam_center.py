@@ -1319,9 +1319,15 @@ def check_in_attendance(
         raise HTTPException(status_code=400, detail="訓練計畫已結束")
     
     # 4. 檢查用戶是否在受課對象中
-    if plan.target_departments:
-        user_dept_ids = [dept.id for dept in plan.target_departments]
-        if current_user.dept_id not in user_dept_ids:
+    # 受課對象 = 受課單位全員（implicit）∪ 個人受課對象（explicit）；兩者皆未設定視為全公司。
+    # 與 my_exams 應考名單解析一致，避免跨單位「個人受課對象」被誤擋。
+    has_targets = bool(plan.target_departments) or bool(plan.target_users)
+    if has_targets:
+        in_dept = current_user.dept_id is not None and any(
+            dept.id == current_user.dept_id for dept in plan.target_departments
+        )
+        in_users = any(u.emp_id == current_user.emp_id for u in plan.target_users)
+        if not (in_dept or in_users):
             raise HTTPException(status_code=403, detail="您不在本訓練計畫的受課對象中")
     
     # 5. 獲取客戶端 IP 地址

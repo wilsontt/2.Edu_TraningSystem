@@ -221,6 +221,37 @@ const TrainingPlanManager = () => {
     return derived;
   }, [formData.target_dept_ids, users]);
 
+  // 個人受課對象拆分為「來自單位」（deptDerivedUserIds）與「額外新增」（explicit，且不屬於已勾選單位）
+  const explicitExtraUserIds = useMemo(
+    () => formData.target_user_ids.filter((id) => !deptDerivedUserIds.has(id)),
+    [formData.target_user_ids, deptDerivedUserIds],
+  );
+  // emp_id → 使用者資料，供受課對象卡片顯示姓名/部門
+  const usersByEmpId = useMemo(() => {
+    const map = new Map<string, { emp_id: string; name: string; dept_name: string; dept_id: number | null }>();
+    for (const u of users) map.set(u.emp_id, u);
+    return map;
+  }, [users]);
+  // 「新增個人對象」跨單位搜尋 modal 開關
+  const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
+
+  // Point 4（Approach A）：移除某「來自單位」成員時，將該單位實體化為個別人員——
+  // 取消該單位勾選、把其餘在職成員轉為明確個人受課對象，並排除被移除者。
+  const materializeDeptRemoval = (empId: string) => {
+    const u = usersByEmpId.get(empId);
+    if (!u || u.dept_id == null) return;
+    const deptId = u.dept_id;
+    const deptIdStr = deptId.toString();
+    const remaining = users
+      .filter((x) => x.dept_id === deptId && x.emp_id !== empId)
+      .map((x) => x.emp_id);
+    setFormData((prev) => ({
+      ...prev,
+      target_dept_ids: prev.target_dept_ids.filter((id) => id !== deptIdStr),
+      target_user_ids: Array.from(new Set([...prev.target_user_ids, ...remaining])),
+    }));
+  };
+
   // 下拉選單資料
   const [categories, setCategories] = useState<MainCategory[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -358,6 +389,8 @@ const TrainingPlanManager = () => {
         expected_attendance: '',
       });
     }
+    setIsAddPersonOpen(false);
+    setUserSearchTerm('');
     setIsModalOpen(true);
   };
 
@@ -379,7 +412,8 @@ const TrainingPlanManager = () => {
         time_limit: formData.timer_enabled ? formData.time_limit : 0,
         passing_score: formData.passing_score,
         target_dept_ids: formData.target_dept_ids.map(id => parseInt(id)),
-        target_user_ids: formData.target_user_ids,
+        // 僅保存「額外新增」個人（排除受課單位衍生成員），避免將單位成員固化為個人受課對象
+        target_user_ids: formData.target_user_ids.filter(id => !deptDerivedUserIds.has(id)),
         expected_attendance: formData.expected_attendance ? parseInt(formData.expected_attendance) : null,
       };
 
@@ -1251,18 +1285,11 @@ const TrainingPlanManager = () => {
                                   const isAllSelected = allDeptIds.length > 0 && 
                                       allDeptIds.every(id => formData.target_dept_ids.includes(id));
                                   
-                                  setFormData(prev => {
-                                    const nextDeptIds = isAllSelected ? [] : allDeptIds;
-                                    // 規則：只要有選受課單位，個人受課對象必須與受課單位完全同步
-                                    if (nextDeptIds.length === 0) {
-                                      return { ...prev, target_dept_ids: [], target_user_ids: [] };
-                                    }
-                                    const deptIdSet = new Set(nextDeptIds.map((id) => Number.parseInt(id, 10)));
-                                    const derived = users
-                                      .filter((u) => u.dept_id != null && deptIdSet.has(u.dept_id))
-                                      .map((u) => u.emp_id);
-                                    return { ...prev, target_dept_ids: nextDeptIds, target_user_ids: Array.from(new Set(derived)) };
-                                  });
+                                  // 僅切換受課單位；個人受課對象（額外新增）不受影響
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    target_dept_ids: isAllSelected ? [] : allDeptIds,
+                                  }));
                               }}
                               className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
                           >
@@ -1276,17 +1303,12 @@ const TrainingPlanManager = () => {
                           <button
                               type="button"
                               onClick={() => {
-                                  // 同開課單位
+                                  // 僅將開課單位加入受課單位；個人受課對象不受影響
                                   if (formData.dept_id) {
                                       setFormData(prev => {
                                           const newIds = new Set(prev.target_dept_ids);
                                           newIds.add(prev.dept_id);
-                                          const nextDeptIds = Array.from(newIds);
-                                          const deptIdSet = new Set(nextDeptIds.map((id) => Number.parseInt(id, 10)));
-                                          const derived = users
-                                            .filter((u) => u.dept_id != null && deptIdSet.has(u.dept_id))
-                                            .map((u) => u.emp_id);
-                                          return { ...prev, target_dept_ids: nextDeptIds, target_user_ids: Array.from(new Set(derived)) };
+                                          return { ...prev, target_dept_ids: Array.from(newIds) };
                                       });
                                   }
                               }}
@@ -1308,20 +1330,13 @@ const TrainingPlanManager = () => {
                                       onChange={e => {
                                           const id = dept.id.toString();
                                           const checked = e.target.checked;
-                                          setFormData(prev => {
-                                              const nextDeptIds = checked
+                                          // 僅切換受課單位；個人受課對象（額外新增）不受影響
+                                          setFormData(prev => ({
+                                              ...prev,
+                                              target_dept_ids: checked
                                                 ? [...prev.target_dept_ids, id]
-                                                : prev.target_dept_ids.filter(tid => tid !== id);
-                                              // 規則：只要有選受課單位，個人受課對象必須與受課單位完全同步（避免不一致）
-                                              if (nextDeptIds.length === 0) {
-                                                return { ...prev, target_dept_ids: [], target_user_ids: [] };
-                                              }
-                                              const deptIdSet = new Set(nextDeptIds.map((dId) => Number.parseInt(dId, 10)));
-                                              const derived = users
-                                                .filter((u) => u.dept_id != null && deptIdSet.has(u.dept_id))
-                                                .map((u) => u.emp_id);
-                                              return { ...prev, target_dept_ids: nextDeptIds, target_user_ids: Array.from(new Set(derived)) };
-                                          });
+                                                : prev.target_dept_ids.filter(tid => tid !== id),
+                                          }));
                                       }}
                                   />
                                   <span className="text-sm font-bold text-gray-700">{dept.name}</span>
@@ -1329,116 +1344,86 @@ const TrainingPlanManager = () => {
                           ))}
                       </div>
                   </div>
-                  {formData.target_dept_ids.length === 0 && (
+                  {formData.target_dept_ids.length === 0 && formData.target_user_ids.length === 0 && (
                       <p className="text-xs text-orange-500 font-bold flex items-center gap-1">
                           <AlertCircle className="w-3 h-3" />
-                          未選擇任何對象，將預設為開課單位
+                          未選擇任何受課對象，將預設為開課單位
                       </p>
                   )}
                 </div>
 
-                {/* Target Users - 個人受課對象 */}
+                {/* Target Users - 個人受課對象（來自單位 implicit ＋ 額外新增 explicit） */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-gray-500 uppercase">個人受課對象 (可複選)</label>
+                      <label className="text-xs font-bold text-gray-500 uppercase">個人受課對象</label>
                       <button
                           type="button"
-                          onClick={() => {
-                              if (formData.target_dept_ids.length > 0) return;
-                              const allUserIds = users.map(u => u.emp_id);
-                              const isAllSelected = allUserIds.length > 0 && 
-                                  allUserIds.every(id => formData.target_user_ids.includes(id));
-                              
-                              if (isAllSelected) {
-                                  setFormData(prev => ({
-                                      ...prev,
-                                      target_user_ids: []
-                                  }));
-                              } else {
-                                  setFormData(prev => ({
-                                      ...prev,
-                                      target_user_ids: allUserIds
-                                  }));
-                              }
-                          }}
-                          disabled={formData.target_dept_ids.length > 0}
-                          className={`text-xs font-bold cursor-pointer ${
-                            formData.target_dept_ids.length > 0
-                              ? 'text-gray-400 cursor-not-allowed'
-                              : 'text-indigo-600 hover:underline'
-                          }`}
+                          onClick={() => { setUserSearchTerm(''); setIsAddPersonOpen(true); }}
+                          className="flex items-center gap-1 text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
                       >
-                          {(() => {
-                              const allUserIds = users.map(u => u.emp_id);
-                              const isAllSelected = allUserIds.length > 0 && 
-                                  allUserIds.every(id => formData.target_user_ids.includes(id));
-                              return isAllSelected ? '取消全選' : '全選';
-                          })()}
+                          <Plus className="w-3.5 h-3.5" /> 新增個人對象
                       </button>
                   </div>
-                  <div className="mb-2">
-                      <input
-                          type="text"
-                          placeholder="搜尋員工編號、姓名或部門..."
-                          className="w-full px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
-                          value={userSearchTerm}
-                          onChange={(e) => setUserSearchTerm(e.target.value)}
-                      />
+                  <div className="border-2 border-indigo-200 rounded-xl p-2 max-h-55 overflow-y-auto bg-indigo-50/30">
+                      {deptDerivedUserIds.size === 0 && explicitExtraUserIds.length === 0 ? (
+                          <p className="text-xs text-gray-400 text-center py-6 px-2 leading-relaxed">
+                              尚未指定個人對象。<br />勾選左側受課單位以納入該單位人員，或點「新增個人對象」加入跨單位人員。
+                          </p>
+                      ) : (
+                          <div className="space-y-1">
+                              {/* 來自單位（隨受課單位自動納入，唯讀） */}
+                              {Array.from(deptDerivedUserIds).map((empId) => {
+                                  const u = usersByEmpId.get(empId);
+                                  return (
+                                      <div key={`dept-${empId}`} className="flex items-center justify-between gap-2 px-2 py-1 rounded-lg bg-white/70">
+                                          <span className="text-sm font-bold text-gray-700 truncate">
+                                              {u ? `${u.name} (${u.emp_id}) - ${u.dept_name}` : empId}
+                                          </span>
+                                          <div className="flex items-center gap-2 shrink-0">
+                                              <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">來自單位</span>
+                                              <button
+                                                  type="button"
+                                                  onClick={() => materializeDeptRemoval(empId)}
+                                                  className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer"
+                                                  title="從受課對象移除此人（將取消該單位勾選，改以個別人員指定其餘成員）"
+                                              >
+                                                  <X className="w-4 h-4" />
+                                              </button>
+                                          </div>
+                                      </div>
+                                  );
+                              })}
+                              {/* 額外新增（跨單位指定，可移除） */}
+                              {explicitExtraUserIds.map((empId) => {
+                                  const u = usersByEmpId.get(empId);
+                                  return (
+                                      <div key={`extra-${empId}`} className="flex items-center justify-between gap-2 px-2 py-1 rounded-lg bg-white">
+                                          <span className={`text-sm font-bold truncate ${u ? 'text-gray-700' : 'text-amber-600'}`}>
+                                              {u ? `${u.name} (${u.emp_id}) - ${u.dept_name}` : `${empId}（查無此帳號／可能已停用，建議移除）`}
+                                          </span>
+                                          <div className="flex items-center gap-2 shrink-0">
+                                              <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold">額外新增</span>
+                                              <button
+                                                  type="button"
+                                                  onClick={() => setFormData(prev => ({ ...prev, target_user_ids: prev.target_user_ids.filter(id => id !== empId) }))}
+                                                  className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer"
+                                                  title="移除"
+                                              >
+                                                  <X className="w-4 h-4" />
+                                              </button>
+                                          </div>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                      )}
                   </div>
-                  {/* 移除 p-3，避免內部元素之間有間距 */}
-                  <div className="border-2 border-indigo-200 rounded-xl p-1 max-h-43 overflow-y-auto bg-indigo-50/30">
-                      <div className="space-y-0"> {/* 移除 space-y-2，避免內部元素之間有間距 */}
-                          {users
-                              .filter(user => 
-                                  userSearchTerm === '' || 
-                                  user.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-                                  user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-                                  user.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase())
-                              )
-                              .map(user => (
-                              // 移除 p-1，避免內部元素之間有間距
-                              <label key={user.emp_id} className="flex items-center gap-2 p-1 rounded-lg hover:bg-white transition-colors duration-200 cursor-pointer">
-                                  <input
-                                      type="checkbox"
-                                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                                      checked={deptDerivedUserIds.has(user.emp_id) || formData.target_user_ids.includes(user.emp_id)}
-                                      disabled={deptDerivedUserIds.has(user.emp_id)}
-                                      onChange={e => {
-                                          if (deptDerivedUserIds.has(user.emp_id)) return;
-                                          if (e.target.checked) {
-                                              setFormData(prev => ({
-                                                  ...prev,
-                                                  target_user_ids: [...prev.target_user_ids, user.emp_id]
-                                              }));
-                                          } else {
-                                              setFormData(prev => ({
-                                                  ...prev,
-                                                  target_user_ids: prev.target_user_ids.filter(id => id !== user.emp_id)
-                                              }));
-                                          }
-                                      }}
-                                  />
-                                  <span className="text-sm font-bold text-gray-700">
-                                      {user.name} ({user.emp_id}) - {user.dept_name}
-                                  </span>
-                              </label>
-                          ))}
-                          {users.filter(user => 
-                              userSearchTerm === '' || 
-                              user.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-                              user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-                              user.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase())
-                          ).length === 0 && (
-                              <p className="text-xs text-gray-400 text-center py-2">沒有找到符合的使用者</p>
-                          )}
-                      </div>
-                  </div>
-                  {formData.target_user_ids.length > 0 && (
+                  {(deptDerivedUserIds.size > 0 || explicitExtraUserIds.length > 0) && (
                       <p className="text-xs text-indigo-600 font-bold">
-                          已選擇 {formData.target_user_ids.length} 位個人受課對象
+                          共 {deptDerivedUserIds.size + explicitExtraUserIds.length} 位（來自單位 {deptDerivedUserIds.size}、額外新增 {explicitExtraUserIds.length}）
                       </p>
                   )}
-                </div>                
+                </div>
               </div>
 
               
@@ -1484,6 +1469,87 @@ const TrainingPlanManager = () => {
                 className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
                 關閉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 新增個人對象（跨單位）模態框 */}
+      {isModalOpen && isAddPersonOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Users className="w-5 h-5 text-indigo-600" /> 新增個人對象（可跨單位）
+              </h3>
+              <button type="button" onClick={() => setIsAddPersonOpen(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-all cursor-pointer">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <div className="p-4 border-b border-gray-100">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="搜尋員工編號、姓名或部門..."
+                  className="w-full pl-9 pr-3 py-2.5 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
+                  value={userSearchTerm}
+                  onChange={(e) => setUserSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              {(() => {
+                const filtered = users.filter(user =>
+                  userSearchTerm === '' ||
+                  user.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                  user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                  user.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase())
+                );
+                if (filtered.length === 0) {
+                  return <p className="text-xs text-gray-400 text-center py-6">沒有找到符合的使用者</p>;
+                }
+                return (
+                  <div className="space-y-0.5">
+                    {filtered.map(user => {
+                      const fromDept = deptDerivedUserIds.has(user.emp_id);
+                      const selected = formData.target_user_ids.includes(user.emp_id);
+                      return (
+                        <label
+                          key={user.emp_id}
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors duration-200 ${fromDept ? 'opacity-60 cursor-not-allowed' : 'hover:bg-indigo-50 cursor-pointer'}`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                            checked={fromDept || selected}
+                            disabled={fromDept}
+                            onChange={(e) => {
+                              if (fromDept) return;
+                              if (e.target.checked) {
+                                setFormData(prev => prev.target_user_ids.includes(user.emp_id) ? prev : { ...prev, target_user_ids: [...prev.target_user_ids, user.emp_id] });
+                              } else {
+                                setFormData(prev => ({ ...prev, target_user_ids: prev.target_user_ids.filter(id => id !== user.emp_id) }));
+                              }
+                            }}
+                          />
+                          <span className="text-sm font-bold text-gray-700 flex-1 truncate">
+                            {user.name} ({user.emp_id}) - {user.dept_name}
+                          </span>
+                          {fromDept && <span className="shrink-0 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">已含（來自單位）</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-500">額外新增 {explicitExtraUserIds.length} 位</span>
+              <button type="button" onClick={() => setIsAddPersonOpen(false)} className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer">
+                完成
               </button>
             </div>
           </div>
