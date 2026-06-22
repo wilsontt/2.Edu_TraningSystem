@@ -271,3 +271,21 @@ class LoginToken(Base):
     expires_at = Column(DateTime) # 過期時間
     used_at = Column(DateTime, nullable=True)
     is_used = Column(Boolean, default=False)
+
+
+class FileTransferAuditLog(Base):
+    """檔案傳輸稽核：記錄考卷／教材之上傳、下載、刪除等傳輸行為（見建議事項 PLAN §7.1）。"""
+    __tablename__ = "file_transfer_audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+    emp_id = Column(String, index=True)            # 教育訓練系統使用者（JWT）
+    client_ip = Column(String, nullable=True)      # 來源 IP
+    nas_username = Column(String, nullable=True)   # 互動傳輸之 NAS 帳號；考卷為 null 或 'service'
+    action = Column(String)                        # upload / download / delete / cancel
+    resource_type = Column(String)                 # teaching_material / exam_txt
+    resource_id = Column(Integer, nullable=True)   # 教材 id 等
+    plan_id = Column(Integer, nullable=True)       # 訓練計畫
+    filename = Column(String)                      # 原始檔名
+    bytes = Column(Integer, nullable=True)         # 傳輸大小
+    status = Column(String)                        # success / failed / cancelled
+    error_message = Column(Text, nullable=True)    # 失敗原因

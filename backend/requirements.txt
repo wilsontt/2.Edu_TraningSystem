@@ -14,3 +14,4 @@ fonttools
 google-generativeai
 pandas
 qrcode[pil]
+smbprotocol
