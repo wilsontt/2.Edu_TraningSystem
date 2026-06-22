@@ -63,9 +63,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       return;
     }
     
-    // 驗證員工編號格式：必須是1-10碼的數字，或特殊帳號 "admin"
-    if (empId.toLowerCase() !== 'admin' && !/^[0-9]{1,10}$/.test(empId)) {
-      setError('員工編號必須是1-10碼的數字');
+    // 驗證員工編號格式：必須是1-6碼的數字，或特殊帳號 "admin"
+    if (empId.toLowerCase() !== 'admin' && !/^[0-9]{1,6}$/.test(empId)) {
+      setError('員工編號必須是1-6碼的數字');
       return;
     }
 
@@ -212,7 +212,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
                 <input
                   type="text"
-                  placeholder={isRegister ? "請輸入10碼以內的數字" : "請輸入員工編號"}
+                  placeholder={isRegister ? "請輸入10碼以內的數字" : "請輸入6碼員工編號"}
                   className="block w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium"
                   value={empId}
                   onChange={(e) => {
@@ -227,8 +227,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       if (lowerValue === 'admin' || lowerValue.startsWith('admin')) {
                         value = 'admin';
                       } else if (/^[0-9]*$/.test(value)) {
-                        // 如果全是數字，保留（最多10碼）
-                        value = value.slice(0, 10);
+                        // 登入時數字最多 6 碼
+                        value = value.slice(0, 6);
                       } else if (/^[a-zA-Z]*$/.test(value)) {
                         // 如果全是字母，檢查是否在輸入 admin
                         const lower = value.toLowerCase();
@@ -243,12 +243,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                         }
                       } else {
                         // 混合字符，只保留數字部分
-                        value = value.replace(/[^0-9]/g, '').slice(0, 10);
+                        value = value.replace(/[^0-9]/g, '').slice(0, 6);
                       }
                     }
                     setEmpId(value);
                   }}
-                  maxLength={isRegister ? 10 : 10}
+                  maxLength={isRegister ? 10 : 6}
                   pattern={isRegister ? "[0-9]*" : undefined}
                   inputMode={isRegister ? "numeric" : "text"}
                 />
@@ -326,9 +326,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     />
                   </div>
                   <div className="relative flex items-center bg-gray-50 rounded-2xl border border-gray-200 p-1 group">
-                    <div className="h-11 w-24 rounded-xl overflow-hidden shadow-inner flex items-center justify-center bg-white cursor-pointer" onClick={fetchCaptcha}>
+                    <div className="h-11 w-28 rounded-xl overflow-hidden shadow-inner flex items-center justify-center bg-white cursor-pointer px-1" onClick={fetchCaptcha}>
                       {captchaData ? (
-                        <img src={captchaData.image} alt="captcha" className="w-full h-full object-cover select-none" />
+                        <img src={captchaData.image} alt="captcha" className="w-full h-full object-contain select-none" />
                       ) : (
                         <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                       )}

@@ -71,6 +71,7 @@ const CheckInPage = () => {
         is_checked_in: true,
         checkin_time: res.data.checkin_time || new Date().toISOString()
       });
+      navigate(`/exam/run/${planId}`);
     } catch (err: unknown) {
       console.error('Failed to check in', err);
       const apiErr = err as { response?: { data?: { detail?: string } } };

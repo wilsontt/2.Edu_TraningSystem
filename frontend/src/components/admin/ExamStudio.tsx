@@ -493,12 +493,14 @@ const ExamStudio = () => {
                                         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white mb-2">
                                             {isUploading ? <Loader2 className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
                                         </div>
-                                        <div>
-                                            <p className="font-bold text-xl text-gray-700">點擊或拖放上傳考卷 (TXT)</p>
-                                            <p className="text-sm text-gray-400 mt-2">系統將自動解析題目並存入資料庫</p>
-                                        </div>
-                                        <div className="mt-4 px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-colors duration-200">
-                                            選擇檔案
+                                        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                                            <div className="text-center sm:text-left">
+                                                <p className="font-bold text-xl text-gray-700">點擊或拖放上傳考卷 (TXT)</p>
+                                                <p className="text-sm text-gray-400 mt-2">系統將自動解析題目並存入資料庫</p>
+                                            </div>
+                                            <div className="text-right border-2 shrink-0 px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-colors duration-200">
+                                                選擇檔案
+                                            </div>
                                         </div>
                                         <p className="text-xs text-gray-500 mt-2">上傳後將先預覽題目，由您勾選要匯入的題目再寫入</p>
                                     </label>

@@ -13,6 +13,7 @@ import { Plus, Calendar, BookOpen, Building2, Search, Loader2, X, AlertCircle, P
 import api from '../../api';
 import Pagination from '../common/Pagination';
 import BulkAbsenceReasonModal from '../attendance/BulkAbsenceReasonModal';
+import PlanMaterialsSection from '../teaching/PlanMaterialsSection';
 
 // ----------------------------------------------------------------
 // 型別定義 (Type Definitions)
@@ -1426,7 +1427,11 @@ const TrainingPlanManager = () => {
                 </div>
               </div>
 
-              
+              {/* 教材區（編輯既有計畫時顯示）— Wave 3 */}
+              {isEditing && editId && (
+                <PlanMaterialsSection planId={editId} archived={activeTab === 'archived'} />
+              )}
+
               {/* ... (footer buttons) ... */}
               {/* 按鈕卡片 */}
               <div className="flex gap-3 pt-2 border-t border-gray-100">

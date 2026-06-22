@@ -14,6 +14,7 @@ env/
 venv/
 .venv/
 .env
+.env.example
 .vscode
 CLAUDE.md
  

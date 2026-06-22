@@ -12,6 +12,10 @@ interface ScoreCardProps {
 const ScoreCard = ({ score, totalScore, isPassed, onClose }: ScoreCardProps) => {
     const count = useMotionValue(0);
     const rounded = useTransform(count, latest => Math.round(latest));
+    const scoreColor = isPassed ? '#2563EB' : '#DC2626';
+    const scoreColorClass = isPassed ? 'text-blue-600' : 'text-red-600';
+    const scoreSubColorClass = isPassed ? 'text-blue-500/80 border-blue-500/50' : 'text-red-500/80 border-red-500/50';
+    const underlineColorClass = isPassed ? 'decoration-blue-600' : 'decoration-red-600';
 
     // 分數滾動動畫
     useEffect(() => {
@@ -53,40 +57,38 @@ const ScoreCard = ({ score, totalScore, isPassed, onClose }: ScoreCardProps) => 
 
                     {/* 分數顯示區域 */}
                     <div className="relative inline-block py-6 px-10 mb-8">
-                        {/* 手寫紅圈動畫 */}
-                        {isPassed && (
-                            <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" style={{ filter: 'drop-shadow(2px 2px 2px rgba(220, 38, 38, 0.2))' }}>
-                                <motion.path
-                                    d="M 10 50 C 20 20, 100 10, 180 40 C 220 55, 200 100, 150 110 C 100 120, 50 110, 20 80 C 10 60, 40 40, 80 40"
-                                    fill="transparent"
-                                    stroke="#DC2626"
-                                    strokeWidth="4"
-                                    strokeLinecap="round"
-                                    initial={{ pathLength: 0, opacity: 0 }}
-                                    animate={{ pathLength: 1, opacity: 1 }}
-                                    transition={{ duration: 0.8, delay: 0.5, ease: "easeInOut" }}
-                                />
-                                <motion.path
-                                    d="M 170 50 C 160 30, 80 20, 30 60 C 10 80, 40 120, 100 125 C 160 130, 210 100, 190 60"
-                                    fill="transparent"
-                                    stroke="#DC2626"
-                                    strokeWidth="3"
-                                    strokeLinecap="round"
-                                    initial={{ pathLength: 0, opacity: 0 }}
-                                    animate={{ pathLength: 1, opacity: 0.7 }}
-                                    transition={{ duration: 0.7, delay: 1.2, ease: "easeInOut" }}
-                                />
-                            </svg>
-                        )}
+                        {/* 手寫圈選動畫：及格藍色、不及格紅色 */}
+                        <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" style={{ filter: `drop-shadow(2px 2px 2px ${isPassed ? 'rgba(37, 99, 235, 0.2)' : 'rgba(220, 38, 38, 0.2)'})` }}>
+                            <motion.path
+                                d="M 10 50 C 20 20, 100 10, 180 40 C 220 55, 200 100, 150 110 C 100 120, 50 110, 20 80 C 10 60, 40 40, 80 40"
+                                fill="transparent"
+                                stroke={scoreColor}
+                                strokeWidth="4"
+                                strokeLinecap="round"
+                                initial={{ pathLength: 0, opacity: 0 }}
+                                animate={{ pathLength: 1, opacity: 1 }}
+                                transition={{ duration: 0.8, delay: 0.5, ease: "easeInOut" }}
+                            />
+                            <motion.path
+                                d="M 170 50 C 160 30, 80 20, 30 60 C 10 80, 40 120, 100 125 C 160 130, 210 100, 190 60"
+                                fill="transparent"
+                                stroke={scoreColor}
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                initial={{ pathLength: 0, opacity: 0 }}
+                                animate={{ pathLength: 1, opacity: 0.7 }}
+                                transition={{ duration: 0.7, delay: 1.2, ease: "easeInOut" }}
+                            />
+                        </svg>
                         
-                        <div className="flex flex-col items-center relative z-10 font-['Caveat'] text-red-600 transform -rotate-3 origin-center">
+                        <div className={`flex flex-col items-center relative z-10 font-['Caveat'] ${scoreColorClass} transform -rotate-3 origin-center`}>
                             <div className="flex items-baseline">
                                 <motion.span className="text-8xl font-bold tracking-tighter loading-none">
                                     {rounded}
                                 </motion.span>
-                                <span className="text-4xl font-bold ml-2 opacity-80 decoration-2 decoration-red-600 underline decoration-wavy">分</span>
+                                <span className={`text-4xl font-bold ml-2 opacity-80 decoration-2 ${underlineColorClass} underline decoration-wavy`}>分</span>
                             </div>
-                            <div className="text-2xl font-bold text-red-500/80 border-t-2 border-red-500/50 w-full pt-1 mt-1 -rotate-2">
+                            <div className={`text-2xl font-bold ${scoreSubColorClass} border-t-2 w-full pt-1 mt-1 -rotate-2`}>
                                 / {totalScore}
                             </div>
                         </div>

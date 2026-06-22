@@ -54,15 +54,9 @@ const ExamDashboard = () => {
             const today = `${year}-${month}-${day}`;
             
             const activeExams = res.data.filter((exam: ExamItem) => {
-                // 如果後端已經標記為過期，直接過濾
+                // 已過期訓練不顯示（含後端標記 expired，或結束日已過）
                 if (exam.status === 'expired') return false;
-                
-                // 雙重檢查日期 (防止後端時區差異或狀態更新延遲)
-                // 如果有結束日期，且今天已經超過結束日期，且尚未完成，則視為過期
-                if (exam.end_date && exam.end_date < today && exam.status !== 'completed') {
-                    return false;
-                }
-                
+                if (exam.end_date && exam.end_date < today) return false;
                 return true;
             });
             setExams(activeExams);
@@ -196,10 +190,7 @@ const ExamDashboard = () => {
                                     <CheckInButton
                                         planId={exam.plan_id}
                                         refreshKey={location.key}
-                                        onCheckInSuccess={() => {
-                                            // 報到成功後可以選擇自動進入考試或重新載入列表
-                                            // 這裡我們先不自動進入，讓用戶點擊卡片進入
-                                        }}
+                                        onCheckInSuccess={() => navigate(`/exam/run/${exam.plan_id}`)}
                                     />
                                 </div>
                             )}

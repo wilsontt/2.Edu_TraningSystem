@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { LayoutDashboard, BookOpen, PenTool, BarChart3, Settings, LogOut, ChevronDown, Menu, X, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, BookOpen, PenTool, BarChart3, Settings, LogOut, ChevronDown, Menu, X, ClipboardList, Library } from 'lucide-react';
 import api from './api';
 import LoginPage from './components/LoginPage';
 import DepartmentManager from './components/admin/DepartmentManager';
@@ -20,6 +20,7 @@ import ReportDashboard from './components/admin/ReportDashboard';
 import ExamStudio from './components/admin/ExamStudio';
 import QRCodeManager from './components/admin/QRCodeManager';
 import ExamDashboard from './components/exam/ExamDashboard';
+import TeachingMaterialLibrary from './components/teaching/TeachingMaterialLibrary';
 import ExamRunner from './components/exam/ExamRunner';
 import PersonalScorePage from './components/personal/PersonalScorePage';
 import CheckInPage from './components/exam/CheckInPage';
@@ -68,6 +69,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     { name: '訓練計畫', path: '/plans', icon: <BookOpen className="w-4 h-4" />, code: 'menu:plan' },
     { name: '報到總覽', path: '/attendance-overview', icon: <ClipboardList className="w-4 h-4" />, code: 'menu:attendance-overview' },
     { name: '考卷工坊', path: '/exams', icon: <PenTool className="w-4 h-4" />, code: 'menu:exam' },
+    { name: '教材庫', path: '/teaching-materials', icon: <Library className="w-4 h-4" />, code: 'menu:exam' },
     { name: '成績中心', path: '/reports', icon: <BarChart3 className="w-4 h-4" />, code: 'menu:report' },
   ].filter(item => user.role === 'Admin' || functions.includes(item.code));
 
@@ -309,6 +311,7 @@ const App = () => {
                     <Route path="/plans" element={user.functions?.includes('menu:plan') || user.role === 'Admin' ? <TrainingPlanManager /> : <Navigate to="/" />} />
                     <Route path="/attendance-overview" element={user.functions?.includes('menu:attendance-overview') || user.role === 'Admin' ? <AttendanceOverviewPage /> : <Navigate to="/" />} />
                     <Route path="/exams" element={user.functions?.includes('menu:exam') || user.role === 'Admin' ? <ExamStudio /> : <Navigate to="/" />} />
+                    <Route path="/teaching-materials" element={user.functions?.includes('menu:exam') || user.role === 'Admin' ? <TeachingMaterialLibrary /> : <Navigate to="/" />} />
                     <Route path="/reports" element={<PersonalScorePage />} />
                     <Route path="/reports/personal" element={<PersonalScorePage />} />
                     <Route path="/admin/departments" element={user.role === 'Admin' ? <DepartmentManager /> : <Navigate to="/" />} />

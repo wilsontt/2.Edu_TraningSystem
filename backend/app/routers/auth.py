@@ -158,7 +158,7 @@ async def get_captcha():
     colors = [(220, 38, 38), (22, 163, 74), (37, 99, 235), (234, 88, 12)]  # 紅, 綠, 藍, 橘
     
     for i, char in enumerate(captcha_text):
-        x = 16 + i * 44  # 4 碼：16, 60, 104, 148，皆在 width 200 內
+        x = 24 + i * 42  # 增加左側留白，避免第一碼被裁切
         y = 10 + random.randint(0, 6)
         color = colors[i % len(colors)]
         draw.text((x, y), char, font=font, fill=color)

@@ -256,6 +256,9 @@ def get_my_exams(
             # 以 ExamHistory 筆數代表實際提交次數；舊資料無 history 時至少為 1
             attempts = history_count if history_count > 0 else 1
 
+        if status == "expired" or (end_date and today > end_date):
+            continue
+
         results.append(ExamListItem(
             plan_id=plan.id,
             title=plan.title,
