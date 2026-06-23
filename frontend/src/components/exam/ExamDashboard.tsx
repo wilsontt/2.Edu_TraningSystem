@@ -54,9 +54,9 @@ const ExamDashboard = () => {
             const today = `${year}-${month}-${day}`;
             
             const activeExams = res.data.filter((exam: ExamItem) => {
-                // 已過期訓練不顯示（含後端標記 expired，或結束日已過）
+                // 已過期訓練不顯示；已考完（含未及格補考）仍保留
                 if (exam.status === 'expired') return false;
-                if (exam.end_date && exam.end_date < today) return false;
+                if (exam.end_date && exam.end_date < today && exam.status !== 'completed') return false;
                 return true;
             });
             setExams(activeExams);

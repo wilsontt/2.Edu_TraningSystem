@@ -449,7 +449,7 @@ class MaterialType(MaterialTypeBase):
 
 class TeachingMaterial(BaseModel):
     id: int
-    plan_id: int
+    plan_id: Optional[int] = None
     title: str
     material_type_id: int
     description: Optional[str] = None

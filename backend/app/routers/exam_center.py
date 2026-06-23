@@ -235,14 +235,13 @@ def get_my_exams(
         calculated_total = sum([q.points for q in qs]) if qs else 0
         total = calculated_total if calculated_total > 0 else 100
 
+        start_date = plan.training_date
+        end_date = plan.end_date
+
         if record and record.submit_time is not None:
             status = "completed"
             score = record.total_score
         else:
-            # Check dates
-            start_date = plan.training_date
-            end_date = plan.end_date
-            
             if today < start_date:
                 status = "pending"
             elif end_date and today > end_date:
@@ -256,7 +255,10 @@ def get_my_exams(
             # 以 ExamHistory 筆數代表實際提交次數；舊資料無 history 時至少為 1
             attempts = history_count if history_count > 0 else 1
 
-        if status == "expired" or (end_date and today > end_date):
+        # 過濾已過期訓練；已提交成績者（含未及格補考）仍顯示，與 start_exam 補考規則一致
+        if status == "expired":
+            continue
+        if end_date and today > end_date and status != "completed":
             continue
 
         results.append(ExamListItem(

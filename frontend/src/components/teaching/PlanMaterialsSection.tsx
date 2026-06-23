@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Upload, Download, Trash2, Loader2, FileText, AlertCircle } from 'lucide-react';
+import { Upload, Download, Trash2, Loader2, FileText, AlertCircle, X } from 'lucide-react';
 import axios, { AxiosError, type AxiosProgressEvent } from 'axios';
 import api from '../../api';
 import NasLoginModal from './NasLoginModal';
 import FileTransferModal from './FileTransferModal';
-import { saveBlob, idleTransfer, type TransferState } from './transfer';
+import { saveBlob, idleTransfer, type TransferState, mergeSelectedFiles, MATERIAL_ACCEPT, IN_FLIGHT_PROGRESS_CAP } from './transfer';
 
 interface MaterialType {
     id: number;
@@ -19,6 +19,7 @@ interface Material {
     title: string;
     original_filename: string;
     material_type_id: number;
+    description: string | null;
     file_format: string;
     file_size_bytes: number;
     uploaded_at: string;
@@ -51,6 +52,7 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
     const [types, setTypes] = useState<MaterialType[]>([]);
     const [materials, setMaterials] = useState<Material[]>([]);
     const [materialTypeId, setMaterialTypeId] = useState('');
+    const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [tags, setTags] = useState('');
     const [files, setFiles] = useState<File[]>([]);
@@ -101,7 +103,7 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
     };
 
     const onProgress = (e: AxiosProgressEvent) =>
-        setTransfer(s => (s.open ? { ...s, progress: e.total ? Math.round((e.loaded / e.total) * 100) : s.progress } : s));
+        setTransfer(s => (s.open ? { ...s, progress: e.total ? Math.min(IN_FLIGHT_PROGRESS_CAP, Math.round((e.loaded / e.total) * 100)) : s.progress } : s));
 
     const isCancel = (err: unknown) => axios.isCancel(err) || (err as { code?: string })?.code === 'ERR_CANCELED';
 
@@ -109,6 +111,8 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
         const fd = new FormData();
         fd.append('plan_id', String(planId));
         fd.append('material_type_id', materialTypeId);
+        // 標題為單筆欄位，多檔批次上傳時套用同一標題沒有意義，僅單檔時套用
+        if (title && files.length === 1) fd.append('title', title);
         if (description) fd.append('description', description);
         if (tags) fd.append('tags', tags);
         if (onConflict) fd.append('on_conflict', onConflict);
@@ -131,6 +135,10 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
             setResultMsg(`成功上傳 ${r.succeeded.length} 筆${failMsg}`);
             setFiles([]);
             setFileInputKey(k => k + 1);
+            setMaterialTypeId('');
+            setTitle('');
+            setDescription('');
+            setTags('');
             fetchMaterials();
         } catch (err) {
             if (isCancel(err)) return;
@@ -230,12 +238,52 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
                             <option key={t.id} value={t.id}>{t.name}</option>
                         ))}
                     </select>
+                    <div className="flex items-start gap-2">
+                        <label className="flex items-center gap-2 px-3 py-2 border-2 border-dashed border-indigo-300 bg-white rounded-lg text-sm font-bold text-indigo-600 hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer transition-colors shrink-0">
+                            <FileText className="w-4 h-4 shrink-0" />
+                            <span className="truncate">{files.length > 0 ? `已選 ${files.length} 個檔案` : '選擇檔案…'}</span>
+                            <input
+                                key={fileInputKey}
+                                type="file"
+                                multiple
+                                accept={MATERIAL_ACCEPT}
+                                onChange={e => {
+                                    const picked = e.target.files ? Array.from(e.target.files) : [];
+                                    const { merged, rejected, overflow } = mergeSelectedFiles(files, picked);
+                                    setFiles(merged);
+                                    setFileInputKey(k => k + 1);
+                                    if (rejected.length) setError(`不允許的格式：${rejected.join('、')}`);
+                                    else if (overflow) setError(`單次最多 5 檔，已忽略超出的 ${overflow} 個檔案`);
+                                    else setError(null);
+                                }}
+                                className="hidden"
+                            />
+                        </label>
+                        {files.length > 0 && (
+                            <ul className="flex-1 min-w-0 text-xs text-gray-600 space-y-0.5 py-1">
+                                {files.map((f, i) => (
+                                    <li key={i} className="flex items-center justify-between gap-1 truncate">
+                                        <span className="truncate">{i + 1}. {f.name}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))}
+                                            className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer shrink-0"
+                                            title="移除"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
                     <input
-                        key={fileInputKey}
-                        type="file"
-                        multiple
-                        onChange={e => setFiles(e.target.files ? Array.from(e.target.files) : [])}
-                        className="text-sm"
+                        type="text"
+                        placeholder={files.length > 1 ? '標題（多檔上傳時不套用，一律使用檔名）' : '標題（選填，預設使用檔名）'}
+                        value={title}
+                        onChange={e => setTitle(e.target.value)}
+                        disabled={files.length > 1}
+                        className="px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
                     />
                     <input
                         type="text"
@@ -252,7 +300,7 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
                         className="px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
                     />
                     <div className="md:col-span-2 flex items-center justify-between">
-                        <span className="text-xs text-gray-500">{files.length > 0 ? `已選 ${files.length} 檔` : '可多選；單次≤5檔/100MB'}</span>
+                        <span className="text-xs text-gray-500">可多選；單次≤5檔/100MB</span>
                         <button
                             type="button"
                             onClick={handleUploadClick}
@@ -276,10 +324,13 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
                 ) : (
                     materials.map(m => (
                         <div key={m.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                            <span className="text-sm text-gray-700 truncate flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
-                                {m.original_filename}
-                                <span className="text-xs text-gray-400">({fmtSize(m.file_size_bytes)})</span>
+                            <span className="text-sm text-gray-700 truncate flex flex-col">
+                                <span className="flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
+                                    {m.original_filename}
+                                    <span className="text-xs text-gray-400">({fmtSize(m.file_size_bytes)})</span>
+                                </span>
+                                {m.description && <span className="text-xs text-gray-400 truncate pl-6">{m.description}</span>}
                             </span>
                             <div className="flex items-center gap-1 shrink-0">
                                 <button type="button" onClick={() => requireNas('下載教材', token => doDownload(token, m))} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer" title="下載">

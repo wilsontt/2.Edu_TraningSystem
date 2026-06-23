@@ -109,7 +109,7 @@ def _content_disposition(filename: str) -> str:
     return f"attachment; filename*=UTF-8''{quote(filename)}"
 
 
-def _find_active_conflict(db: Session, plan_id: int, original_filename: str) -> Optional[models.TeachingMaterial]:
+def _find_active_conflict(db: Session, plan_id: Optional[int], original_filename: str) -> Optional[models.TeachingMaterial]:
     return db.query(models.TeachingMaterial).filter(
         models.TeachingMaterial.plan_id == plan_id,
         models.TeachingMaterial.is_active == True,  # noqa: E712
@@ -225,7 +225,7 @@ def verify_nas_session(
 
 @router.get("/conflict-check", response_model=schemas.ConflictCheckResponse)
 def conflict_check(
-    plan_id: int = Query(...),
+    plan_id: Optional[int] = Query(None),
     original_filename: str = Query(...),
     db: Session = Depends(get_db),
     current_user=check_permission("menu:exam"),
@@ -250,7 +250,7 @@ def conflict_check(
 @router.post("/upload", response_model=schemas.UploadResult)
 async def upload_materials(
     request: Request,
-    plan_id: int = Form(...),
+    plan_id: Optional[int] = Form(None),
     material_type_id: int = Form(...),
     title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
@@ -268,11 +268,13 @@ async def upload_materials(
     emp_id = getattr(current_user, "emp_id", None)
     client_ip = _client_ip(request)
 
-    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="訓練計畫不存在")
-    if plan.is_archived:
-        raise HTTPException(status_code=403, detail="計畫已封存，無法上傳教材")
+    plan = None
+    if plan_id is not None:
+        plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+        if not plan:
+            raise HTTPException(status_code=404, detail="訓練計畫不存在")
+        if plan.is_archived:
+            raise HTTPException(status_code=403, detail="計畫已封存，無法上傳教材")
 
     mt = db.query(models.MaterialType).filter(models.MaterialType.id == material_type_id).first()
     if not mt or not mt.is_active:
@@ -295,7 +297,8 @@ async def upload_materials(
 
     creds = _resolve_credentials(nas_session_token, nas_username, nas_password)
     type_max = _type_max_bytes(mt)
-    year = plan.year if plan.year else str(datetime.utcnow().year)
+    year = (plan.year if plan and plan.year else None) or str(datetime.utcnow().year)
+    sub_category_id = plan.sub_category_id if plan else None
     tags_json = _parse_tags(tags)
 
     succeeded: List[dict] = []
@@ -347,13 +350,14 @@ async def upload_materials(
                             description=description, tags=tags_json,
                             original_filename=fname, stored_filename="", storage_path="",
                             file_format=ext, file_size_bytes=len(raw), year=year,
-                            sub_category_id=plan.sub_category_id, uploaded_by=emp_id,
+                            sub_category_id=sub_category_id, uploaded_by=emp_id,
                             uploaded_at=datetime.utcnow(), is_active=True,
                         )
                         db.add(material)
                         db.flush()  # 取得 id
                         stored_filename = f"{material.id}.{ext}"
-                        storage_path = f"{year}/{plan_id}/teaching/{mt.slug}/{stored_filename}"
+                        plan_segment = str(plan_id) if plan_id is not None else "general"
+                        storage_path = f"{year}/{plan_segment}/teaching/{mt.slug}/{stored_filename}"
                         st.save(storage_path, raw)
                         material.stored_filename = stored_filename
                         material.storage_path = storage_path
