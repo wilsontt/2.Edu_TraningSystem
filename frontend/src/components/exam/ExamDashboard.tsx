@@ -45,7 +45,7 @@ const ExamDashboard = () => {
     const fetchExams = async () => {
         try {
             const res = await api.get('/exam/my_exams');
-            // 過濾掉已過期的考試 (後端狀態為 expired 或 日期已過且未完成)
+            // 過濾已過期訓練（不論是否已通過或提交成績）
             // 使用本地時間來進行比較，避免 UTC 時間差問題
             const now = new Date();
             const year = now.getFullYear();
@@ -54,9 +54,8 @@ const ExamDashboard = () => {
             const today = `${year}-${month}-${day}`;
             
             const activeExams = res.data.filter((exam: ExamItem) => {
-                // 已過期訓練不顯示；已考完（含未及格補考）仍保留
-                if (exam.status === 'expired') return false;
-                if (exam.end_date && exam.end_date < today && exam.status !== 'completed') return false;
+                // 已過期訓練不顯示（不論是否已通過或提交成績）
+                if (exam.end_date && exam.end_date < today) return false;
                 return true;
             });
             setExams(activeExams);

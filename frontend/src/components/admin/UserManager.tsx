@@ -79,13 +79,13 @@ const UserManager = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [showInactiveUsers]);
 
   const fetchData = async () => {
     try {
       setIsLoading(true);
       const [usersRes, rolesRes, deptsRes, jobTitlesRes] = await Promise.all([
-        api.get('/admin/users'),
+        api.get('/admin/users', { params: { include_inactive: showInactiveUsers } }),
         api.get('/admin/roles'),
         api.get('/admin/departments'),
         api.get('/admin/job-titles')

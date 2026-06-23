@@ -3,11 +3,12 @@
 負責處理組織架構 (部門、職務)、使用者帳號、角色權限以及課程分類的核心 CRUD 操作。
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Body
+from fastapi import APIRouter, HTTPException, Depends, Body, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from .. import models, schemas
 from ..database import get_db
+from ..access_scope import apply_active_user_filter
 from .auth import check_permission
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -83,9 +84,11 @@ def get_department_users(
         raise HTTPException(status_code=404, detail="單位不存在")
 
     users = (
-        db.query(models.User)
-        .options(joinedload(models.User.role))
-        .filter(models.User.dept_id == id)
+        apply_active_user_filter(
+            db.query(models.User)
+            .options(joinedload(models.User.role))
+            .filter(models.User.dept_id == id)
+        )
         .order_by(models.User.emp_id.asc())
         .all()
     )
@@ -266,10 +269,12 @@ def get_job_title_users(id: int, db: Session = Depends(get_db), current_user=che
     obj = db.query(models.JobTitle).filter(models.JobTitle.id == id).first()
     if not obj:
         raise HTTPException(status_code=404, detail="職務不存在")
-    users = db.query(models.User).options(
-        joinedload(models.User.department),
-        joinedload(models.User.role),
-    ).filter(models.User.job_title_id == id).all()
+    users = apply_active_user_filter(
+        db.query(models.User).options(
+            joinedload(models.User.department),
+            joinedload(models.User.role),
+        ).filter(models.User.job_title_id == id)
+    ).all()
     return {
         "job_title_id": id,
         "job_title_name": obj.name,
@@ -304,13 +309,20 @@ def delete_job_title(id: int, db: Session = Depends(get_db), current_user=check_
 # ----------------------------------------------------------------
 
 @router.get("/users", response_model=List[schemas.UserDetail])
-def get_users(db: Session = Depends(get_db), current_user=check_permission("menu:admin:user")):
-    """取得所有使用者"""
-    return db.query(models.User).options(
+def get_users(
+    include_inactive: bool = Query(False, description="是否包含停用帳號（僅人員管理使用）"),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:admin:user"),
+):
+    """取得使用者列表；預設僅在職帳號。"""
+    query = db.query(models.User).options(
         joinedload(models.User.department),
         joinedload(models.User.role),
         joinedload(models.User.job_title),
-    ).all()
+    )
+    if not include_inactive:
+        query = apply_active_user_filter(query)
+    return query.all()
 
 @router.put("/users/{emp_id}", response_model=schemas.UserDetail)
 def update_user(emp_id: str, user_update: schemas.UserUpdate, db: Session = Depends(get_db), current_user = check_permission("menu:admin:user")):

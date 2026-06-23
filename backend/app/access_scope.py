@@ -75,6 +75,16 @@ def resolve_data_scope(current_user: models.User, db: Optional[Session] = None) 
     return "self"
 
 
+def is_active_user_status(status: Optional[str]) -> bool:
+    """帳號是否為在職（active）。"""
+    return (status or "").strip().lower() == "active"
+
+
+def apply_active_user_filter(query):
+    """SQLAlchemy User 查詢：僅在職帳號。"""
+    return query.filter(models.User.status == "active")
+
+
 def get_scope_emp_ids(db: Session, current_user: models.User, active_only: bool = False) -> Optional[List[str]]:
     """
     回傳可見 emp_id 範圍：
@@ -98,6 +108,8 @@ def get_scope_emp_ids(db: Session, current_user: models.User, active_only: bool 
             }
 
     if scope == "all":
+        if active_only:
+            return [row[0] for row in apply_active_user_filter(db.query(models.User.emp_id)).all()]
         return None
 
     if scope == "department":

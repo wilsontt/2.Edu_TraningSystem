@@ -18,7 +18,7 @@ from ..access_scope import get_scope_emp_ids, apply_emp_scope as apply_emp_scope
 router = APIRouter(prefix="/admin/reports", tags=["reports"])
 
 def _get_report_scope_emp_ids(db: Session, current_user: models.User):
-    return get_scope_emp_ids(db, current_user, active_only=False)
+    return get_scope_emp_ids(db, current_user, active_only=True)
 
 
 def _apply_emp_scope(query, emp_ids):
@@ -622,7 +622,10 @@ def get_department_statistics(
             # 進階分析
             if include_advanced:
                 # 計算完成率
-                dept_users_query = db.query(models.User).filter(models.User.dept_id == r.id)
+                dept_users_query = db.query(models.User).filter(
+                    models.User.dept_id == r.id,
+                    models.User.status == "active",
+                )
                 if emp_scope_ids is not None:
                     dept_users_query = dept_users_query.filter(models.User.emp_id.in_(emp_scope_ids))
                 dept_users = dept_users_query.count()
@@ -930,7 +933,10 @@ def get_department_comparison(
             pass_rate = (passed / total * 100) if total > 0 else 0
             
             # 計算完成率（該部門已完成考試的人數 / 應考人數）
-            dept_users_query = db.query(models.User).filter(models.User.dept_id == r.id)
+            dept_users_query = db.query(models.User).filter(
+                models.User.dept_id == r.id,
+                models.User.status == "active",
+            )
             if emp_scope_ids is not None:
                 dept_users_query = dept_users_query.filter(models.User.emp_id.in_(emp_scope_ids))
             dept_users = dept_users_query.count()
@@ -1002,6 +1008,7 @@ def get_department_details(
             models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id
         ).filter(
             models.User.dept_id == dept_id,
+            models.User.status == "active",
             models.ExamRecord.submit_time.isnot(None)
         )
         if emp_scope_ids is not None:

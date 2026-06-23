@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from .. import models, schemas
 from ..database import get_db
 from .auth import get_current_user
-from ..access_scope import get_scope_emp_ids
+from ..access_scope import get_scope_emp_ids, is_active_user_status
 
 _TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 
@@ -106,6 +106,10 @@ def _has_menu_report_permission(current_user: models.User) -> bool:
 
 
 def _can_view_emp_id(db: Session, current_user: models.User, target_emp_id: str) -> bool:
+    target_user = db.query(models.User).filter(models.User.emp_id == target_emp_id).first()
+    if not target_user or not is_active_user_status(target_user.status):
+        return False
+
     role_name = (current_user.role and current_user.role.name) or ""
     if is_admin_or_system_role(role_name):
         return True
@@ -113,7 +117,7 @@ def _can_view_emp_id(db: Session, current_user: models.User, target_emp_id: str)
         return True
     if not _has_menu_report_permission(current_user):
         return False
-    allowed_emp_ids = get_scope_emp_ids(db, current_user, active_only=False)
+    allowed_emp_ids = get_scope_emp_ids(db, current_user, active_only=True)
     return allowed_emp_ids is None or target_emp_id in allowed_emp_ids
 
 # --- 考試中心資料結構 ---
@@ -255,10 +259,8 @@ def get_my_exams(
             # 以 ExamHistory 筆數代表實際提交次數；舊資料無 history 時至少為 1
             attempts = history_count if history_count > 0 else 1
 
-        # 過濾已過期訓練；已提交成績者（含未及格補考）仍顯示，與 start_exam 補考規則一致
-        if status == "expired":
-            continue
-        if end_date and today > end_date and status != "completed":
+        # 過濾已過期訓練（不論是否已通過或提交成績）
+        if end_date and today > end_date:
             continue
 
         results.append(ExamListItem(
@@ -624,10 +626,13 @@ def _resolve_personal_target_emp_id(
     role_name = (current_user.role and current_user.role.name) or ""
     is_admin = is_admin_or_system_role(role_name)
     if emp_id:
+        target_user = db.query(models.User).filter(models.User.emp_id == emp_id).first()
+        if not target_user or not is_active_user_status(target_user.status):
+            raise HTTPException(status_code=404, detail="該帳號已停用或不存在")
         if not is_admin:
             if not _has_menu_report_permission(current_user):
                 raise HTTPException(status_code=403, detail="只有 Admin 或具成績中心權限者可以查看其他使用者的成績")
-            allowed_emp_ids = get_scope_emp_ids(db, current_user, active_only=False)
+            allowed_emp_ids = get_scope_emp_ids(db, current_user, active_only=True)
             if allowed_emp_ids is not None and emp_id not in allowed_emp_ids:
                 raise HTTPException(status_code=403, detail="目標員工不在您的可視範圍內")
         return emp_id
