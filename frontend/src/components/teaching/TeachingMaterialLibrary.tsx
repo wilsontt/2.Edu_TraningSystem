@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Library, Search, Download, Trash2, Loader2, CheckSquare, Square, PackageOpen, Upload, FileText, AlertCircle, X } from 'lucide-react';
+import { Library, Search, Download, Trash2, Loader2, CheckSquare, Square, PackageOpen, Upload, FileText, AlertCircle, X, PenTool } from 'lucide-react';
 import axios, { AxiosError, type AxiosProgressEvent } from 'axios';
 import { PaginatedDataTable, type DataTableColumn } from '@shared-ui/data-table';
 import api from '../../api';
@@ -49,7 +49,12 @@ interface MaterialList {
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
-const TeachingMaterialLibrary = () => {
+interface TeachingMaterialLibraryProps {
+    /** 提供時，於標頭顯示「返回考卷工坊」按鈕（教材庫掛載於考卷工坊頁籤內時使用）。 */
+    onBack?: () => void;
+}
+
+const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) => {
     const [items, setItems] = useState<Material[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -339,13 +344,24 @@ const TeachingMaterialLibrary = () => {
                         <p className="text-gray-500 font-medium text-sm">跨計畫搜尋、勾選與批次下載教材（下載前須 NAS 登入）</p>
                     </div>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => setUploadOpen(o => !o)}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 cursor-pointer"
-                >
-                    <Upload className="w-4 h-4" /> 上傳教材
-                </button>
+                <div className="flex items-center gap-2">
+                    {onBack && (
+                        <button
+                            type="button"
+                            onClick={onBack}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-sm font-bold hover:bg-indigo-50 cursor-pointer"
+                        >
+                            <PenTool className="w-4 h-4" /> 返回考卷工坊
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => setUploadOpen(o => !o)}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 cursor-pointer"
+                    >
+                        <Upload className="w-4 h-4" /> 上傳教材
+                    </button>
+                </div>
             </header>
 
             {/* 通用上傳（不綁定訓練計畫） */}

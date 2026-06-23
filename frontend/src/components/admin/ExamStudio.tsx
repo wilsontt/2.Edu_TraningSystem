@@ -4,13 +4,14 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download, Lightbulb, ChevronUp, ChevronDown, X } from 'lucide-react';
+import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download, Lightbulb, ChevronUp, ChevronDown, X, Library } from 'lucide-react';
 import { AxiosError } from 'axios';
 import api from '../../api';
 import QuestionEditorModal from './QuestionEditorModal';
 import QuestionBankManager from './QuestionBankManager';
 import BankImportModal from './BankImportModal';
 import Pagination from '../common/Pagination';
+import TeachingMaterialLibrary from '../teaching/TeachingMaterialLibrary';
 
 interface TrainingPlan {
   id: number;
@@ -62,7 +63,7 @@ const ExamStudio = () => {
     const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
     const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
-    const [mode, setMode] = useState<'plan' | 'bank'>('plan');
+    const [mode, setMode] = useState<'plan' | 'bank' | 'materials'>('plan');
     const [showImportModal, setShowImportModal] = useState(false);
     const [expandedHints, setExpandedHints] = useState<Record<number, boolean>>({});
     
@@ -357,6 +358,10 @@ const ExamStudio = () => {
         );
     }
 
+    if (mode === 'materials') {
+        return <TeachingMaterialLibrary onBack={() => setMode('plan')} />;
+    }
+
     return (
         <div className="max-w-7xl mx-auto p-6 space-y-6 h-[calc(100vh-100px)]">
             <div className="flex items-center justify-between mb-6">
@@ -367,13 +372,22 @@ const ExamStudio = () => {
                         <p className="text-gray-500 font-medium">上傳 TXT 考卷題目，系統將自動解析並匯入題庫</p>
                     </div>
                 </div>
-                <button 
-                    onClick={() => setMode('bank')}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 hover:shadow-green-300 transition-all duration-200 shadow-lg shadow-green-200 cursor-pointer"
-                >
-                    <Archive className="w-4 h-4" />
-                    歷史題庫維護
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setMode('materials')}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 hover:shadow-indigo-300 transition-all duration-200 shadow-lg shadow-indigo-200 cursor-pointer"
+                    >
+                        <Library className="w-4 h-4" />
+                        教材庫
+                    </button>
+                    <button
+                        onClick={() => setMode('bank')}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 hover:shadow-green-300 transition-all duration-200 shadow-lg shadow-green-200 cursor-pointer"
+                    >
+                        <Archive className="w-4 h-4" />
+                        歷史題庫維護
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-12 gap-6 h-full">
