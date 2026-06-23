@@ -100,9 +100,9 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
   }
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto print:hidden">
+    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto print:hidden">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">
           {titlePrefix ? `${titlePrefix} 個人學習分析` : '個人學習分析'}
         </h2>
         <p className="text-gray-500 mt-1">
@@ -111,7 +111,7 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
       </div>
 
       {/* 學習進度 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-gray-900 flex items-center">
             <Target className="mr-2 h-5 w-5 text-blue-500" />
@@ -134,7 +134,7 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* 擅長領域 */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
             <TrendingUp className="mr-2 h-5 w-5 text-green-500" />
             擅長領域
@@ -160,7 +160,7 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
         </div>
 
         {/* 需要加強的領域 */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
             <TrendingDown className="mr-2 h-5 w-5 text-red-500" />
             需要加強的領域
@@ -188,7 +188,7 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
 
       {/* 分類成績分析圖表 */}
       {analysis.category_analysis.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4">各分類成績分析</h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={analysis.category_analysis}>
@@ -205,14 +205,14 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
 
       {/* 成績趨勢圖 */}
       {analysis.trend_data.length > 0 && (
-        <div ref={trendChartRef} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between mb-4">
+        <div ref={trendChartRef} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <h3 className="text-lg font-bold text-gray-900">成績趨勢</h3>
             {/* 頁籤切換 */}
-            <div className="flex gap-2 bg-gray-100 rounded-lg p-1">
+            <div className="flex gap-2 bg-gray-100 rounded-lg p-1 w-fit">
               <button
                 onClick={() => setTrendPeriod(3)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                className={`shrink-0 px-3 sm:px-4 py-2 rounded-md text-sm font-medium transition-all ${
                   trendPeriod === 3
                     ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
@@ -222,7 +222,7 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
               </button>
               <button
                 onClick={() => setTrendPeriod(6)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                className={`shrink-0 px-3 sm:px-4 py-2 rounded-md text-sm font-medium transition-all ${
                   trendPeriod === 6
                     ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
@@ -232,7 +232,7 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
               </button>
               <button
                 onClick={() => setTrendPeriod(12)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                className={`shrink-0 px-3 sm:px-4 py-2 rounded-md text-sm font-medium transition-all ${
                   trendPeriod === 12
                     ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'

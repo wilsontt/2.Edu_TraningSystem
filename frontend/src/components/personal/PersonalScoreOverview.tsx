@@ -74,9 +74,9 @@ export default function PersonalScoreOverview({ empId, titlePrefix, onNavigateHi
   }
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto print:hidden">
+    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto print:hidden">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">
           {titlePrefix ? `${titlePrefix} 個人成績總覽` : '個人成績總覽'}
         </h2>
         <p className="text-gray-500 mt-1">

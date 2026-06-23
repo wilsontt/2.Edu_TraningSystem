@@ -173,20 +173,20 @@ export default function PersonalScorePage() {
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto">
+    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
       {/* 頁面標題 */}
-      <header className="flex items-center gap-4">
+      <header className="flex items-center gap-3 sm:gap-4">
         <button
           type="button"
           onClick={resetToSelfView}
           title="回到登入者的個人成績中心"
-          className="w-14 h-14 rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200 cursor-pointer"
+          className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200 cursor-pointer shrink-0"
         >
-          <Award className="w-7 h-7 text-white" />
+          <Award className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
         </button>
         <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight mb-1">成績中心</h1>
-          <p className="text-gray-500 font-medium">查看個人學習成績與分析報表</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight mb-1">成績中心</h1>
+          <p className="text-sm sm:text-base text-gray-500 font-medium">查看個人學習成績與分析報表</p>
         </div>
       </header>
 
@@ -271,54 +271,56 @@ export default function PersonalScorePage() {
         </div>
       )}
 
-      {/* Tab 切換 */}
-      <div className="flex space-x-1 bg-indigo-50/50 p-1.5 rounded-xl w-fit border border-indigo-100/50">
-        <button
-          onClick={() => navigateTab('overview')}
-          className={clsx(
-            "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
-            activeTab === 'overview'
-              ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
-              : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
-          )}
-        >
-          總覽
-        </button>
-        <button
-          onClick={() => navigateTab('history')}
-          className={clsx(
-            "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
-            activeTab === 'history'
-              ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
-              : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
-          )}
-        >
-          歷史記錄
-        </button>
-        <button
-          onClick={() => navigateTab('analysis')}
-          className={clsx(
-            "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
-            activeTab === 'analysis'
-              ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
-              : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
-          )}
-        >
-          學習分析
-        </button>
-        {hasReportPermission && (
+      {/* Tab 切換：手機螢幕較窄時 4 個頁籤可能超出版面寬度，改為可橫向滑動而非擠壓換行/溢出 */}
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex space-x-1 bg-indigo-50/50 p-1.5 rounded-xl w-fit border border-indigo-100/50">
           <button
-            onClick={() => navigateTab('team')}
+            onClick={() => navigateTab('overview')}
             className={clsx(
-              "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
-              activeTab === 'team'
+              "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+              activeTab === 'overview'
                 ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
                 : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
             )}
           >
-            部門成績
+            總覽
           </button>
-        )}
+          <button
+            onClick={() => navigateTab('history')}
+            className={clsx(
+              "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+              activeTab === 'history'
+                ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
+                : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+            )}
+          >
+            歷史記錄
+          </button>
+          <button
+            onClick={() => navigateTab('analysis')}
+            className={clsx(
+              "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+              activeTab === 'analysis'
+                ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
+                : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+            )}
+          >
+            學習分析
+          </button>
+          {hasReportPermission && (
+            <button
+              onClick={() => navigateTab('team')}
+              className={clsx(
+                "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+                activeTab === 'team'
+                  ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
+                  : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+              )}
+            >
+              部門成績
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tab 內容 */}

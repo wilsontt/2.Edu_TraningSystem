@@ -117,14 +117,14 @@ const ExamDashboard = () => {
 
     return (
         <>
-        <div className="max-w-6xl mx-auto p-6 space-y-8">
-            <header className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
-                    <GraduationCap className="w-7 h-7 text-white" />
+        <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+            <header className="flex items-center gap-3 sm:gap-4">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0">
+                    <GraduationCap className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
                 </div>
                 <div>
-                    <h1 className="text-3xl font-black text-gray-900 tracking-tight mb-1">考試中心</h1>
-                    <p className="text-gray-500 font-medium">查看您的考試任務與歷史成績</p>
+                    <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight mb-1">考試中心</h1>
+                    <p className="text-sm sm:text-base text-gray-500 font-medium">查看您的考試任務與歷史成績</p>
                 </div>
             </header>
 
@@ -142,9 +142,9 @@ const ExamDashboard = () => {
                 // <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {exams.map((exam) => (
-                        <div 
-                            key={exam.plan_id} 
-                            className={`bg-white p-6 rounded-2xl shadow-sm border transition-all duration-200 group
+                        <div
+                            key={exam.plan_id}
+                            className={`bg-white p-4 sm:p-6 rounded-2xl shadow-sm border transition-all duration-200 group
                                 ${(exam.status === 'active' || (exam.status === 'completed' && (exam.score !== null && exam.score < 60))) ? 'border-indigo-100 hover:shadow-lg hover:shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50/20' : 'border-gray-100 opacity-80 grayscale-[0.3]'}
                                 ${(exam.status === 'completed' && (exam.score === null || exam.score >= 60)) ? 'bg-gray-50/50' : ''}
                             `}
@@ -173,11 +173,11 @@ const ExamDashboard = () => {
                             </div>
 
                             {/* 開放時間 ＋ 挑戰次數 */}
-                            <div className="flex items-center gap-3 text-sm text-gray-500 font-mono">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-500 font-mono">
                                 <span>開放時間: {exam.training_date}</span>
                                 {exam.end_date && <span>~ {exam.end_date}</span>}
                                 {exam.attempts > 0 && (
-                                    <span className="bg-indigo-50 px-2 py-0.5 rounded text-indigo-600 font-bold ml-2">
+                                    <span className="bg-indigo-50 px-2 py-0.5 rounded text-indigo-600 font-bold">
                                         挑戰次數: {exam.attempts}
                                     </span>
                                 )}
@@ -200,7 +200,7 @@ const ExamDashboard = () => {
                                     onClick={() => {
                                         void handleStartExam(exam.plan_id);
                                     }}
-                                    className="mt-4 pt-4 border-t border-indigo-100/50 cursor-pointer text-center font-bold text-sm transition-all duration-200 py-2 rounded-lg hover:bg-green-50 text-green-600 hover:text-green-700"
+                                    className="mt-4 pt-4 border-t border-indigo-100/50 cursor-pointer text-center font-bold text-sm transition-all duration-200 py-3 rounded-lg hover:bg-green-50 text-green-600 hover:text-green-700"
                                 >
                                     開始考試 →
                                 </div>
@@ -230,7 +230,7 @@ const ExamDashboard = () => {
                         <button
                             type="button"
                             onClick={() => setShowNotCheckedInModal(false)}
-                            className="px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer"
+                            className="px-4 py-2.5 text-sm rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer"
                         >
                             取消
                         </button>
@@ -238,7 +238,7 @@ const ExamDashboard = () => {
                             type="button"
                             onClick={handleQuickCheckIn}
                             disabled={quickCheckInLoading}
-                            className="px-3 py-2 text-sm rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed cursor-pointer"
+                            className="px-4 py-2.5 text-sm rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed cursor-pointer"
                         >
                             {quickCheckInLoading ? '報到中...' : '立即報到'}
                         </button>

@@ -262,9 +262,9 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto print:hidden">
+    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto print:hidden">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">
           {titlePrefix ? `${titlePrefix} 個人成績歷史` : '個人成績歷史'}
         </h2>
         <p className="text-gray-500 mt-1">
@@ -316,7 +316,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
 
       {/* 計畫選擇器 */}
       {Object.keys(plansData).length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h3 className="text-lg font-bold text-gray-900">選擇計畫</h3>
             <div className="flex items-center gap-2">
@@ -336,7 +336,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {Object.values(plansData).map((plan, index) => (
               <label
                 key={plan.plan_id}
@@ -366,7 +366,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
 
       {/* 成績趨勢圖 */}
       {chartData.length > 0 && selectedPlanIds.size > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4">成績趨勢</h3>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={chartData}>

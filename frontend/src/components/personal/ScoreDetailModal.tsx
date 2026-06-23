@@ -110,7 +110,7 @@ export default function ScoreDetailModal({
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
         <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           {/* Header */}
-          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-4 flex items-center justify-between">
             <h3 className="text-xl font-bold text-gray-900">成績詳情</h3>
             <div className="flex items-center gap-2 flex-wrap justify-end">
               {detail && requireSignatureForPreview && (
@@ -161,7 +161,7 @@ export default function ScoreDetailModal({
           </div>
 
           {/* Content */}
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {loading ? (
               <div className="py-8 flex justify-center text-gray-500">載入中...</div>
             ) : !detail ? (
@@ -169,12 +169,12 @@ export default function ScoreDetailModal({
             ) : (
               <>
                 {/* 基本資訊 */}
-                <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                <div className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6">
                   <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
                     <FileText className="h-5 w-5 mr-2 text-blue-500" />
                     基本資訊
                   </h4>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <div className="text-sm text-gray-500 mb-1">考生姓名</div>
                       <div className="font-medium text-gray-900 flex items-center">
@@ -296,7 +296,7 @@ export default function ScoreDetailModal({
                             )}
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200">
                             <div>
                               <div className="text-sm text-gray-500 mb-1">您的答案</div>
                               <div className={clsx(
@@ -333,7 +333,7 @@ export default function ScoreDetailModal({
           </div>
 
           {/* Footer */}
-          <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end">
+          <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 sm:px-6 py-4 flex justify-end">
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
