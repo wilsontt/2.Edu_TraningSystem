@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # NAS interactive 短時 session token 有效秒數（教材傳輸；密碼不存 DB）
     nas_session_ttl_seconds: int = 600  # 10 分鐘
 
+    # 排程備份（Wave 4）：backup_nas_username/password 加密存於 DB，金鑰由此環境變數注入
+    # 產生方式：python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    backup_credential_secret: str = ""  # BACKUP_CREDENTIAL_SECRET
+
     @property
     def smb_configured(self) -> bool:
         """SMB 伺服器與共享是否已設定（interactive 模式前提）。"""

@@ -14,6 +14,7 @@ import api from '../../api';
 import Pagination from '../common/Pagination';
 import BulkAbsenceReasonModal from '../attendance/BulkAbsenceReasonModal';
 import PlanMaterialsSection from '../teaching/PlanMaterialsSection';
+import { parseBackendDateTime } from '../../utils/date';
 
 // ----------------------------------------------------------------
 // 型別定義 (Type Definitions)
@@ -1897,7 +1898,7 @@ const TrainingPlanManager = () => {
                                     <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
                                     <td className="px-4 py-2 text-gray-500 text-xs">
                                       {user.kind === 'actual' ? (
-                                        new Date(user.checkin_time).toLocaleString('zh-TW', { hour12: false })
+                                        parseBackendDateTime(user.checkin_time)?.toLocaleString('zh-TW', { hour12: false })
                                       ) : user.absence_reason_code ? (
                                         <span title={user.absence_reason_text || ''}>
                                           {ABSENCE_REASON_OPTIONS.find(o => o.code === user.absence_reason_code)?.label || user.absence_reason_code}

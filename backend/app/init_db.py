@@ -66,6 +66,7 @@ def init_db():
             {"name": "角色管理", "code": "menu:admin:role", "path": "/admin/roles", "parent_id": db_functions["menu:admin"].id},
             {"name": "權限管理", "code": "menu:admin:perm", "path": "/admin/permissions", "parent_id": db_functions["menu:admin"].id},
             {"name": "功能清單管理", "code": "menu:admin:func", "path": "/admin/functions", "parent_id": db_functions["menu:admin"].id},
+            {"name": "排程備份", "code": "menu:admin:backup", "path": "/admin/backup", "parent_id": db_functions["menu:admin"].id},
         ]
         
         for f in admin_sub:
@@ -144,6 +145,12 @@ def init_db():
                     name=name, slug=slug, max_file_bytes=max_bytes, sort_order=order, is_active=True
                 ))
         db.commit()
+
+        # 8. 建立排程備份預設設定（Wave 4；單例 id=1，冪等）
+        backup_config = db.query(models.BackupScheduleConfig).filter(models.BackupScheduleConfig.id == 1).first()
+        if not backup_config:
+            db.add(models.BackupScheduleConfig(id=1, enabled=False, frequency="daily", time_of_day="02:00", retention_count=7))
+            db.commit()
 
         print("Database initialized successfully!")
         

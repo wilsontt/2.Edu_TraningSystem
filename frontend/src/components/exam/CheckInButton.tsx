@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, Clock, Loader2, AlertCircle } from 'lucide-react';
 import api from '../../api';
+import { parseBackendDateTime } from '../../utils/date';
 
 interface CheckInButtonProps {
     planId: number;
@@ -81,8 +82,8 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess,
     }
 
     if (status?.is_checked_in) {
-        const checkinTime = status.checkin_time 
-            ? new Date(status.checkin_time).toLocaleString('zh-TW', {
+        const checkinTime = status.checkin_time
+            ? parseBackendDateTime(status.checkin_time)?.toLocaleString('zh-TW', {
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit',

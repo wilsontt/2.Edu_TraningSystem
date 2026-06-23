@@ -24,10 +24,20 @@ app = FastAPI(
 async def startup_event():
     """
     應用程式啟動時的初始化任務：
-    建立所有 SQLAlchemy 定義的資料表（若資料庫中尚不存在）。
+    建立所有 SQLAlchemy 定義的資料表（若資料庫中尚不存在），並啟動排程備份服務（Wave 4）。
     """
     Base.metadata.create_all(bind=engine)
     print("Database tables initialized - 系統資料庫初始化完成")
+    from .services.scheduler import start_scheduler
+    start_scheduler()
+    print("Backup scheduler started - 排程備份服務已啟動")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """應用程式關閉時停止排程備份服務，避免殘留行程。"""
+    from .services.scheduler import stop_scheduler
+    stop_scheduler()
 
 # ----------------------------------------------------------------
 # 中間件配置 (Middleware Configuration)
@@ -61,6 +71,8 @@ app.include_router(question_bank.router, prefix="/api")   # 全域題庫管理
 app.include_router(qrcode.router, prefix="/api")          # QRcode 生成相關
 from .routers import teaching_materials
 app.include_router(teaching_materials.router, prefix="/api")  # 教材庫 (上傳/搜尋/下載)
+from .routers import backup
+app.include_router(backup.router, prefix="/api")          # 排程備份設定與紀錄
 
 # ----------------------------------------------------------------
 # 基礎端點 (Base Endpoints)

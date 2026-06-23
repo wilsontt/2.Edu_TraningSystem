@@ -15,3 +15,4 @@ google-generativeai
 pandas
 qrcode[pil]
 smbprotocol
+apscheduler

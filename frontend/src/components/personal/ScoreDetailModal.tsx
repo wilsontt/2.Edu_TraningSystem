@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { API_BASE_URL } from '../../api';
 import type { ScoreDetail } from './types';
 import type { SignatureTriState } from './printTriState';
+import { parseBackendDateTime } from '../../utils/date';
 
 // 動態導入以避免循環依賴
 const ScoreCardPreview = lazy(() => import('./ScoreCardPreview'));
@@ -228,7 +229,7 @@ export default function ScoreDetailModal({
                     <div>
                       <div className="text-sm text-gray-500 mb-1">提交時間</div>
                       <div className="font-medium text-gray-900">
-                        {detail.basic_info.submit_time ? new Date(detail.basic_info.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
+                        {detail.basic_info.submit_time ? parseBackendDateTime(detail.basic_info.submit_time)?.toLocaleString('zh-TW', { hour12: false }) : '-'}
                       </div>
                     </div>
                     <div>

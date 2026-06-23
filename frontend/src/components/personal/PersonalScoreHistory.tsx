@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { API_BASE_URL } from '../../api';
 import PlanHistoryModal from './PlanHistoryModal';
 import Pagination from '../common/Pagination';
+import { parseBackendDateTime } from '../../utils/date';
 import {
   LineChart,
   Line,
@@ -111,7 +112,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
           // 以實際歷程順序為準，避免用 attempts 推算造成錯位或缺筆誤導
           attempt: idx + 1,
           score: h.total_score,
-          date: h.submit_time ? new Date(h.submit_time).toLocaleDateString('zh-TW') : '',
+          date: h.submit_time ? parseBackendDateTime(h.submit_time)?.toLocaleDateString('zh-TW') || '' : '',
           history_id: h.id,
         }));
 
@@ -123,7 +124,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
         };
 
         if (record.submit_time) {
-          if (!latestSubmitTime || new Date(record.submit_time) > new Date(latestSubmitTime)) {
+          if (!latestSubmitTime || (parseBackendDateTime(record.submit_time)?.getTime() ?? 0) > (parseBackendDateTime(latestSubmitTime)?.getTime() ?? 0)) {
             latestSubmitTime = record.submit_time;
             latestPlanId = planId;
           }
@@ -480,7 +481,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
                       {formatDuration(record.duration)}
                     </td>
                     <td className="px-4 py-4 text-right text-gray-500 text-sm">
-                      {record.submit_time ? new Date(record.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
+                      {record.submit_time ? parseBackendDateTime(record.submit_time)?.toLocaleString('zh-TW', { hour12: false }) : '-'}
                     </td>
                     <td className="px-4 py-4 text-right text-gray-700">
                       {record.attempts}

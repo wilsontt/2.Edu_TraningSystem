@@ -509,3 +509,70 @@ class BatchDownloadRequest(BaseModel):
     nas_username: Optional[str] = None
     nas_password: Optional[str] = None
     nas_session_token: Optional[str] = None
+
+
+# ----------------------------------------------------------------
+# 排程備份相關模型 (Backup Schedule Schemas) — Wave 4
+# ----------------------------------------------------------------
+
+class BackupScheduleConfigOut(BaseModel):
+    """排程設定回應；密碼欄位永不回傳明文，僅回傳是否已設定。"""
+    enabled: bool
+    frequency: str
+    time_of_day: str
+    weekday: Optional[int] = None
+    retention_count: int
+    destination: Optional[str] = None
+    backup_nas_username: Optional[str] = None
+    has_password: bool
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BackupScheduleConfigUpdate(BaseModel):
+    enabled: bool
+    frequency: str
+    time_of_day: str
+    weekday: Optional[int] = None
+    retention_count: int = Field(ge=1)
+    destination: Optional[str] = None
+    backup_nas_username: Optional[str] = None
+    # 未提供（None）則保留原密碼；傳空字串視為清除
+    backup_nas_password: Optional[str] = None
+
+    @field_validator("frequency")
+    @classmethod
+    def validate_frequency(cls, v: str) -> str:
+        if v not in ("daily", "weekly"):
+            raise ValueError("frequency 僅允許 daily 或 weekly")
+        return v
+
+    @field_validator("time_of_day")
+    @classmethod
+    def validate_time_of_day(cls, v: str) -> str:
+        if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", v):
+            raise ValueError("time_of_day 格式須為 HH:mm（24 小時）")
+        return v
+
+
+class BackupRecordOut(BaseModel):
+    id: int
+    filename: Optional[str] = None
+    created_at: datetime
+    size_bytes: Optional[int] = None
+    status: str
+    message: Optional[str] = None
+    duration_ms: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BackupRecordList(BaseModel):
+    items: List[BackupRecordOut]
+    total: int
+    page: int
+    size: int
+    total_pages: int

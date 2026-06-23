@@ -11,6 +11,7 @@ import { Download, Users, FileText, CheckCircle, TrendingUp, AlertCircle, Refres
 import Pagination from '../common/Pagination';
 import ScorePrintFlow from '../common/ScorePrintFlow';
 import DeptMemberScoreModal from './DeptMemberScoreModal';
+import { parseBackendDateTime } from '../../utils/date';
 import { API_BASE_URL } from '../../api';
 import clsx from 'clsx';
 import { format } from "date-fns";
@@ -1465,7 +1466,7 @@ export default function ReportDashboard() {
                                                 )}
                                               </td>
                                               <td className="px-4 py-2 text-right text-gray-500 tabular-nums whitespace-nowrap">
-                                                {record.submit_time ? new Date(record.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
+                                                {record.submit_time ? parseBackendDateTime(record.submit_time)?.toLocaleString('zh-TW', { hour12: false }) : '-'}
                                               </td>
                                               <td className="px-4 py-2 text-center whitespace-nowrap">
                                                 {record.emp_id && (
@@ -1576,7 +1577,7 @@ export default function ReportDashboard() {
                                                 )}
                                               </td>
                                               <td className="px-4 py-2 text-right text-gray-500">
-                                                {record.submit_time ? new Date(record.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
+                                                {record.submit_time ? parseBackendDateTime(record.submit_time)?.toLocaleString('zh-TW', { hour12: false }) : '-'}
                                               </td>
                                               <td className="px-4 py-2 text-center">
                                                 {record.emp_id && (

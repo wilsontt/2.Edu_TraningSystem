@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2, Clock, ArrowLeft } from 'lucide-react';
 import api from '../../api';
+import { parseBackendDateTime } from '../../utils/date';
 
 const CheckInPage = () => {
   const navigate = useNavigate();
@@ -94,8 +95,8 @@ const CheckInPage = () => {
   }
 
   if (attendanceStatus?.is_checked_in) {
-    const checkinTime = attendanceStatus.checkin_time 
-      ? new Date(attendanceStatus.checkin_time).toLocaleString('zh-TW', {
+    const checkinTime = attendanceStatus.checkin_time
+      ? parseBackendDateTime(attendanceStatus.checkin_time)?.toLocaleString('zh-TW', {
           year: 'numeric',
           month: '2-digit',
           day: '2-digit',

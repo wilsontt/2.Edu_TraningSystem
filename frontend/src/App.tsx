@@ -19,6 +19,7 @@ import RoleDepartmentScopeManager from './components/admin/RoleDepartmentScopeMa
 import ReportDashboard from './components/admin/ReportDashboard';
 import ExamStudio from './components/admin/ExamStudio';
 import QRCodeManager from './components/admin/QRCodeManager';
+import BackupScheduleManager from './components/admin/BackupScheduleManager';
 import ExamDashboard from './components/exam/ExamDashboard';
 import ExamRunner from './components/exam/ExamRunner';
 import PersonalScorePage from './components/personal/PersonalScorePage';
@@ -81,6 +82,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     { name: '權限管理', path: '/admin/permissions', code: 'menu:admin:perm' },
     { name: '角色部門權限', path: '/admin/role-scopes', code: 'menu:admin:perm' },
     { name: 'QRcode 管理', path: '/admin/qrcode', code: 'menu:admin' },
+    { name: '排程備份', path: '/admin/backup', code: 'menu:admin:backup' },
   ].filter(item => functions.includes(item.code));
 
   // 判斷是否具備進入管理後台的權限
@@ -321,6 +323,7 @@ const App = () => {
                     <Route path="/admin/permissions" element={user.role === 'Admin' ? <PermissionManager /> : <Navigate to="/" />} />
                     <Route path="/admin/role-scopes" element={user.role === 'Admin' ? <RoleDepartmentScopeManager /> : <Navigate to="/" />} />
                     <Route path="/admin/qrcode" element={user.role === 'Admin' ? <QRCodeManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/backup" element={user.role === 'Admin' || user.functions?.includes('menu:admin:backup') ? <BackupScheduleManager /> : <Navigate to="/" />} />
                     <Route path="/admin/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <Navigate to="/" />} />
                     <Route path="*" element={<Navigate to="/" />} />
                   </Routes>

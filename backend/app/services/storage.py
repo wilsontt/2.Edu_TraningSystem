@@ -193,6 +193,23 @@ def interactive_credentials(nas_username: str, nas_password: str) -> SmbCredenti
     )
 
 
+def backup_credentials(nas_username: str, nas_password: str, destination: str | None = None) -> SmbCredentials:
+    """排程備份 backup 模式 credentials（帳密來自排程設定 backup_nas_*）。
+    `destination` 可覆寫備份目的地（相對共享根目錄）；未提供則用 BACKUP_ROOT。"""
+    s = get_settings()
+    if not s.smb_configured:
+        raise StorageUnavailable("NAS 共享尚未設定（需 SMB_SERVER／SMB_SHARE）")
+    if not (nas_username and nas_password):
+        raise StorageUnavailable("排程備份尚未設定 NAS 帳號或密碼")
+    return SmbCredentials(
+        server=s.smb_server,
+        share=s.smb_share,
+        username=nas_username,
+        password=nas_password,
+        root=destination or s.backup_root,
+    )
+
+
 def verify_credentials(creds: SmbCredentials) -> None:
     """驗證 credentials 可連線（連線後立即關閉）；失敗拋 StorageUnavailable。"""
     storage = SmbStorage(creds)

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BarChart3, Loader2, X } from 'lucide-react';
 import api from '../../api';
 import BulkAbsenceReasonModal from './BulkAbsenceReasonModal';
+import { parseBackendDateTime } from '../../utils/date';
 
 interface PlanSummary {
   id: number;
@@ -420,7 +421,7 @@ const AttendanceOverviewPage = () => {
                                   <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
                                   <td className="px-4 py-2 text-gray-500 text-xs">
                                     {user.kind === 'actual' && 'checkin_time' in user && user.checkin_time
-                                      ? new Date(user.checkin_time).toLocaleString('zh-TW', { hour12: false })
+                                      ? parseBackendDateTime(user.checkin_time)?.toLocaleString('zh-TW', { hour12: false })
                                       : ('absence_reason_code' in user && user.absence_reason_code
                                           ? `${ABSENCE_REASON_OPTIONS.find(o => o.code === user.absence_reason_code)?.label || user.absence_reason_code}${user.absence_reason_code === 'other' && user.absence_reason_text ? `：${user.absence_reason_text}` : ''}`
                                           : '-')}

@@ -7,6 +7,7 @@ import ScoreDetailModal from './ScoreDetailModal';
 import type { ExamHistoryItem, ScoreDetail } from './types';
 import ScorePrintFlow, { type ScorePrintPlanOption } from '../common/ScorePrintFlow';
 import type { PrintModeTriState, SignatureTriState } from './printTriState';
+import { parseBackendDateTime } from '../../utils/date';
 
 interface PlanHistoryModalProps {
   recordId: number;
@@ -201,7 +202,7 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                             第 {idx + 1} 次
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {h.submit_time ? new Date(h.submit_time).toLocaleString('zh-TW', { hour12: false }) : '-'}
+                            {h.submit_time ? parseBackendDateTime(h.submit_time)?.toLocaleString('zh-TW', { hour12: false }) : '-'}
                           </td>
                           <td className={clsx(
                             "px-6 py-4 whitespace-nowrap text-sm font-bold",

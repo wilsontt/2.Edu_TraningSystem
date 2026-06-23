@@ -311,6 +311,34 @@ class TeachingMaterial(Base):
     material_type = relationship("MaterialType")
 
 
+class BackupScheduleConfig(Base):
+    """排程備份設定（單例，固定 id=1；見 NAS PLAN §7.1）。僅備份 DB 本身，
+    教材／考卷實體檔存於 NAS、已有 NAS 端 3-2-1 備援機制，不在此重複打包。"""
+    __tablename__ = "backup_schedule_config"
+    id = Column(Integer, primary_key=True)
+    enabled = Column(Boolean, default=False)
+    frequency = Column(String, default="daily")        # daily / weekly
+    time_of_day = Column(String, default="02:00")       # HH:mm（24 小時）
+    weekday = Column(Integer, nullable=True)            # frequency=weekly 時 0-6（0=星期一）
+    retention_count = Column(Integer, default=7)        # 保留份數
+    destination = Column(String, nullable=True)         # NAS 備份路徑；空則用 BACKUP_ROOT
+    backup_nas_username = Column(String, nullable=True)
+    backup_nas_password_encrypted = Column(Text, nullable=True)  # Fernet 加密，不存明文
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
+class BackupRecord(Base):
+    """備份執行紀錄（排程或「立即備份」皆寫入）。"""
+    __tablename__ = "backup_records"
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+    size_bytes = Column(Integer, nullable=True)
+    status = Column(String)                 # success / failed
+    message = Column(String, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+
+
 class FileTransferAuditLog(Base):
     """檔案傳輸稽核：記錄考卷／教材之上傳、下載、刪除等傳輸行為（見建議事項 PLAN §7.1）。"""
     __tablename__ = "file_transfer_audit_logs"

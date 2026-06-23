@@ -5,6 +5,7 @@
  */
 
 import type { ScoreDetail } from './types';
+import { parseBackendDateTime } from '../../utils/date';
 
 // ── SVG icons（與 ScoreCardPreview 相同） ──────────────────────────────────────
 const ICON_CHECK = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
@@ -117,7 +118,7 @@ function buildSignatureFooterHtml(): string {
  */
 function buildExamCoverHtml(detail: ScoreDetail): string {
   const submitDate = detail.basic_info.submit_time
-    ? new Date(detail.basic_info.submit_time).toLocaleDateString('zh-TW')
+    ? parseBackendDateTime(detail.basic_info.submit_time)?.toLocaleDateString('zh-TW') || '-'
     : '-';
   const isPassedColor = detail.basic_info.is_passed ? '#16a34a' : '#dc2626';
   const resultText = detail.basic_info.is_passed ? '通過' : '未通過';

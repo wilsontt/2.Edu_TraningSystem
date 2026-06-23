@@ -2,6 +2,7 @@ import { X, Printer } from 'lucide-react';
 import clsx from 'clsx';
 import type { ScoreDetail } from './types';
 import { buildBatchPrintHtml, printHtmlInIframe } from './scoreCardPrintHtml';
+import { parseBackendDateTime } from '../../utils/date';
 
 interface ScoreCardPreviewProps {
   detail: ScoreDetail;
@@ -59,7 +60,7 @@ function ScoreCardContent({
                 <div className="text-sm text-gray-600 mb-0">測驗日期 / Date</div>
                 <div className="font-bold text-lg border-b-2 border-gray-800 pb-1">
                   {detail.basic_info.submit_time
-                    ? new Date(detail.basic_info.submit_time).toLocaleDateString('zh-TW')
+                    ? parseBackendDateTime(detail.basic_info.submit_time)?.toLocaleDateString('zh-TW') || '-'
                     : '-'}
                 </div>
               </div>
