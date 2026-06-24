@@ -2484,7 +2484,7 @@ def report_print_pdf(
     )
 
 
-def _validate_batch_print_limits(plan_ids: List[int], emp_ids: List[int]) -> None:
+def _validate_batch_print_limits(plan_ids: List[int], emp_ids: List[str]) -> None:
     """檢查 plan_ids／emp_ids 數量是否超過批次列印護欄上限，超過則回傳 400。"""
     if len(plan_ids) > BATCH_PRINT_MAX_PLAN_IDS:
         raise HTTPException(
@@ -2630,7 +2630,16 @@ def batch_print_individual_data(
     """
     成績中心批次列印 individual 明細資料（泛化既有 /dept-plan/individual-print-data，
     不限單部門）：依 plan_ids + emp_ids 回傳每位成員完整成績詳情（MemberPrintItem[] 格式）。
+
+    範圍限制：individual 模式僅支援 `score_data_mode="last_attempt"`（對齊個人端 T13，
+    考試歷程逐題明細暫不支援 individual 呈現，詳見計畫書 §2.2／§4.2）。
+    若傳入 `score_data_mode="exam_history"` 將回傳 400，而非靜默改採 last_attempt。
     """
+    if payload.score_data_mode == "exam_history":
+        raise HTTPException(
+            status_code=400,
+            detail="individual-data 僅支援 score_data_mode=last_attempt（考試歷程逐題明細暫不支援 individual 模式）",
+        )
     _validate_batch_print_limits(payload.plan_ids, payload.emp_ids)
     allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
 
@@ -2673,46 +2682,32 @@ def batch_print_individual_data(
         passing_score = plan_obj.passing_score if plan_obj else 60
         plan_title_resolved = plan_obj.title if plan_obj else ""
 
-        if payload.score_data_mode == "exam_history":
-            history_rows = (
-                db.query(models.ExamHistory, models.ExamRecord)
-                .join(models.ExamRecord, models.ExamHistory.record_id == models.ExamRecord.id)
-                .filter(
+        # individual 模式僅支援 last_attempt（已於函式開頭擋下 exam_history，見上方檢查）
+        last_subq = (
+            db.query(
+                models.ExamRecord.emp_id,
+                func.max(models.ExamRecord.submit_time).label("last_submit_time"),
+            )
+            .filter(
+                models.ExamRecord.plan_id == plan_id,
+                models.ExamRecord.emp_id.in_(emp_ids),
+            )
+            .group_by(models.ExamRecord.emp_id)
+            .subquery()
+        )
+        exam_rows = (
+            db.query(models.ExamRecord)
+            .join(
+                last_subq,
+                and_(
+                    models.ExamRecord.emp_id == last_subq.c.emp_id,
+                    models.ExamRecord.submit_time == last_subq.c.last_submit_time,
                     models.ExamRecord.plan_id == plan_id,
-                    models.ExamRecord.emp_id.in_(emp_ids),
-                )
-                .order_by(models.ExamHistory.submit_time.asc())
-                .all()
+                ),
             )
-            exam_map: dict = {}
-            for history, record in history_rows:
-                exam_map.setdefault(record.emp_id, []).append((history, record))
-        else:
-            last_subq = (
-                db.query(
-                    models.ExamRecord.emp_id,
-                    func.max(models.ExamRecord.submit_time).label("last_submit_time"),
-                )
-                .filter(
-                    models.ExamRecord.plan_id == plan_id,
-                    models.ExamRecord.emp_id.in_(emp_ids),
-                )
-                .group_by(models.ExamRecord.emp_id)
-                .subquery()
-            )
-            exam_rows = (
-                db.query(models.ExamRecord)
-                .join(
-                    last_subq,
-                    and_(
-                        models.ExamRecord.emp_id == last_subq.c.emp_id,
-                        models.ExamRecord.submit_time == last_subq.c.last_submit_time,
-                        models.ExamRecord.plan_id == plan_id,
-                    ),
-                )
-                .all()
-            )
-            exam_map = {r.emp_id: r for r in exam_rows}
+            .all()
+        )
+        exam_map = {r.emp_id: r for r in exam_rows}
 
         att_rows = (
             db.query(models.AttendanceRecord)
@@ -2743,11 +2738,7 @@ def batch_print_individual_data(
             att_record = att_dict.get(u.emp_id)
             absence = abs_label_map.get(u.emp_id)
 
-            if payload.score_data_mode == "exam_history":
-                exam_entries = exam_map.get(u.emp_id, [])
-                exam = exam_entries[-1][1] if exam_entries else None
-            else:
-                exam = exam_map.get(u.emp_id)
+            exam = exam_map.get(u.emp_id)
 
             if exam:
                 att_status = "已考試"
