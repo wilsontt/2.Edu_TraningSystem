@@ -4,7 +4,7 @@ Pydantic 資料模型定義 (Pydantic Schemas)
 """
 
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
+from typing import List, Literal, Optional
 from datetime import date, datetime
 import re
 
@@ -576,3 +576,36 @@ class BackupRecordList(BaseModel):
     page: int
     size: int
     total_pages: int
+
+
+# ----------------------------------------------------------------
+# 成績中心批次列印相關模型 (Batch Print Schemas) — Wave 1
+# ----------------------------------------------------------------
+
+class BatchPrintPreviewRequest(BaseModel):
+    """批次列印預覽請求：依部門／計畫範圍查詢可列印成績資料。"""
+    plan_ids: List[int] = Field(default_factory=list)
+    dept_ids: List[int] = Field(default_factory=list)  # 空陣列 = 權限範圍內全部部門
+    emp_ids: List[str] = Field(default_factory=list)   # preview 可空
+    plan_status: Literal["active", "expired", "archived"] = "active"
+    score_data_mode: Literal["last_attempt", "exam_history"] = "last_attempt"
+    print_mode: Literal["list", "individual"] = "list"
+    include_employee_signature: bool = False
+
+
+class BatchPrintPdfRequest(BaseModel):
+    """批次列印 PDF 下載請求：plan_ids / emp_ids 數量受護欄常數限制。"""
+    plan_ids: List[int] = Field(default_factory=list)
+    dept_ids: List[int] = Field(default_factory=list)
+    emp_ids: List[str] = Field(default_factory=list)   # pdf 時為勾選結果
+    plan_status: Literal["active", "expired", "archived"] = "active"
+    score_data_mode: Literal["last_attempt", "exam_history"] = "last_attempt"
+    print_mode: Literal["list", "individual"] = "list"
+    include_employee_signature: bool = False
+
+
+class BatchPrintIndividualRequest(BaseModel):
+    """批次列印 individual 明細資料請求：可跨部門，依 plan_ids + emp_ids 取得逐人成績詳情。"""
+    plan_ids: List[int] = Field(default_factory=list)
+    emp_ids: List[str] = Field(default_factory=list)
+    score_data_mode: Literal["last_attempt", "exam_history"] = "last_attempt"

@@ -6,16 +6,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_, or_, extract, select, Integer
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 from urllib.parse import quote
+import re
+import zipfile
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission
 from ..access_scope import get_scope_emp_ids, apply_emp_scope as apply_emp_scope_field
 
 router = APIRouter(prefix="/admin/reports", tags=["reports"])
+
+# 成績中心批次列印（Batch Print）護欄常數：避免單次請求查詢／產出過量資料。
+BATCH_PRINT_MAX_PLAN_IDS = 20
+BATCH_PRINT_MAX_EMP_IDS = 200
 
 def _get_report_scope_emp_ids(db: Session, current_user: models.User):
     return get_scope_emp_ids(db, current_user, active_only=True)
@@ -49,6 +55,157 @@ def _training_plan_status_filter_expr(status: str):
         status_code=400,
         detail="plan_status 必須為 active、expired 或 archived",
     )
+
+
+def _batch_print_rows(
+    db: Session,
+    allowed_emp_ids: Optional[List[str]],
+    plan_ids: List[int],
+    dept_ids: List[int],
+    plan_status: Optional[str] = None,
+    score_data_mode: str = "last_attempt",
+    order_desc: bool = False,
+) -> List[dict]:
+    """
+    成績中心批次列印共用查詢：依範圍／計畫狀態／資料模式回傳成績列印列資料。
+
+    - score_data_mode="last_attempt"：每人每計畫僅取最新一筆（以 max(submit_time) 為準），
+      資料來源為 ExamRecord（本身即每人每計畫僅一筆最終總結）。
+    - score_data_mode="exam_history"：同計畫全部已提交紀錄（ExamHistory 逐次提交快照），
+      依 submit_time 排序。
+    - plan_status=None：不套用計畫狀態篩選（供既有 /print/preview 向後相容；
+      新版批次列印端點一律傳入明確的 active／expired／archived）。
+
+    回傳每筆 dict 含：emp_id, name, dept_name, plan_id, plan_title,
+    total_score, is_passed, submit_time（ISO 字串或 None）。
+    """
+    plan_status_expr = (
+        _training_plan_status_filter_expr(plan_status) if plan_status else None
+    )
+
+    if allowed_emp_ids is not None and not allowed_emp_ids:
+        return []
+
+    if score_data_mode == "exam_history":
+        base_query = (
+            db.query(
+                models.ExamRecord.emp_id,
+                models.User.name,
+                models.Department.name.label("dept_name"),
+                models.ExamRecord.plan_id,
+                models.TrainingPlan.title.label("plan_title"),
+                models.ExamHistory.total_score,
+                models.ExamHistory.is_passed,
+                models.ExamHistory.submit_time,
+            )
+            .join(models.ExamRecord, models.ExamHistory.record_id == models.ExamRecord.id)
+            .join(models.User, models.ExamRecord.emp_id == models.User.emp_id)
+            .join(models.Department, models.User.dept_id == models.Department.id)
+            .join(models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id)
+        )
+        order_col = models.ExamHistory.submit_time
+    else:
+        last_attempt_subq = (
+            db.query(
+                models.ExamRecord.emp_id,
+                models.ExamRecord.plan_id,
+                func.max(models.ExamRecord.submit_time).label("last_submit_time"),
+            )
+            .group_by(models.ExamRecord.emp_id, models.ExamRecord.plan_id)
+            .subquery()
+        )
+        base_query = (
+            db.query(
+                models.ExamRecord.emp_id,
+                models.User.name,
+                models.Department.name.label("dept_name"),
+                models.ExamRecord.plan_id,
+                models.TrainingPlan.title.label("plan_title"),
+                models.ExamRecord.total_score,
+                models.ExamRecord.is_passed,
+                models.ExamRecord.submit_time,
+            )
+            .join(
+                last_attempt_subq,
+                and_(
+                    models.ExamRecord.emp_id == last_attempt_subq.c.emp_id,
+                    models.ExamRecord.plan_id == last_attempt_subq.c.plan_id,
+                    models.ExamRecord.submit_time == last_attempt_subq.c.last_submit_time,
+                ),
+            )
+            .join(models.User, models.ExamRecord.emp_id == models.User.emp_id)
+            .join(models.Department, models.User.dept_id == models.Department.id)
+            .join(models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id)
+        )
+        order_col = models.ExamRecord.submit_time
+
+    if plan_status_expr is not None:
+        base_query = base_query.filter(plan_status_expr)
+    if allowed_emp_ids is not None:
+        base_query = base_query.filter(models.ExamRecord.emp_id.in_(allowed_emp_ids))
+    if dept_ids:
+        base_query = base_query.filter(models.User.dept_id.in_(dept_ids))
+    if plan_ids:
+        base_query = base_query.filter(models.ExamRecord.plan_id.in_(plan_ids))
+
+    order_clause = order_col.desc() if order_desc else order_col.asc()
+    rows = base_query.order_by(order_clause).all()
+    return [
+        {
+            "emp_id": r.emp_id,
+            "name": r.name,
+            "dept_name": r.dept_name,
+            "plan_id": r.plan_id,
+            "plan_title": r.plan_title,
+            "total_score": r.total_score,
+            "is_passed": r.is_passed,
+            "submit_time": r.submit_time.isoformat() if r.submit_time else None,
+        }
+        for r in rows
+    ]
+
+
+_FILENAME_ILLEGAL_CHARS_RE = re.compile(r'[\\/:*?"<>|]')
+
+
+def _sanitize_filename_segment(name: str, max_len: int = 40) -> str:
+    """
+    檔名片段消毒：將 \\ / : * ? " < > | 等檔案系統非法字元替換為 "_"，
+    並截斷至 max_len 字元（避免過長路徑）。
+    """
+    cleaned = _FILENAME_ILLEGAL_CHARS_RE.sub("_", (name or "").strip())
+    cleaned = cleaned.strip() or "未命名"
+    return cleaned[:max_len]
+
+
+def _group_batch_print_items(items: List[dict]) -> Dict[Tuple[str, str], List[dict]]:
+    """
+    依 (dept_name, plan_title) 將批次列印項目分組，保留原始出現順序。
+    """
+    grouped: Dict[Tuple[str, str], List[dict]] = {}
+    for item in items:
+        key = (item.get("dept_name") or "", item.get("plan_title") or "")
+        grouped.setdefault(key, []).append(item)
+    return grouped
+
+
+def _build_unique_zip_filename(base_name: str, used_names: set) -> str:
+    """
+    ZIP 內檔名重複時依序加上 _2、_3… 尾綴，確保不覆蓋同名檔案。
+    """
+    if base_name not in used_names:
+        used_names.add(base_name)
+        return base_name
+    stem, _, ext = base_name.rpartition(".")
+    if not stem:
+        stem, ext = base_name, ""
+    counter = 2
+    while True:
+        candidate = f"{stem}_{counter}.{ext}" if ext else f"{stem}_{counter}"
+        if candidate not in used_names:
+            used_names.add(candidate)
+            return candidate
+        counter += 1
 
 
 @router.get("/print/plan-options")
@@ -1724,42 +1881,27 @@ def report_print_preview(
     current_user=check_permission("menu:report")
 ):
     allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
-    base_query = db.query(
-        models.ExamRecord.emp_id,
-        models.User.name,
-        models.Department.name.label("dept_name"),
-        models.ExamRecord.plan_id,
-        models.TrainingPlan.title.label("plan_title"),
-        models.ExamRecord.total_score,
-        models.ExamRecord.is_passed,
-        models.ExamRecord.submit_time
-    ).join(models.User, models.ExamRecord.emp_id == models.User.emp_id)\
-     .join(models.Department, models.User.dept_id == models.Department.id)\
-     .join(models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id)
+    if allowed_emp_ids is not None and not allowed_emp_ids:
+        return {"total": 0, "items": [], "options": {"include_employee_signature": include_employee_signature, "include_exam_history": include_exam_history}}
 
-    if allowed_emp_ids is not None:
-        if not allowed_emp_ids:
-            return {"total": 0, "items": [], "options": {"include_employee_signature": include_employee_signature, "include_exam_history": include_exam_history}}
-        base_query = base_query.filter(models.ExamRecord.emp_id.in_(allowed_emp_ids))
+    # 向後相容：scope=department／plan 決定 dept_ids／plan_ids 是否生效，emp_ids 一律套用；
+    # 不套用計畫狀態篩選、依 submit_time 新到舊排序，與既有行為一致。
+    effective_dept_ids = dept_ids if (scope == "department" and dept_ids) else []
+    effective_plan_ids = plan_ids if (scope == "plan" and plan_ids) else []
 
-    if scope == "department" and dept_ids:
-        base_query = base_query.filter(models.User.dept_id.in_(dept_ids))
-    if scope == "plan" and plan_ids:
-        base_query = base_query.filter(models.ExamRecord.plan_id.in_(plan_ids))
+    items = _batch_print_rows(
+        db,
+        allowed_emp_ids,
+        effective_plan_ids,
+        effective_dept_ids,
+        plan_status=None,
+        score_data_mode="last_attempt",
+        order_desc=True,
+    )
     if emp_ids:
-        base_query = base_query.filter(models.ExamRecord.emp_id.in_(emp_ids))
+        emp_id_set = set(emp_ids)
+        items = [item for item in items if item["emp_id"] in emp_id_set]
 
-    rows = base_query.order_by(models.ExamRecord.submit_time.desc()).all()
-    items = [{
-        "emp_id": r.emp_id,
-        "name": r.name,
-        "dept_name": r.dept_name,
-        "plan_id": r.plan_id,
-        "plan_title": r.plan_title,
-        "total_score": r.total_score,
-        "is_passed": r.is_passed,
-        "submit_time": r.submit_time.isoformat() if r.submit_time else None
-    } for r in rows]
     return {
         "total": len(items),
         "items": items,
@@ -2340,6 +2482,342 @@ def report_print_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=report_print.pdf"}
     )
+
+
+def _validate_batch_print_limits(plan_ids: List[int], emp_ids: List[int]) -> None:
+    """檢查 plan_ids／emp_ids 數量是否超過批次列印護欄上限，超過則回傳 400。"""
+    if len(plan_ids) > BATCH_PRINT_MAX_PLAN_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"plan_ids 數量超過上限（最多 {BATCH_PRINT_MAX_PLAN_IDS} 個）",
+        )
+    if len(emp_ids) > BATCH_PRINT_MAX_EMP_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"emp_ids 數量超過上限（最多 {BATCH_PRINT_MAX_EMP_IDS} 個）",
+        )
+
+
+@router.get("/batch-print/dept-options")
+def get_batch_print_dept_options(
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report"),
+):
+    """
+    批次列印可選部門清單，依使用者權限範圍過濾（不可看到範圍外部門）。
+    """
+    allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
+    query = db.query(models.Department.id, models.Department.name)
+    if allowed_emp_ids is not None:
+        if not allowed_emp_ids:
+            return []
+        dept_ids_in_scope = (
+            db.query(models.User.dept_id)
+            .filter(models.User.emp_id.in_(allowed_emp_ids), models.User.dept_id.isnot(None))
+            .distinct()
+        )
+        query = query.filter(models.Department.id.in_(dept_ids_in_scope))
+    rows = query.order_by(models.Department.name).all()
+    return [{"dept_id": r.id, "dept_name": r.name} for r in rows]
+
+
+@router.post("/batch-print/preview")
+def batch_print_preview(
+    payload: schemas.BatchPrintPreviewRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report"),
+):
+    """
+    成績中心批次列印預覽：依部門／計畫範圍與資料模式回傳可列印成績資料。
+    """
+    _validate_batch_print_limits(payload.plan_ids, payload.emp_ids)
+    allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
+
+    items = _batch_print_rows(
+        db,
+        allowed_emp_ids,
+        payload.plan_ids,
+        payload.dept_ids,
+        plan_status=payload.plan_status,
+        score_data_mode=payload.score_data_mode,
+    )
+    if payload.emp_ids:
+        emp_id_set = set(payload.emp_ids)
+        items = [item for item in items if item["emp_id"] in emp_id_set]
+
+    return {"total": len(items), "items": items}
+
+
+@router.post("/batch-print/pdf")
+def batch_print_pdf(
+    payload: schemas.BatchPrintPdfRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report"),
+):
+    """
+    成績中心批次列印 PDF 下載：依 (dept_name, plan_title) 分組產生 PDF；
+    單組回傳單一 PDF，多組打包為 ZIP（詳見 §4.5 檔名與交付規則）。
+    """
+    _validate_batch_print_limits(payload.plan_ids, payload.emp_ids)
+    allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
+
+    items = _batch_print_rows(
+        db,
+        allowed_emp_ids,
+        payload.plan_ids,
+        payload.dept_ids,
+        plan_status=payload.plan_status,
+        score_data_mode=payload.score_data_mode,
+    )
+    if payload.emp_ids:
+        emp_id_set = set(payload.emp_ids)
+        items = [item for item in items if item["emp_id"] in emp_id_set]
+
+    if not items:
+        raise HTTPException(status_code=404, detail="查無可列印的成績資料")
+
+    document_context = (
+        "personal_exam_history" if payload.score_data_mode == "exam_history" else "default"
+    )
+    today_str = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d")
+    grouped = _group_batch_print_items(items)
+
+    pdf_buffers: List[Tuple[str, "BytesIO"]] = []
+    used_filenames: set = set()
+    for (dept_name, plan_title), group_items in grouped.items():
+        buffer = render_score_print_pdf_to_buffer(
+            db,
+            group_items,
+            payload.print_mode,
+            payload.include_employee_signature,
+            False,
+            document_context=document_context,
+            personal_plan_title=plan_title,
+        )
+        safe_dept = _sanitize_filename_segment(dept_name)
+        safe_plan = _sanitize_filename_segment(plan_title)
+        base_filename = f"{safe_dept}-{safe_plan}_{today_str}.pdf"
+        filename = _build_unique_zip_filename(base_filename, used_filenames)
+        pdf_buffers.append((filename, buffer))
+
+    if len(pdf_buffers) == 1:
+        filename, buffer = pdf_buffers[0]
+        return StreamingResponse(
+            buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+        )
+
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for filename, buffer in pdf_buffers:
+            zf.writestr(filename, buffer.getvalue())
+    zip_buffer.seek(0)
+    zip_filename = f"批次列印_{today_str}.zip"
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(zip_filename)}"},
+    )
+
+
+@router.post("/batch-print/individual-data")
+def batch_print_individual_data(
+    payload: schemas.BatchPrintIndividualRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report"),
+):
+    """
+    成績中心批次列印 individual 明細資料（泛化既有 /dept-plan/individual-print-data，
+    不限單部門）：依 plan_ids + emp_ids 回傳每位成員完整成績詳情（MemberPrintItem[] 格式）。
+    """
+    _validate_batch_print_limits(payload.plan_ids, payload.emp_ids)
+    allowed_emp_ids = _get_report_scope_emp_ids(db, current_user)
+
+    if not payload.plan_ids:
+        raise HTTPException(status_code=400, detail="plan_ids 不可為空")
+
+    users_q = db.query(models.User).filter(
+        models.User.status == "active",
+    )
+    if payload.emp_ids:
+        users_q = users_q.filter(models.User.emp_id.in_(payload.emp_ids))
+    if allowed_emp_ids is not None:
+        if not allowed_emp_ids:
+            raise HTTPException(status_code=403, detail="無可視範圍")
+        users_q = users_q.filter(models.User.emp_id.in_(allowed_emp_ids))
+    users = users_q.order_by(models.User.name).all()
+    if not users:
+        raise HTTPException(status_code=404, detail="查無符合條件之成員資料")
+
+    emp_ids = [u.emp_id for u in users]
+    dept_map = {
+        d.id: d.name
+        for d in db.query(models.Department).all()
+    }
+    plans = (
+        db.query(models.TrainingPlan)
+        .filter(models.TrainingPlan.id.in_(payload.plan_ids))
+        .all()
+    )
+    plan_map = {p.id: p for p in plans}
+
+    reason_code_map = {
+        "sick_leave": "病假", "business_trip": "出差",
+        "official_leave": "公假", "other": "其他",
+    }
+
+    result = []
+    for plan_id in payload.plan_ids:
+        plan_obj = plan_map.get(plan_id)
+        passing_score = plan_obj.passing_score if plan_obj else 60
+        plan_title_resolved = plan_obj.title if plan_obj else ""
+
+        if payload.score_data_mode == "exam_history":
+            history_rows = (
+                db.query(models.ExamHistory, models.ExamRecord)
+                .join(models.ExamRecord, models.ExamHistory.record_id == models.ExamRecord.id)
+                .filter(
+                    models.ExamRecord.plan_id == plan_id,
+                    models.ExamRecord.emp_id.in_(emp_ids),
+                )
+                .order_by(models.ExamHistory.submit_time.asc())
+                .all()
+            )
+            exam_map: dict = {}
+            for history, record in history_rows:
+                exam_map.setdefault(record.emp_id, []).append((history, record))
+        else:
+            last_subq = (
+                db.query(
+                    models.ExamRecord.emp_id,
+                    func.max(models.ExamRecord.submit_time).label("last_submit_time"),
+                )
+                .filter(
+                    models.ExamRecord.plan_id == plan_id,
+                    models.ExamRecord.emp_id.in_(emp_ids),
+                )
+                .group_by(models.ExamRecord.emp_id)
+                .subquery()
+            )
+            exam_rows = (
+                db.query(models.ExamRecord)
+                .join(
+                    last_subq,
+                    and_(
+                        models.ExamRecord.emp_id == last_subq.c.emp_id,
+                        models.ExamRecord.submit_time == last_subq.c.last_submit_time,
+                        models.ExamRecord.plan_id == plan_id,
+                    ),
+                )
+                .all()
+            )
+            exam_map = {r.emp_id: r for r in exam_rows}
+
+        att_rows = (
+            db.query(models.AttendanceRecord)
+            .filter(
+                models.AttendanceRecord.plan_id == plan_id,
+                models.AttendanceRecord.emp_id.in_(emp_ids),
+            )
+            .all()
+        )
+        att_dict = {r.emp_id: r for r in att_rows}
+        abs_rows = (
+            db.query(models.AttendanceAbsenceReason)
+            .filter(
+                models.AttendanceAbsenceReason.plan_id == plan_id,
+                models.AttendanceAbsenceReason.emp_id.in_(emp_ids),
+            )
+            .all()
+        )
+        abs_label_map: dict = {}
+        for r in abs_rows:
+            label = reason_code_map.get(r.reason_code, r.reason_code)
+            if r.reason_code == "other" and r.reason_text:
+                label = r.reason_text
+            abs_label_map[r.emp_id] = label
+
+        for u in users:
+            dept_name_resolved = dept_map.get(u.dept_id, "")
+            att_record = att_dict.get(u.emp_id)
+            absence = abs_label_map.get(u.emp_id)
+
+            if payload.score_data_mode == "exam_history":
+                exam_entries = exam_map.get(u.emp_id, [])
+                exam = exam_entries[-1][1] if exam_entries else None
+            else:
+                exam = exam_map.get(u.emp_id)
+
+            if exam:
+                att_status = "已考試"
+            elif att_record:
+                att_status = "已報到/未完成"
+            else:
+                reason_part = f"（{absence}）" if absence else ""
+                att_status = f"未應考{reason_part}"
+
+            if exam:
+                exam_details_q = (
+                    db.query(models.ExamDetail, models.Question)
+                    .join(models.Question, models.ExamDetail.question_id == models.Question.id)
+                    .filter(models.ExamDetail.record_id == exam.id)
+                    .all()
+                )
+                question_details = []
+                for ed, q in exam_details_q:
+                    question_details.append({
+                        "question_id": q.id,
+                        "question_number": len(question_details) + 1,
+                        "content": q.content,
+                        "question_type": q.question_type,
+                        "options": q.options,
+                        "correct_answer": q.answer,
+                        "user_answer": ed.user_answer,
+                        "is_correct": ed.is_correct,
+                        "points": q.points,
+                        "earned_points": q.points if ed.is_correct else 0,
+                    })
+                question_details.sort(key=lambda x: x["question_id"])
+
+                duration = None
+                if exam.start_time and exam.submit_time:
+                    duration = round((exam.submit_time - exam.start_time).total_seconds(), 0)
+
+                detail = {
+                    "record_id": exam.id,
+                    "basic_info": {
+                        "emp_id": u.emp_id,
+                        "name": u.name,
+                        "dept_name": dept_name_resolved,
+                        "plan_id": plan_id,
+                        "plan_title": plan_title_resolved,
+                        "training_date": None,
+                        "end_date": None,
+                        "passing_score": passing_score,
+                        "total_score": exam.total_score,
+                        "is_passed": exam.is_passed,
+                        "start_time": exam.start_time.isoformat() if exam.start_time else None,
+                        "submit_time": exam.submit_time.isoformat() if exam.submit_time else None,
+                        "duration": duration,
+                        "attempts": exam.attempts,
+                    },
+                    "question_details": question_details,
+                    "history": [],
+                }
+                result.append({"has_exam": True, "attendance_status": att_status, "detail": detail})
+            else:
+                result.append({
+                    "has_exam": False,
+                    "attendance_status": att_status,
+                    "name": u.name,
+                    "emp_id": u.emp_id,
+                    "dept_name": dept_name_resolved,
+                    "plan_title": plan_title_resolved,
+                    "detail": None,
+                })
+
+    return result
 
 
 def _render_dept_plan_pdf_to_buffer(
