@@ -13,6 +13,7 @@ import ScorePrintFlow from '../common/ScorePrintFlow';
 import DeptMemberScoreModal from './DeptMemberScoreModal';
 import { parseBackendDateTime } from '../../utils/date';
 import { API_BASE_URL } from '../../api';
+import { useBatchPrint, BATCH_PRINT_INDIVIDUAL_WARN_THRESHOLD } from '../../hooks/useBatchPrint';
 import clsx from 'clsx';
 import { format } from "date-fns";
 import { Link } from 'react-router-dom';
@@ -176,23 +177,6 @@ interface RetakeUser {
   }>;
 }
 
-interface PrintPreviewItem {
-  emp_id: string;
-  name: string;
-  dept_name: string;
-  plan_id: number;
-  plan_title: string;
-  total_score: number;
-  is_passed: boolean;
-  submit_time: string | null;
-}
-
-interface PrintPlanOption {
-  plan_id: number;
-  plan_title: string;
-  training_date: string | null;
-}
-
 interface DeptDetailRecord {
   emp_id?: string;
   name: string;
@@ -260,14 +244,6 @@ export default function ReportDashboard() {
   const [expandedPlan, setExpandedPlan] = useState<number | null>(null);
   const [deptDetails, setDeptDetails] = useState<Record<number, { records: DeptDetailRecord[] }>>({});
   const [planDetails, setPlanDetails] = useState<Record<number, { records: PlanDetailRecord[] }>>({});
-  const [printPreview, setPrintPreview] = useState<PrintPreviewItem[]>([]);
-  const [selectedPrintEmpIds, setSelectedPrintEmpIds] = useState<Set<string>>(new Set());
-  const [printPlanOptions, setPrintPlanOptions] = useState<PrintPlanOption[]>([]);
-  const [selectedPrintPlanIds, setSelectedPrintPlanIds] = useState<Set<number>>(new Set());
-  const [printMode, setPrintMode] = useState<'list' | 'individual'>('list');
-  const [includeEmployeeSignature, setIncludeEmployeeSignature] = useState(false);
-  const [includeExamHistory, setIncludeExamHistory] = useState(false);
-  const [printLoading, setPrintLoading] = useState(false);
   const [printKeyword, setPrintKeyword] = useState('');
   const [printSortKey, setPrintSortKey] = useState<
     'emp_id' | 'name' | 'dept_name' | 'plan_title' | 'total_score'
@@ -278,6 +254,54 @@ export default function ReportDashboard() {
   const [deptModalOpen, setDeptModalOpen] = useState(false);
   const [deptModalId, setDeptModalId] = useState(0);
   const [deptModalName, setDeptModalName] = useState('');
+
+  // 成績列印頁籤：與頂層「批次列印」頁籤共用同一套資料層（避免兩入口邏輯分叉）
+  const {
+    selectedPlanIds: selectedPrintPlanIds,
+    setSelectedPlanIds: setSelectedPrintPlanIds,
+    scoreDataMode: printScoreDataMode,
+    setScoreDataMode: setPrintScoreDataMode,
+    printMode,
+    setPrintMode,
+    includeEmployeeSignature,
+    setIncludeEmployeeSignature,
+    selectedEmpIds: selectedPrintEmpIds,
+    setSelectedEmpIds: setSelectedPrintEmpIds,
+    previewItems: printPreview,
+    planOptions: printPlanOptions,
+    loading: printLoading,
+    error: printError,
+    setError: setPrintError,
+    fetchPlanOptions: fetchPrintPlanOptions,
+    loadPreview: loadPrintPreview,
+    exportPdf: exportPrintListPdf,
+    exportIndividualHtml: exportPrintIndividualHtml,
+  } = useBatchPrint();
+
+  // 選「考試歷程」時，「考卷成績單(individual)」為無效組合，自動回退為「成績清單」
+  const printIndividualDisabled = printScoreDataMode === 'exam_history';
+  useEffect(() => {
+    if (printIndividualDisabled && printMode === 'individual') {
+      setPrintMode('list');
+    }
+  }, [printIndividualDisabled, printMode, setPrintMode]);
+
+  const exportPrintPdf = async () => {
+    if (
+      printMode === 'individual' &&
+      selectedPrintEmpIds.size > BATCH_PRINT_INDIVIDUAL_WARN_THRESHOLD &&
+      !window.confirm(
+        `本次共 ${selectedPrintEmpIds.size} 人，超過 ${BATCH_PRINT_INDIVIDUAL_WARN_THRESHOLD} 人可能產生較大列印，確定繼續？`
+      )
+    ) {
+      return;
+    }
+    if (printMode === 'individual') {
+      await exportPrintIndividualHtml();
+    } else {
+      await exportPrintListPdf();
+    }
+  };
 
   const toggleExpandRow = async (itemId: number) => {
     if (!itemId) return;
@@ -537,111 +561,12 @@ export default function ReportDashboard() {
     return details[kpiType] || { description: "無詳細資訊", value: "-", unit: "" };
   };
 
-  const loadPrintPreview = async () => {
-    try {
-      if (selectedPrintPlanIds.size === 0) {
-        alert('請至少選擇一個訓練計畫');
-        return;
-      }
-      setPrintLoading(true);
-      const token = localStorage.getItem('token');
-      const baseURL = API_BASE_URL;
-      const res = await fetch(`${baseURL}/admin/reports/print/preview`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          scope: 'plan',
-          print_mode: printMode,
-          plan_ids: Array.from(selectedPrintPlanIds),
-          include_employee_signature: includeEmployeeSignature,
-          include_exam_history: includeExamHistory
-        })
-      });
-      if (!res.ok) throw new Error('preview failed');
-      const data = await res.json();
-      const items = (data.items || []) as PrintPreviewItem[];
-      setPrintPreview(items);
-      setSelectedPrintEmpIds(new Set(items.map((i) => i.emp_id)));
-      setPrintPreviewPage(1);
-    } catch (error) {
-      console.error('load print preview failed', error);
-      alert('載入列印預覽失敗');
-    } finally {
-      setPrintLoading(false);
-    }
-  };
-
-  const exportPrintPdf = async () => {
-    try {
-      if (selectedPrintPlanIds.size === 0) {
-        alert('請至少選擇一個訓練計畫');
-        return;
-      }
-      if (selectedPrintEmpIds.size === 0) {
-        alert('請至少選擇一位人員');
-        return;
-      }
-      setPrintLoading(true);
-      const token = localStorage.getItem('token');
-      const baseURL = API_BASE_URL;
-      const response = await fetch(`${baseURL}/admin/reports/print/pdf`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          scope: 'plan',
-          print_mode: printMode,
-          plan_ids: Array.from(selectedPrintPlanIds),
-          emp_ids: Array.from(selectedPrintEmpIds),
-          include_employee_signature: includeEmployeeSignature,
-          include_exam_history: includeExamHistory
-        })
-      });
-      if (!response.ok) throw new Error('print failed');
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `score-print-${format(new Date(), 'yyyyMMdd')}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('print export failed', error);
-      alert('成績列印失敗');
-    } finally {
-      setPrintLoading(false);
-    }
-  };
-
-  const fetchPrintPlanOptions = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const baseURL = API_BASE_URL;
-      const res = await fetch(`${baseURL}/admin/reports/print/plan-options`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) throw new Error('load plan options failed');
-      const data = await res.json();
-      const options = (data || []) as PrintPlanOption[];
-      setPrintPlanOptions(options);
-      setSelectedPrintPlanIds(new Set(options.map((p) => p.plan_id)));
-    } catch (error) {
-      console.error('load print plan options failed', error);
-    }
-  };
-
+  // 進入「成績列印」頁籤且尚未載入計畫選項時觸發一次（沿用舊版「載入後預設全選」的操作習慣）
   useEffect(() => {
     if (activeTab === 'print' && printPlanOptions.length === 0) {
-      fetchPrintPlanOptions();
+      fetchPrintPlanOptions()
+        .then((options) => setSelectedPrintPlanIds(new Set(options.map((p) => p.plan_id))))
+        .catch(() => setPrintError('載入訓練計畫清單失敗'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -1628,6 +1553,12 @@ export default function ReportDashboard() {
         )}
         {activeTab === 'print' && (
           <div className="bg-white rounded-xl shadow-sm border border-indigo-100/50 overflow-hidden p-6 space-y-4">
+            {printError && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 font-medium">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {printError}
+              </div>
+            )}
             <ScorePrintFlow
               planOptions={printPlanOptions}
               selectedPlanIds={selectedPrintPlanIds}
@@ -1636,16 +1567,21 @@ export default function ReportDashboard() {
               onPrintModeChange={setPrintMode}
               includeEmployeeSignature={includeEmployeeSignature}
               onIncludeEmployeeSignatureChange={setIncludeEmployeeSignature}
-              includeExamHistory={includeExamHistory}
-              onIncludeExamHistoryChange={setIncludeExamHistory}
+              includeExamHistory={printIndividualDisabled}
+              onIncludeExamHistoryChange={(v) => setPrintScoreDataMode(v ? 'exam_history' : 'last_attempt')}
               onLoadPreview={loadPrintPreview}
               onPrintPdf={exportPrintPdf}
               printLoading={printLoading}
               selectedEmployeeCount={selectedPrintEmpIds.size}
               requireEmployeeSelectionForPrint
             />
+            {printIndividualDisabled && (
+              <p className="text-xs text-orange-500 font-bold">
+                「考試歷程」目前僅支援成績清單，考卷成績單（individual）僅支援「最後一次考試成績」，已自動切換為成績清單
+              </p>
+            )}
             <p className="text-xs text-gray-500">
-              預覽表可依關鍵字篩選與排序；「列印 PDF（已選 N 人）」的 N 為勾選要列印的<strong>員工人數（去重）</strong>，與下方列數不同。
+              預覽表可依關鍵字篩選與排序；「列印 PDF（已選 N 人）」的 N 為勾選要列印的<strong>員工人數（去重）</strong>，與下方列數不同。individual 模式將開啟瀏覽器列印視窗（非下載 PDF）。
             </p>
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
               <div className="relative flex-1 max-w-md">
