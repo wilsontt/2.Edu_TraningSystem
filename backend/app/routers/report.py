@@ -2113,6 +2113,36 @@ def _render_personal_exam_individual_to_buffer(
     return buffer
 
 
+def _draw_personal_exam_history_list_header(
+    p,
+    width: float,
+    height: float,
+    chinese_font: str,
+    plan_title: Optional[str],
+) -> float:
+    """
+    考試歷程 list PDF 抬頭（手機／平板／電腦皆經同一後端 API 產生，輸出一致）：
+    - 第一列：固定標題「教育訓練考試歷程成績列印」＋右側列印時間
+    - 第二列起：訓練計畫名稱（由左至右，過長自動換行）
+    回傳繪製完成後的 y 座標（供接續主表表頭）。
+    """
+    y = height - 40
+    p.setFont(chinese_font, 16)
+    p.drawString(40, y, "教育訓練考試歷程成績列印")
+    now_str = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y/%m/%d %H:%M")
+    p.setFont(chinese_font, 10)
+    p.drawString(width - 180, y, f"列印時間：{now_str}")
+    y -= 22
+    plan_name = (plan_title or "").strip()
+    if plan_name:
+        p.setFont(chinese_font, 11)
+        y = _draw_wrapped_text(p, plan_name, 40, y, width - 80, chinese_font, 11, 14)
+        y -= 6
+    else:
+        y -= 4
+    return y
+
+
 def render_score_print_pdf_to_buffer(
     db: Session,
     items: List[dict],
@@ -2125,8 +2155,8 @@ def render_score_print_pdf_to_buffer(
 ) -> BytesIO:
     """
     產生成績列印 PDF（Admin / 個人共用）。
-    document_context=personal_exam_history：歷程成績列印專用抬頭、不印筆數、
-    list 時歷程改表格式＋隔列；簽名為雙欄；表頭右側列印時間（Asia/Taipei）。
+    document_context=personal_exam_history：歷程成績列印專用抬頭（第一列固定標題＋列印時間，
+    第二列訓練計畫名稱）、不印筆數、list 時歷程改表格式＋隔列；簽名為雙欄；
     individual 時每試一頁摘要（T13；前端 2026/04/23 起暫隱藏詢問2 該選項）。
     規格對照：T13 測試問題約 208–247 行；實作索引見
     1.docs/reviews/T13-成績中心歷史記錄與考試歷程列印-變更記錄-20260423.md。
@@ -2141,26 +2171,19 @@ def render_score_print_pdf_to_buffer(
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
-    y = height - 40
     p.setFont(chinese_font, 16)
     if is_personal_exam:
-        plan_head = (personal_plan_title or (items[0].get("plan_title") if items else None) or "")[:40]
-        title_line = f"{plan_head} 教育訓練考試歷程成績列印" if plan_head else "教育訓練考試歷程成績列印"
-        p.drawString(40, y, title_line)
-        # T13（約 247 行）：PDF 表頭列印當下時間（與下載檔名由前端另組）
-        now_str = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y/%m/%d %H:%M")
-        p.setFont(chinese_font, 10)
-        p.drawString(width - 180, y, f"列印時間：{now_str}")
-        p.setFont(chinese_font, 16)
+        plan_name_src = personal_plan_title or (items[0].get("plan_title") if items else None)
+        y = _draw_personal_exam_history_list_header(
+            p, width, height, chinese_font, plan_name_src
+        )
     else:
+        y = height - 40
         p.drawString(40, y, "教育訓練成績列印")
-    y -= 24
-    p.setFont(chinese_font, 10)
-    if not is_personal_exam:
+        y -= 24
+        p.setFont(chinese_font, 10)
         p.drawString(40, y, f"筆數：{len(items)}")
         y -= 20
-    else:
-        y -= 4
 
     # T13：僅 personal_exam_history 主表最後欄顯示「考試時間」；Admin default 維持「時間」
     headers = (
