@@ -44,7 +44,7 @@ interface AdminUserResponse {
 export default function PersonalScorePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = parseUrlTab(searchParams.get('tab'));
-  const [localTab, setLocalTab] = useState<TabType>('overview');
+  const [localTab, setLocalTab] = useState<TabType>('history'); //預設頁籤改為 history
   const activeTab: TabType = urlTab ?? localTab;
 
   const navigateTab = (t: TabType) => {
@@ -162,7 +162,7 @@ export default function PersonalScorePage() {
   })();
 
   const resetToSelfView = () => {
-    setLocalTab('overview');
+    setLocalTab('history'); //預設頁籤改為 history
     setSelectedEmpId(null);
     setSelectedEmpName('');
     setSelectedDeptName('');
@@ -201,7 +201,7 @@ export default function PersonalScorePage() {
             {selectedEmpId && (
               <button
                 onClick={() => {
-                  setLocalTab('overview');
+                  setLocalTab('history'); //預設頁籤改為 history
                   setSelectedEmpId(null);
                   setSelectedEmpName('');
                   setSelectedDeptName('');
@@ -275,6 +275,17 @@ export default function PersonalScorePage() {
       <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
         <div className="flex space-x-1 bg-indigo-50/50 p-1.5 rounded-xl w-fit border border-indigo-100/50">
           <button
+            onClick={() => navigateTab('history')} //預設頁籤改為 history
+            className={clsx(
+              "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+              activeTab === 'history'
+                ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
+                : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+            )}
+          >
+            歷史記錄
+          </button>
+          <button
             onClick={() => navigateTab('overview')}
             className={clsx(
               "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
@@ -284,17 +295,6 @@ export default function PersonalScorePage() {
             )}
           >
             總覽
-          </button>
-          <button
-            onClick={() => navigateTab('history')}
-            className={clsx(
-              "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
-              activeTab === 'history'
-                ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
-                : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
-            )}
-          >
-            歷史記錄
           </button>
           <button
             onClick={() => navigateTab('analysis')}

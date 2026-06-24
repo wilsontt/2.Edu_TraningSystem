@@ -93,9 +93,19 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
     <div className="relative">
       <PortalTopNav
         left={
-          <Link to="/" className="flex min-w-0">
-            <CrownBrand logoSrc={logoUrl} subtitle="Education System" />
-          </Link>
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="lg:hidden text-gray-500 hover:text-blue-600 transition-colors p-2 hover:bg-gray-50 rounded-xl shrink-0"
+              aria-label={isMobileMenuOpen ? '關閉選單' : '開啟選單'}
+            >
+              {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+            <Link to="/" className="flex min-w-0">
+              <CrownBrand logoSrc={logoUrl} subtitle="Education System" compact />
+            </Link>
+          </div>
         }
         center={
           <div className="flex items-center gap-2 flex-wrap justify-center">
@@ -152,30 +162,24 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
         }
         right={
           <>
-            <div className="flex items-center gap-3 pr-2 sm:pr-4 border-r border-gray-200">
-              <div className="text-right hidden sm:block">
-                <p className="text-xs text-gray-500 font-medium leading-none">
+            <div className="flex items-center gap-1.5 sm:gap-3 pr-1 sm:pr-4 sm:border-r sm:border-gray-200 min-w-0">
+              <div className="text-right min-w-0 flex-1">
+                <p className="text-[11px] sm:text-xs text-gray-500 font-medium leading-tight sm:truncate">
                   {user.role === 'Admin' ? 'IT管理員' : user.dept_name}
                 </p>
-                <p className="text-sm font-bold text-gray-800">
-                  {user.name} <span className="text-gray-400 font-normal">({user.emp_id})</span>
+                <p className="text-xs sm:text-sm font-bold text-gray-800 leading-tight sm:truncate">
+                  {user.name}
+                  <span className="text-gray-400 font-normal hidden sm:inline"> ({user.emp_id})</span>
                 </p>
               </div>
-              <NavCalendarCluster />
+              <NavCalendarCluster className="shrink-0 [&>div:last-child]:hidden sm:[&>div:last-child]:flex" />
             </div>
             <button
               type="button"
               onClick={onLogout}
-              className="hidden sm:block text-gray-500 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-full"
+              className="hidden sm:block text-gray-500 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-full shrink-0"
             >
               <LogOut className="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden text-gray-500 hover:text-blue-600 transition-colors p-2 hover:bg-gray-50 rounded-xl"
-            >
-              {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </>
         }

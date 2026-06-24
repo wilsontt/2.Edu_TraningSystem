@@ -77,11 +77,7 @@ const UserManager = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => {
-    fetchData();
-  }, [showInactiveUsers]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
       const [usersRes, rolesRes, deptsRes, jobTitlesRes] = await Promise.all([
@@ -100,7 +96,11 @@ const UserManager = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [showInactiveUsers]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleEdit = (user: User) => {
     setEditingUser(user);
