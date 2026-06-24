@@ -1574,6 +1574,7 @@ export default function ReportDashboard() {
               printLoading={printLoading}
               selectedEmployeeCount={selectedPrintEmpIds.size}
               requireEmployeeSelectionForPrint
+              disableIndividualMode={printIndividualDisabled}
             />
             {printIndividualDisabled && (
               <p className="text-xs text-orange-500 font-bold">

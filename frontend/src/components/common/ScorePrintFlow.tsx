@@ -41,6 +41,11 @@ export interface ScorePrintFlowProps {
    * 考試歷程精靈：每次此數值變化時重設至步驟 1（例如父層在 Modal 每次開啟時遞增）。
    */
   planHistoryWizardResetSignal?: number;
+  /**
+   * 若 true，禁用「考卷成績單(individual)」列印方式單選框（例如成績資料模式為「考試歷程」時，
+   * individual 為無效組合）。預設 false（不禁用），不影響既有呼叫端行為。
+   */
+  disableIndividualMode?: boolean;
 }
 
 /**
@@ -64,6 +69,7 @@ export default function ScorePrintFlow({
   requireEmployeeSelectionForPrint = false,
   planHistoryTri,
   planHistoryWizardResetSignal = 0,
+  disableIndividualMode = false,
 }: ScorePrintFlowProps) {
   const isPlanHistoryFooter = variant === 'planHistoryFooter';
   const usePlanHistoryWizard = isPlanHistoryFooter && planHistoryTri !== undefined;
@@ -386,12 +392,17 @@ export default function ScorePrintFlow({
                 />
                 {listLabel}
               </label>
-              <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
+              <label
+                className={`flex items-center gap-2 text-sm font-bold cursor-pointer ${
+                  disableIndividualMode ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700'
+                }`}
+              >
                 <input
                   type="radio"
                   name="score_print_mode"
                   checked={printMode === 'individual'}
                   onChange={() => onPrintModeChange('individual')}
+                  disabled={disableIndividualMode}
                 />
                 {individualLabel}
               </label>
@@ -422,12 +433,17 @@ export default function ScorePrintFlow({
                 />
                 {listLabel}
               </label>
-              <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
+              <label
+                className={`flex items-center gap-2 text-sm font-bold cursor-pointer ${
+                  disableIndividualMode ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700'
+                }`}
+              >
                 <input
                   type="radio"
                   name="score_print_mode"
                   checked={printMode === 'individual'}
                   onChange={() => onPrintModeChange('individual')}
+                  disabled={disableIndividualMode}
                 />
                 {individualLabel}
               </label>
