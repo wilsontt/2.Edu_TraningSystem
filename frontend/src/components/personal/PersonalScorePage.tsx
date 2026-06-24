@@ -7,10 +7,11 @@ import PersonalScoreOverview from './PersonalScoreOverview';
 import PersonalScoreHistory from './PersonalScoreHistory';
 import PersonalLearningAnalysis from './PersonalLearningAnalysis';
 import ReportDashboard from '../admin/ReportDashboard';
+import BatchPrintPage from '../admin/BatchPrintPage';
 
-type TabType = 'overview' | 'history' | 'analysis' | 'team';
+type TabType = 'overview' | 'history' | 'analysis' | 'team' | 'batch-print';
 
-const URL_TAB_VALUES = ['overview', 'history', 'analysis'] as const;
+const URL_TAB_VALUES = ['overview', 'history', 'analysis', 'batch-print'] as const;
 type UrlTab = (typeof URL_TAB_VALUES)[number];
 
 function parseUrlTab(raw: string | null): UrlTab | null {
@@ -320,6 +321,19 @@ export default function PersonalScorePage() {
               部門成績
             </button>
           )}
+          {hasReportPermission && (
+            <button
+              onClick={() => navigateTab('batch-print')}
+              className={clsx(
+                "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+                activeTab === 'batch-print'
+                  ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
+                  : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+              )}
+            >
+              批次列印
+            </button>
+          )}
         </div>
       </div>
 
@@ -335,6 +349,7 @@ export default function PersonalScorePage() {
         {activeTab === 'history' && <PersonalScoreHistory empId={selectedEmpId || undefined} titlePrefix={titlePrefix} />}
         {activeTab === 'analysis' && <PersonalLearningAnalysis empId={selectedEmpId || undefined} titlePrefix={titlePrefix} />}
         {activeTab === 'team' && hasReportPermission && <ReportDashboard />}
+        {activeTab === 'batch-print' && hasReportPermission && <BatchPrintPage />}
       </div>
     </div>
   );
