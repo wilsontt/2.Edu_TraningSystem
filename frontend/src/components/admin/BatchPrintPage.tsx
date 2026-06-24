@@ -510,11 +510,14 @@ export default function BatchPrintPage() {
           <button
             type="button"
             onClick={handleExport}
-            disabled={loading || selectedPlanIds.size === 0}
+            disabled={loading || selectedPlanIds.size === 0 || selectedEmpIds.size === 0}
             className="w-full sm:w-auto px-5 py-2.5 text-sm font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer"
           >
             {loading ? '產生中...' : printMode === 'individual' ? '列印考卷成績單' : '產生 PDF'}
           </button>
+          {!loading && selectedPlanIds.size > 0 && selectedEmpIds.size === 0 && (
+            <p className="text-xs text-orange-500 font-bold">請至少勾選一位人員</p>
+          )}
         </div>
       )}
 

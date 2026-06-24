@@ -250,6 +250,11 @@ export function useBatchPrint(): UseBatchPrintResult {
       setError('考卷成績單（individual）僅支援「最後一次考試成績」，請改選最後一次成績或切換為成績清單');
       return;
     }
+    // individual-data 後端要求 plan_ids 不可為空（會回 400），於呼叫前先擋下並給出明確錯誤
+    if (selectedPlanIds.size === 0) {
+      setError('請至少選擇一項訓練計畫');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
