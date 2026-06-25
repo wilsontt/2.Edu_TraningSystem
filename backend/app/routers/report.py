@@ -2498,6 +2498,51 @@ def _validate_batch_print_limits(plan_ids: List[int], emp_ids: List[str]) -> Non
         )
 
 
+def _batch_print_plan_option_rows(db: Session, plan_status: str) -> List[dict]:
+    """
+    批次列印可選訓練計畫：與訓練計畫管理 GET /training/plans?status= 語意一致，
+    不依 ExamRecord 篩選（避免「進行中」清單多於管理頁）。
+    """
+    status_filter = _training_plan_status_filter_expr(plan_status)
+    rows = (
+        db.query(
+            models.TrainingPlan.id,
+            models.TrainingPlan.title,
+            models.TrainingPlan.year,
+            models.TrainingPlan.training_date,
+            models.Department.name.label("dept_name"),
+        )
+        .outerjoin(models.Department, models.TrainingPlan.dept_id == models.Department.id)
+        .filter(status_filter)
+        .order_by(models.TrainingPlan.training_date.desc())
+        .all()
+    )
+    return [
+        {
+            "plan_id": r.id,
+            "plan_title": r.title,
+            "year": r.year,
+            "training_date": r.training_date.isoformat() if r.training_date else None,
+            "dept_name": r.dept_name,
+            "display_index": idx,
+        }
+        for idx, r in enumerate(rows, start=1)
+    ]
+
+
+@router.get("/batch-print/plan-options")
+def get_batch_print_plan_options(
+    plan_status: str = Query("active"),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:report"),
+):
+    """成績中心批次列印：可選訓練計畫（依 active／expired／archived 篩選）。"""
+    ps = (plan_status or "active").strip().lower()
+    if ps not in ("active", "expired", "archived"):
+        raise HTTPException(status_code=400, detail="plan_status 必須為 active、expired 或 archived")
+    return _batch_print_plan_option_rows(db, ps)
+
+
 @router.get("/batch-print/dept-options")
 def get_batch_print_dept_options(
     db: Session = Depends(get_db),
@@ -2631,6 +2676,9 @@ def batch_print_individual_data(
     成績中心批次列印 individual 明細資料（泛化既有 /dept-plan/individual-print-data，
     不限單部門）：依 plan_ids + emp_ids 回傳每位成員完整成績詳情（MemberPrintItem[] 格式）。
 
+    僅回傳 `has_exam=True` 且含逐題明細之紀錄；未應考／僅報到未完成者不列入
+    （避免 plan_ids × emp_ids 笛卡兒展開產生空白成績單頁）。
+
     範圍限制：individual 模式僅支援 `score_data_mode="last_attempt"`（對齊個人端 T13，
     考試歷程逐題明細暫不支援 individual 呈現，詳見計畫書 §2.2／§4.2）。
     若傳入 `score_data_mode="exam_history"` 將回傳 400，而非靜默改採 last_attempt。
@@ -2670,15 +2718,13 @@ def batch_print_individual_data(
         .all()
     )
     plan_map = {p.id: p for p in plans}
-
-    reason_code_map = {
-        "sick_leave": "病假", "business_trip": "出差",
-        "official_leave": "公假", "other": "其他",
-    }
+    user_map = {u.emp_id: u for u in users}
 
     result = []
     for plan_id in payload.plan_ids:
         plan_obj = plan_map.get(plan_id)
+        if not plan_obj:
+            continue
         passing_score = plan_obj.passing_score if plan_obj else 60
         plan_title_resolved = plan_obj.title if plan_obj else ""
 
@@ -2707,106 +2753,64 @@ def batch_print_individual_data(
             )
             .all()
         )
-        exam_map = {r.emp_id: r for r in exam_rows}
 
-        att_rows = (
-            db.query(models.AttendanceRecord)
-            .filter(
-                models.AttendanceRecord.plan_id == plan_id,
-                models.AttendanceRecord.emp_id.in_(emp_ids),
-            )
-            .all()
-        )
-        att_dict = {r.emp_id: r for r in att_rows}
-        abs_rows = (
-            db.query(models.AttendanceAbsenceReason)
-            .filter(
-                models.AttendanceAbsenceReason.plan_id == plan_id,
-                models.AttendanceAbsenceReason.emp_id.in_(emp_ids),
-            )
-            .all()
-        )
-        abs_label_map: dict = {}
-        for r in abs_rows:
-            label = reason_code_map.get(r.reason_code, r.reason_code)
-            if r.reason_code == "other" and r.reason_text:
-                label = r.reason_text
-            abs_label_map[r.emp_id] = label
-
-        for u in users:
+        for exam in exam_rows:
+            u = user_map.get(exam.emp_id)
+            if not u:
+                continue
             dept_name_resolved = dept_map.get(u.dept_id, "")
-            att_record = att_dict.get(u.emp_id)
-            absence = abs_label_map.get(u.emp_id)
 
-            exam = exam_map.get(u.emp_id)
-
-            if exam:
-                att_status = "已考試"
-            elif att_record:
-                att_status = "已報到/未完成"
-            else:
-                reason_part = f"（{absence}）" if absence else ""
-                att_status = f"未應考{reason_part}"
-
-            if exam:
-                exam_details_q = (
-                    db.query(models.ExamDetail, models.Question)
-                    .join(models.Question, models.ExamDetail.question_id == models.Question.id)
-                    .filter(models.ExamDetail.record_id == exam.id)
-                    .all()
-                )
-                question_details = []
-                for ed, q in exam_details_q:
-                    question_details.append({
-                        "question_id": q.id,
-                        "question_number": len(question_details) + 1,
-                        "content": q.content,
-                        "question_type": q.question_type,
-                        "options": q.options,
-                        "correct_answer": q.answer,
-                        "user_answer": ed.user_answer,
-                        "is_correct": ed.is_correct,
-                        "points": q.points,
-                        "earned_points": q.points if ed.is_correct else 0,
-                    })
-                question_details.sort(key=lambda x: x["question_id"])
-
-                duration = None
-                if exam.start_time and exam.submit_time:
-                    duration = round((exam.submit_time - exam.start_time).total_seconds(), 0)
-
-                detail = {
-                    "record_id": exam.id,
-                    "basic_info": {
-                        "emp_id": u.emp_id,
-                        "name": u.name,
-                        "dept_name": dept_name_resolved,
-                        "plan_id": plan_id,
-                        "plan_title": plan_title_resolved,
-                        "training_date": None,
-                        "end_date": None,
-                        "passing_score": passing_score,
-                        "total_score": exam.total_score,
-                        "is_passed": exam.is_passed,
-                        "start_time": exam.start_time.isoformat() if exam.start_time else None,
-                        "submit_time": exam.submit_time.isoformat() if exam.submit_time else None,
-                        "duration": duration,
-                        "attempts": exam.attempts,
-                    },
-                    "question_details": question_details,
-                    "history": [],
-                }
-                result.append({"has_exam": True, "attendance_status": att_status, "detail": detail})
-            else:
-                result.append({
-                    "has_exam": False,
-                    "attendance_status": att_status,
-                    "name": u.name,
-                    "emp_id": u.emp_id,
-                    "dept_name": dept_name_resolved,
-                    "plan_title": plan_title_resolved,
-                    "detail": None,
+            exam_details_q = (
+                db.query(models.ExamDetail, models.Question)
+                .join(models.Question, models.ExamDetail.question_id == models.Question.id)
+                .filter(models.ExamDetail.record_id == exam.id)
+                .all()
+            )
+            question_details = []
+            for ed, q in exam_details_q:
+                question_details.append({
+                    "question_id": q.id,
+                    "question_number": len(question_details) + 1,
+                    "content": q.content,
+                    "question_type": q.question_type,
+                    "options": q.options,
+                    "correct_answer": q.answer,
+                    "user_answer": ed.user_answer,
+                    "is_correct": ed.is_correct,
+                    "points": q.points,
+                    "earned_points": q.points if ed.is_correct else 0,
                 })
+            question_details.sort(key=lambda x: x["question_id"])
+
+            duration = None
+            if exam.start_time and exam.submit_time:
+                duration = round((exam.submit_time - exam.start_time).total_seconds(), 0)
+
+            detail = {
+                "record_id": exam.id,
+                "basic_info": {
+                    "emp_id": u.emp_id,
+                    "name": u.name,
+                    "dept_name": dept_name_resolved,
+                    "plan_id": plan_id,
+                    "plan_title": plan_title_resolved,
+                    "training_date": None,
+                    "end_date": None,
+                    "passing_score": passing_score,
+                    "total_score": exam.total_score,
+                    "is_passed": exam.is_passed,
+                    "start_time": exam.start_time.isoformat() if exam.start_time else None,
+                    "submit_time": exam.submit_time.isoformat() if exam.submit_time else None,
+                    "duration": duration,
+                    "attempts": exam.attempts,
+                },
+                "question_details": question_details,
+                "history": [],
+            }
+            result.append({"has_exam": True, "attendance_status": "已考試", "detail": detail})
+
+    if not result:
+        raise HTTPException(status_code=404, detail="查無可列印的成績資料")
 
     return result
 

@@ -28,6 +28,13 @@ export interface MemberPrintItem {
   plan_title?: string;
 }
 
+/** 答題詳情版面：preview_table 對齊成績單預覽 Modal；exam_card 為考卷成績單逐題卡片 */
+export type AnswerDetailLayout = 'preview_table' | 'exam_card' | 'none';
+
+export interface BuildBatchPrintHtmlOptions {
+  answerDetailLayout?: AnswerDetailLayout;
+}
+
 // ── 內部 helper ────────────────────────────────────────────────────────────────
 
 function parseOptions(optionsStr: string | null): Record<string, string> {
@@ -93,6 +100,39 @@ function buildDetailsHtml(questionDetails: ScoreDetail['question_details']): str
         </div>
       </div>`;
   }).join('');
+}
+
+/** 答題詳情表格 HTML（與 ScoreCardPreview 螢幕預覽表格一致） */
+function buildDetailsTableHtml(questionDetails: ScoreDetail['question_details']): string {
+  const rows = questionDetails.map((q) => {
+    const rowBg = q.is_correct ? '' : 'background:#fef2f2;';
+    const answerColor = q.is_correct ? '#15803d' : '#b91c1c';
+    return `
+      <tr style="${rowBg}">
+        <td style="border:1px solid #1f2937;padding:8px;text-align:center;font-size:14px;">${q.question_number}</td>
+        <td style="border:1px solid #1f2937;padding:8px;font-size:14px;">${q.content}</td>
+        <td style="border:1px solid #1f2937;padding:8px;text-align:center;font-size:14px;font-weight:500;color:${answerColor};">${q.user_answer || '未作答'}</td>
+        <td style="border:1px solid #1f2937;padding:8px;text-align:center;font-size:14px;font-weight:500;color:#15803d;">${q.correct_answer}</td>
+        <td style="border:1px solid #1f2937;padding:8px;text-align:center;font-size:14px;font-weight:bold;color:${answerColor};">${q.earned_points} / ${q.points}</td>
+      </tr>`;
+  }).join('');
+
+  return `
+    <div style="margin-top:1.5rem;margin-bottom:1.5rem;font-family:${CHINESE_FONT_STACK};">
+      <div style="font-size:14px;font-weight:bold;color:#374151;margin-bottom:0.5rem;">答題詳情 / Answer Details</div>
+      <table style="width:100%;border-collapse:collapse;border:2px solid #1f2937;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="border:1px solid #1f2937;padding:8px;font-size:14px;font-weight:bold;width:48px;">題號</th>
+            <th style="border:1px solid #1f2937;padding:8px;font-size:14px;font-weight:bold;">題目</th>
+            <th style="border:1px solid #1f2937;padding:8px;font-size:14px;font-weight:bold;width:80px;">考生答案</th>
+            <th style="border:1px solid #1f2937;padding:8px;font-size:14px;font-weight:bold;width:80px;">正確答案</th>
+            <th style="border:1px solid #1f2937;padding:8px;font-size:14px;font-weight:bold;width:72px;">得分</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
 
 /** 簽名欄 HTML（與 ScoreCardPreview 的 signatureFooterHtml 相同） */
@@ -279,7 +319,9 @@ function buildPrintStyles(pageStyles: string): string {
 export function buildBatchPrintHtml(
   members: MemberPrintItem[],
   includeSignature: boolean,
+  options: BuildBatchPrintHtmlOptions = {},
 ): string {
+  const layout: AnswerDetailLayout = options.answerDetailLayout ?? 'exam_card';
   const pageStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
     .map(el => el.outerHTML)
     .join('');
@@ -300,14 +342,26 @@ export function buildBatchPrintHtml(
     if (m.has_exam && m.detail) {
       const coverHtml = buildExamCoverHtml(m.detail);
       const hasQuestions = m.detail.question_details.length > 0;
-      const detailsHtml = hasQuestions ? buildDetailsHtml(m.detail.question_details) : '';
+
+      if (layout === 'preview_table') {
+        const detailsHtml = hasQuestions ? buildDetailsTableHtml(m.detail.question_details) : '';
+        return `
+        <div class="cover-page">
+          <div class="cover-content">${coverHtml}${detailsHtml}</div>
+          ${signatureFooterHtml}
+        </div>
+        ${memberPageBreak}`;
+      }
+
+      const detailsHtml =
+        hasQuestions && layout === 'exam_card' ? buildDetailsHtml(m.detail.question_details) : '';
 
       return `
         <div class="cover-page">
           <div class="cover-content">${coverHtml}</div>
           ${signatureFooterHtml}
         </div>
-        ${hasQuestions ? `
+        ${hasQuestions && layout === 'exam_card' ? `
           <div class="page-break"></div>
           <div style="padding-top:1rem;">
             <h2 style="font-size:1.5rem;font-weight:bold;color:#111827;margin-bottom:1.5rem;border-bottom:2px solid #1f2937;padding-bottom:0.5rem;font-family:${CHINESE_FONT_STACK};">

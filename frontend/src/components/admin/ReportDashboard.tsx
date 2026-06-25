@@ -274,8 +274,7 @@ export default function ReportDashboard() {
     setError: setPrintError,
     fetchPlanOptions: fetchPrintPlanOptions,
     loadPreview: loadPrintPreview,
-    exportPdf: exportPrintListPdf,
-    exportIndividualHtml: exportPrintIndividualHtml,
+    exportByOutputStyle: exportPrintByStyle,
   } = useBatchPrint();
 
   // 選「考試歷程」時，「考卷成績單(individual)」為無效組合，自動回退為「成績清單」
@@ -296,11 +295,7 @@ export default function ReportDashboard() {
     ) {
       return;
     }
-    if (printMode === 'individual') {
-      await exportPrintIndividualHtml();
-    } else {
-      await exportPrintListPdf();
-    }
+    await exportPrintByStyle();
   };
 
   const toggleExpandRow = async (itemId: number) => {
@@ -561,11 +556,15 @@ export default function ReportDashboard() {
     return details[kpiType] || { description: "無詳細資訊", value: "-", unit: "" };
   };
 
-  // 進入「成績列印」頁籤且尚未載入計畫選項時觸發一次（沿用舊版「載入後預設全選」的操作習慣）
+  // 進入「成績列印」頁籤時載入計畫選項（與批次列印頁相同 API，預設進行中）
   useEffect(() => {
-    if (activeTab === 'print' && printPlanOptions.length === 0) {
-      fetchPrintPlanOptions()
-        .then((options) => setSelectedPrintPlanIds(new Set(options.map((p) => p.plan_id))))
+    if (activeTab === 'print') {
+      fetchPrintPlanOptions('active')
+        .then((options) => {
+          if (selectedPrintPlanIds.size === 0) {
+            setSelectedPrintPlanIds(new Set(options.map((p) => p.plan_id)));
+          }
+        })
         .catch(() => setPrintError('載入訓練計畫清單失敗'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

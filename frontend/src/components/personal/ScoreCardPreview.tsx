@@ -189,6 +189,7 @@ export default function ScoreCardPreview({
     const htmlContent = buildBatchPrintHtml(
       [{ has_exam: true, attendance_status: '', detail }],
       includeEmployeeSignature,
+      { answerDetailLayout: 'preview_table' },
     );
     printHtmlInIframe(htmlContent);
   };

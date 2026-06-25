@@ -590,6 +590,7 @@ class BatchPrintPreviewRequest(BaseModel):
     plan_status: Literal["active", "expired", "archived"] = "active"
     score_data_mode: Literal["last_attempt", "exam_history"] = "last_attempt"
     print_mode: Literal["list", "individual"] = "list"
+    output_style: Literal["score_card", "summary_list"] = "summary_list"
     include_employee_signature: bool = False
 
 
@@ -601,6 +602,7 @@ class BatchPrintPdfRequest(BaseModel):
     plan_status: Literal["active", "expired", "archived"] = "active"
     score_data_mode: Literal["last_attempt", "exam_history"] = "last_attempt"
     print_mode: Literal["list", "individual"] = "list"
+    output_style: Literal["score_card", "summary_list"] = "summary_list"
     include_employee_signature: bool = False
 
 

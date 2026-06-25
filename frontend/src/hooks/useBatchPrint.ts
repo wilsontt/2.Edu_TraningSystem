@@ -9,11 +9,14 @@ import {
   buildBatchPrintHtml,
   printHtmlInIframe,
   type MemberPrintItem,
+  type AnswerDetailLayout,
 } from '../components/personal/scoreCardPrintHtml';
 
 export type PlanStatus = 'active' | 'expired' | 'archived';
 export type ScoreDataMode = 'last_attempt' | 'exam_history';
 export type PrintMode = 'list' | 'individual';
+/** 最後一次成績：成績單預覽樣式（HTML）或成績清單表格（PDF/ZIP） */
+export type OutputStyle = 'score_card' | 'summary_list';
 
 export interface DeptOption {
   dept_id: number;
@@ -24,6 +27,9 @@ export interface PlanOption {
   plan_id: number;
   plan_title: string;
   training_date: string | null;
+  year?: string | null;
+  dept_name?: string | null;
+  display_index?: number;
 }
 
 export interface BatchPrintPreviewItem {
@@ -85,7 +91,6 @@ async function extractErrorMessage(error: unknown, fallback: string): Promise<st
     'data' in error.response
   ) {
     const data = (error.response as { data?: unknown }).data;
-    // responseType:'blob' 的請求即使是錯誤回應，data 也會是 Blob，需先轉文字再解析 JSON
     if (data instanceof Blob) {
       try {
         const text = await data.text();
@@ -104,7 +109,6 @@ async function extractErrorMessage(error: unknown, fallback: string): Promise<st
 }
 
 export interface UseBatchPrintResult {
-  // 篩選條件 state
   selectedPlanIds: Set<number>;
   setSelectedPlanIds: (ids: Set<number>) => void;
   selectedDeptIds: Set<number>;
@@ -115,38 +119,36 @@ export interface UseBatchPrintResult {
   setScoreDataMode: (mode: ScoreDataMode) => void;
   printMode: PrintMode;
   setPrintMode: (mode: PrintMode) => void;
+  outputStyle: OutputStyle;
+  setOutputStyle: (style: OutputStyle) => void;
   includeEmployeeSignature: boolean;
   setIncludeEmployeeSignature: (v: boolean) => void;
 
-  // 人員勾選（去重 emp_id）
   selectedEmpIds: Set<string>;
   setSelectedEmpIds: (ids: Set<string>) => void;
   toggleEmpId: (empId: string) => void;
 
-  // 預覽資料
   previewItems: BatchPrintPreviewItem[];
   previewTotal: number;
 
-  // 選項資料
   deptOptions: DeptOption[];
   planOptions: PlanOption[];
 
-  // loading / error
   loading: boolean;
   error: string;
   setError: (msg: string) => void;
 
-  // actions
   fetchDeptOptions: () => Promise<DeptOption[]>;
-  fetchPlanOptions: () => Promise<PlanOption[]>;
+  fetchPlanOptions: (status?: PlanStatus) => Promise<PlanOption[]>;
   loadPreview: () => Promise<void>;
   exportPdf: () => Promise<void>;
-  exportIndividualHtml: () => Promise<void>;
+  exportIndividualHtml: (answerDetailLayout?: AnswerDetailLayout) => Promise<void>;
+  /** 依 outputStyle / printMode 自動選擇 PDF 或成績單 HTML 列印 */
+  exportByOutputStyle: () => Promise<void>;
 }
 
 /**
  * 成績中心批次列印共用 hook。
- * @returns 篩選條件狀態、預覽/選項資料與三種輸出動作
  */
 export function useBatchPrint(): UseBatchPrintResult {
   const [selectedPlanIds, setSelectedPlanIds] = useState<Set<number>>(new Set());
@@ -154,6 +156,7 @@ export function useBatchPrint(): UseBatchPrintResult {
   const [planStatus, setPlanStatus] = useState<PlanStatus>('active');
   const [scoreDataMode, setScoreDataMode] = useState<ScoreDataMode>('last_attempt');
   const [printMode, setPrintMode] = useState<PrintMode>('list');
+  const [outputStyle, setOutputStyle] = useState<OutputStyle>('summary_list');
   const [includeEmployeeSignature, setIncludeEmployeeSignature] = useState(false);
 
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
@@ -182,11 +185,14 @@ export function useBatchPrint(): UseBatchPrintResult {
     return res.data;
   }, []);
 
-  const fetchPlanOptions = useCallback(async (): Promise<PlanOption[]> => {
-    const res = await api.get<PlanOption[]>('/admin/reports/print/plan-options');
+  const fetchPlanOptions = useCallback(async (status?: PlanStatus): Promise<PlanOption[]> => {
+    const effectiveStatus = status ?? planStatus;
+    const res = await api.get<PlanOption[]>('/admin/reports/batch-print/plan-options', {
+      params: { plan_status: effectiveStatus },
+    });
     setPlanOptions(res.data);
     return res.data;
-  }, []);
+  }, [planStatus]);
 
   const loadPreview = useCallback(async () => {
     setLoading(true);
@@ -200,10 +206,12 @@ export function useBatchPrint(): UseBatchPrintResult {
           emp_ids: [],
           plan_status: planStatus,
           score_data_mode: scoreDataMode,
+          output_style: outputStyle,
         },
       );
       setPreviewItems(res.data.items);
       setPreviewTotal(res.data.total);
+      setSelectedEmpIds(new Set(res.data.items.map((i) => i.emp_id)));
     } catch (e) {
       setPreviewItems([]);
       setPreviewTotal(0);
@@ -211,7 +219,7 @@ export function useBatchPrint(): UseBatchPrintResult {
     } finally {
       setLoading(false);
     }
-  }, [selectedPlanIds, selectedDeptIds, planStatus, scoreDataMode]);
+  }, [selectedPlanIds, selectedDeptIds, planStatus, scoreDataMode, outputStyle]);
 
   const exportPdf = useCallback(async () => {
     setLoading(true);
@@ -225,7 +233,8 @@ export function useBatchPrint(): UseBatchPrintResult {
           emp_ids: Array.from(selectedEmpIds),
           plan_status: planStatus,
           score_data_mode: scoreDataMode,
-          print_mode: printMode,
+          print_mode: 'list',
+          output_style: 'summary_list',
           include_employee_signature: includeEmployeeSignature,
         },
         { responseType: 'blob' },
@@ -243,14 +252,13 @@ export function useBatchPrint(): UseBatchPrintResult {
     } finally {
       setLoading(false);
     }
-  }, [selectedPlanIds, selectedDeptIds, selectedEmpIds, planStatus, scoreDataMode, printMode, includeEmployeeSignature]);
+  }, [selectedPlanIds, selectedDeptIds, selectedEmpIds, planStatus, scoreDataMode, includeEmployeeSignature]);
 
-  const exportIndividualHtml = useCallback(async () => {
-    if (printMode === 'individual' && scoreDataMode === 'exam_history') {
-      setError('考卷成績單（individual）僅支援「最後一次考試成績」，請改選最後一次成績或切換為成績清單');
+  const exportIndividualHtml = useCallback(async (answerDetailLayout: AnswerDetailLayout = 'exam_card') => {
+    if (scoreDataMode === 'exam_history') {
+      setError('考卷成績單僅支援「最後一次考試成績」，請改選最後一次成績');
       return;
     }
-    // individual-data 後端要求 plan_ids 不可為空（會回 400），於呼叫前先擋下並給出明確錯誤
     if (selectedPlanIds.size === 0) {
       setError('請至少選擇一項訓練計畫');
       return;
@@ -258,22 +266,46 @@ export function useBatchPrint(): UseBatchPrintResult {
     setLoading(true);
     setError('');
     try {
+      const selectedPreviewRows = previewItems.filter((item) => selectedEmpIds.has(item.emp_id));
+      const planIdsForExport =
+        selectedPreviewRows.length > 0
+          ? [...new Set(selectedPreviewRows.map((item) => item.plan_id))]
+          : Array.from(selectedPlanIds);
+
       const res = await api.post<MemberPrintItem[]>(
         '/admin/reports/batch-print/individual-data',
         {
-          plan_ids: Array.from(selectedPlanIds),
+          plan_ids: planIdsForExport,
           emp_ids: Array.from(selectedEmpIds),
-          score_data_mode: scoreDataMode,
+          score_data_mode: 'last_attempt',
         },
       );
-      const html = buildBatchPrintHtml(res.data, includeEmployeeSignature);
+      const html = buildBatchPrintHtml(res.data, includeEmployeeSignature, {
+        answerDetailLayout,
+      });
       printHtmlInIframe(html);
     } catch (e) {
       setError(await extractErrorMessage(e, '載入列印資料失敗'));
     } finally {
       setLoading(false);
     }
-  }, [selectedPlanIds, selectedEmpIds, scoreDataMode, includeEmployeeSignature, printMode]);
+  }, [selectedPlanIds, selectedEmpIds, previewItems, scoreDataMode, includeEmployeeSignature]);
+
+  const exportByOutputStyle = useCallback(async () => {
+    if (scoreDataMode !== 'last_attempt') {
+      await exportPdf();
+      return;
+    }
+    if (outputStyle === 'score_card') {
+      await exportIndividualHtml('preview_table');
+      return;
+    }
+    if (printMode === 'individual') {
+      await exportIndividualHtml('exam_card');
+      return;
+    }
+    await exportPdf();
+  }, [scoreDataMode, outputStyle, printMode, exportIndividualHtml, exportPdf]);
 
   return {
     selectedPlanIds,
@@ -286,6 +318,8 @@ export function useBatchPrint(): UseBatchPrintResult {
     setScoreDataMode,
     printMode,
     setPrintMode,
+    outputStyle,
+    setOutputStyle,
     includeEmployeeSignature,
     setIncludeEmployeeSignature,
     selectedEmpIds,
@@ -303,5 +337,6 @@ export function useBatchPrint(): UseBatchPrintResult {
     loadPreview,
     exportPdf,
     exportIndividualHtml,
+    exportByOutputStyle,
   };
 }

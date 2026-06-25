@@ -6,6 +6,9 @@ export interface ScorePrintPlanOption {
   plan_id: number;
   plan_title: string;
   training_date?: string | null;
+  year?: string | null;
+  dept_name?: string | null;
+  display_index?: number;
 }
 
 /** 考試歷程 Modal 底部：詢問2／3 三態與主鈕（由 PlanHistoryModal 傳入） */
@@ -250,6 +253,14 @@ export default function ScorePrintFlow({
                         checked={selectedPlanIds.has(plan.plan_id)}
                         onChange={() => togglePlan(plan.plan_id)}
                       />
+                      {plan.display_index != null && (
+                        <span className="w-6 shrink-0 text-center text-xs text-gray-400 tabular-nums">
+                          {plan.display_index}
+                        </span>
+                      )}
+                      {plan.year && (
+                        <span className="w-12 shrink-0 text-xs text-indigo-600 tabular-nums">{plan.year}</span>
+                      )}
                       <span className="truncate">{plan.plan_title}</span>
                     </label>
                   ))
