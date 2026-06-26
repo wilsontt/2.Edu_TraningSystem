@@ -16,3 +16,5 @@ pandas
 qrcode[pil]
 smbprotocol
 apscheduler
+ldap3
+pytest

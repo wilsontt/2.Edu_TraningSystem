@@ -1,6 +1,11 @@
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from .database import SessionLocal, engine, Base
 from . import models
+from .config import get_settings
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def init_db():
     # 建立所有資料表
@@ -8,20 +13,26 @@ def init_db():
     
     db = SessionLocal()
     try:
-        # 1. 建立基礎角色
+        # 1. 建立基礎角色（含 AD JIT 用的「系統管理」角色）
         admin_role = db.query(models.Role).filter(models.Role.name == "Admin").first()
         if not admin_role:
             admin_role = models.Role(name="Admin")
             db.add(admin_role)
-            
+
         user_role = db.query(models.Role).filter(models.Role.name == "User").first()
         if not user_role:
             user_role = models.Role(name="User")
             db.add(user_role)
-        
+
+        sysadmin_role = db.query(models.Role).filter(models.Role.name == "系統管理").first()
+        if not sysadmin_role:
+            sysadmin_role = models.Role(name="系統管理")
+            db.add(sysadmin_role)
+
         db.commit()
         db.refresh(admin_role)
         db.refresh(user_role)
+        db.refresh(sysadmin_role)
         
         # 2. 建立基礎部門
         it_dept = db.query(models.Department).filter(models.Department.name == "IT部").first()
@@ -77,16 +88,17 @@ def init_db():
         
         db.commit()
         
-        # 4. 配置角色權限 (Admin 擁有所有權限, User 擁有首頁與成績中心)
+        # 4. 配置角色權限 (Admin / 系統管理 擁有所有權限；User 擁有首頁與成績中心)
         all_funcs = db.query(models.SystemFunction).all()
         admin_role.functions = all_funcs
-        
+        sysadmin_role.functions = all_funcs  # AD JIT 角色同樣擁有全部功能
+
         user_role_funcs = [
             db_functions["menu:home"],
             db_functions["menu:report"]
         ]
         user_role.functions = user_role_funcs
-        
+
         db.commit()
         
         # 5. 建立預設訓練分類
@@ -112,19 +124,31 @@ def init_db():
                 
                 db.commit()
 
-        # 6. 建立預設管理員帳號（如果不存在）
+        # 6. 建立預設管理員帳號（break-glass，如果不存在）
+        settings = get_settings()
         admin_user = db.query(models.User).filter(models.User.emp_id == "admin").first()
         if not admin_user:
+            pw_hash = (
+                _pwd_context.hash(settings.initial_admin_password)
+                if settings.initial_admin_password
+                else None
+            )
             admin_user = models.User(
                 emp_id="admin",
                 name="系統管理員",
                 dept_id=it_dept.id,
                 role_id=admin_role.id,
-                status="active"
+                status="active",
+                auth_source="local",
+                is_trainee=False,
+                is_protected=True,
+                password_hash=pw_hash,
             )
             db.add(admin_user)
             db.commit()
             print("Created default admin user: admin")
+            if not pw_hash:
+                print("WARNING: INITIAL_ADMIN_PASSWORD not set; admin cannot log in via break-glass until password is configured.")
         else:
             print(f"Admin user already exists: {admin_user.emp_id}")
 

@@ -112,7 +112,21 @@ class User(Base):
     role_id = Column(Integer, ForeignKey("roles.id")) # 系統角色
     job_title_id = Column(Integer, ForeignKey("job_titles.id"), nullable=True) # 職稱
     status = Column(String, default="active") # 帳號狀態 (active/inactive)
-    
+
+    # AD 整合擴充欄位（W1）
+    auth_source = Column(String, default="local")         # local | ad | email_fallback
+    ad_username = Column(String, unique=True, nullable=True)
+    email = Column(String, nullable=True)
+    email_verified_at = Column(DateTime, nullable=True)
+    is_trainee = Column(Boolean, default=True)            # False 表示管理帳號（非受訓者）
+    last_login_at = Column(DateTime, nullable=True)
+    password_hash = Column(String, nullable=True)         # 僅 break-glass 帳號使用
+    password_changed_at = Column(DateTime, nullable=True)
+    must_change_password = Column(Boolean, default=False)
+    failed_login_count = Column(Integer, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    is_protected = Column(Boolean, default=False)         # True 表示 break-glass 帳號，禁止刪除
+
     department = relationship("Department", back_populates="users")
     role = relationship("Role", back_populates="users")
     job_title = relationship("JobTitle", back_populates="users")
@@ -337,6 +351,19 @@ class BackupRecord(Base):
     status = Column(String)                 # success / failed
     message = Column(String, nullable=True)
     duration_ms = Column(Integer, nullable=True)
+
+
+class AdminLoginOtp(Base):
+    """管理帳號 Email OTP 紀錄（路徑 D：AD 斷線備援）。
+    otp_hash 儲存 bcrypt 雜湊，**不存明文 OTP**。"""
+    __tablename__ = "admin_login_otps"
+    id = Column(Integer, primary_key=True, index=True)
+    emp_id = Column(String, index=True)
+    otp_hash = Column(String)
+    expires_at = Column(DateTime, index=True)
+    attempt_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    used_at = Column(DateTime, nullable=True)
 
 
 class FileTransferAuditLog(Base):
