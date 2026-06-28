@@ -1,4 +1,4 @@
-# 教育訓練教材及線上考卷系統 - 系統架構、邏輯分析與目錄結構
+# 線上教育訓練系統 - 系統架構、邏輯分析與目錄結構
 
 ![版本](https://img.shields.io/badge/版本-v1.2.0-blue) ![狀態](https://img.shields.io/badge/狀態-穩定版-green)
 

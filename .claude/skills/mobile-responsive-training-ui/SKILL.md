@@ -1,6 +1,6 @@
 ---
 name: mobile-responsive-training-ui
-description: Use when adjusting an existing page in this repo (教育訓練教材及線上考卷) for mobile/touch screens — symptoms include a tab bar or button row overflowing on narrow viewports, grid columns too cramped below 400px, undersized touch targets, or text/badges clipping on a single flex row. Layout-only; not for new feature work.
+description: Use when adjusting an existing page in this repo (線上教育訓練系統) for mobile/touch screens — symptoms include a tab bar or button row overflowing on narrow viewports, grid columns too cramped below 400px, undersized touch targets, or text/badges clipping on a single flex row. Layout-only; not for new feature work.
 ---
 
 # Mobile-Responsive Training UI

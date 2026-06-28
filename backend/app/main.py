@@ -11,7 +11,7 @@ from . import models
 
 # 初始化 FastAPI 應用
 app = FastAPI(
-    title="教育訓練教材及線上考卷系統 API",
+    title="線上教育訓練系統 API",
     description="提供教育訓練計畫、考卷解析、考試中心及成績統計之核心服務",
     version="1.2.0"
 )

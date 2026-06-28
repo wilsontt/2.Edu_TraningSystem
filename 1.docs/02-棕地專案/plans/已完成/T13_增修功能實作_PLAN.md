@@ -129,12 +129,12 @@ isProject: false
 ## 主要影響檔案（預估）
 
 - 後端：
-  - [/Users/wilson/5.Projects/3.企業入口網站/2.教育訓練教材及線上考卷/backend/app/routers/exam.py](/Users/wilson/5.Projects/3.企業入口網站/2.教育訓練教材及線上考卷/backend/app/routers/exam.py)
-  - [/Users/wilson/5.Projects/3.企業入口網站/2.教育訓練教材及線上考卷/backend/app/routers/question_bank.py](/Users/wilson/5.Projects/3.企業入口網站/2.教育訓練教材及線上考卷/backend/app/routers/question_bank.py)
-  - [/Users/wilson/5.Projects/3.企業入口網站/2.教育訓練教材及線上考卷/backend/app/routers/auth.py](/Users/wilson/5.Projects/3.企業入口網站/2.教育訓練教材及線上考卷/backend/app/routers/auth.py)
+  - [/Users/wilson/5.Projects/3.企業入口網站/2.線上教育訓練系統/backend/app/routers/exam.py](/Users/wilson/5.Projects/3.企業入口網站/2.線上教育訓練系統/backend/app/routers/exam.py)
+  - [/Users/wilson/5.Projects/3.企業入口網站/2.線上教育訓練系統/backend/app/routers/question_bank.py](/Users/wilson/5.Projects/3.企業入口網站/2.線上教育訓練系統/backend/app/routers/question_bank.py)
+  - [/Users/wilson/5.Projects/3.企業入口網站/2.線上教育訓練系統/backend/app/routers/auth.py](/Users/wilson/5.Projects/3.企業入口網站/2.線上教育訓練系統/backend/app/routers/auth.py)
 - 前端：
-  - [/Users/wilson/5.Projects/3.企業入口網站/2.教育訓練教材及線上考卷/frontend/src/components/admin/ReportDashboard.tsx](/Users/wilson/5.Projects/3.企業入口網站/2.教育訓練教材及線上考卷/frontend/src/components/admin/ReportDashboard.tsx)
-  - [/Users/wilson/5.Projects/3.企業入口網站/2.教育訓練教材及線上考卷/frontend/src/components/admin/ExamStudio.tsx](/Users/wilson/5.Projects/3.企業入口網站/2.教育訓練教材及線上考卷/frontend/src/components/admin/ExamStudio.tsx)
+  - [/Users/wilson/5.Projects/3.企業入口網站/2.線上教育訓練系統/frontend/src/components/admin/ReportDashboard.tsx](/Users/wilson/5.Projects/3.企業入口網站/2.線上教育訓練系統/frontend/src/components/admin/ReportDashboard.tsx)
+  - [/Users/wilson/5.Projects/3.企業入口網站/2.線上教育訓練系統/frontend/src/components/admin/ExamStudio.tsx](/Users/wilson/5.Projects/3.企業入口網站/2.線上教育訓練系統/frontend/src/components/admin/ExamStudio.tsx)
   - 訓練計畫與報到總覽相關頁面元件（依現況路徑補齊）
 
 ## 里程碑
