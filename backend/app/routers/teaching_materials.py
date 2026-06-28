@@ -685,9 +685,9 @@ async def replace_material_file(
             if tags is not None:
                 m.tags = _parse_tags(tags)
 
-            # 7. 提交
-            db.commit()
-            db.refresh(m)
+        # 7. 提交
+        db.commit()
+        db.refresh(m)
 
     except storage.StorageUnavailable as e:
         raise HTTPException(status_code=503, detail=f"NAS 無法連線：{e}")
