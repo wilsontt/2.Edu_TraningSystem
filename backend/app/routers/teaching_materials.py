@@ -595,6 +595,117 @@ def update_material(
     return m
 
 
+# ----------------------------------------------------------------
+# 替換教材實體檔（replace-file）
+# ----------------------------------------------------------------
+
+@router.post("/{material_id}/replace-file", response_model=schemas.TeachingMaterial)
+async def replace_material_file(
+    material_id: int,
+    request: Request,
+    files: List[UploadFile] = File(...),
+    material_type_id: Optional[int] = Form(None),
+    title: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    tags: Optional[str] = Form(None),
+    nas_username: Optional[str] = Form(None),
+    nas_password: Optional[str] = Form(None),
+    nas_session_token: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    """替換教材實體檔（覆寫同一 NAS 路徑）；可同時更新部分中繼資料。
+    storage_path 與 stored_filename 不更新，以維持同路徑覆寫語意。
+    """
+    emp_id = getattr(current_user, "emp_id", None)
+    client_ip = _client_ip(request)
+
+    # 1. 查找 is_active 教材
+    m = db.query(models.TeachingMaterial).filter(
+        models.TeachingMaterial.id == material_id,
+        models.TeachingMaterial.is_active == True,  # noqa: E712
+    ).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="教材不存在")
+
+    # 2. 只接受 1 個檔案
+    if len(files) != 1:
+        raise HTTPException(status_code=400, detail="只能替換一個檔案")
+
+    f = files[0]
+    raw = await f.read()
+    fname = os.path.basename(f.filename or "")
+
+    try:
+        ext = _validate_filename(fname)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # 確認有效教材類型（若有指定新類型則驗證；否則沿用現有）
+    if material_type_id is not None:
+        effective_mt = db.query(models.MaterialType).filter(
+            models.MaterialType.id == material_type_id,
+            models.MaterialType.is_active == True,  # noqa: E712
+        ).first()
+        if not effective_mt:
+            raise HTTPException(status_code=400, detail="教材類型不存在")
+    else:
+        effective_mt = db.query(models.MaterialType).filter(
+            models.MaterialType.id == m.material_type_id
+        ).first()
+
+    if effective_mt and len(raw) > _type_max_bytes(effective_mt):
+        raise HTTPException(
+            status_code=400,
+            detail=f"超過類型單檔上限（{_type_max_bytes(effective_mt)} bytes）",
+        )
+
+    # 3. 解析 NAS 憑證
+    creds = _resolve_credentials(nas_session_token, nas_username, nas_password)
+
+    try:
+        # 4. 開啟 NAS 連線
+        with storage.connection(creds) as st:
+            # 5. 覆寫同一 NAS 路徑（storage_path 不更新）
+            st.save(m.storage_path, raw)
+
+            # 6. 更新 DB 欄位
+            m.original_filename = fname
+            m.file_format = ext
+            m.file_size_bytes = len(raw)
+            m.uploaded_by = emp_id
+            m.uploaded_at = datetime.utcnow()
+
+            if material_type_id is not None:
+                m.material_type_id = material_type_id
+            if title is not None:
+                m.title = title
+            if description is not None:
+                m.description = description
+            if tags is not None:
+                m.tags = _parse_tags(tags)
+
+            # 7. 提交
+            db.commit()
+            db.refresh(m)
+
+    except storage.StorageUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"NAS 無法連線：{e}")
+    except storage.StorageError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # 8. 稽核紀錄
+    record_file_transfer(
+        emp_id=emp_id, client_ip=client_ip, action="upload",
+        resource_type="teaching_material", status="success", filename=fname,
+        plan_id=m.plan_id, resource_id=m.id, nas_username=creds.username,
+        bytes_=len(raw),
+    )
+
+    # 9. 回傳
+    return m
+
+
 @router.delete("/{material_id}")
 def delete_material(
     material_id: int,
