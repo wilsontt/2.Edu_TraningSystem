@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Library, Search, Download, Trash2, Loader2, CheckSquare, Square, PackageOpen, Upload, FileText, AlertCircle, X, PenTool } from 'lucide-react';
+import { Library, Search, Download, Trash2, Loader2, CheckSquare, Square, PackageOpen, Upload, FileText, AlertCircle, X, PenTool, Pencil } from 'lucide-react';
 import axios, { AxiosError, type AxiosProgressEvent } from 'axios';
 import { PaginatedDataTable, type DataTableColumn } from '@shared-ui/data-table';
 import api from '../../api';
 import NasLoginModal from './NasLoginModal';
 import FileTransferModal from './FileTransferModal';
-import { saveBlob, idleTransfer, type TransferState, mergeSelectedFiles, MATERIAL_ACCEPT, IN_FLIGHT_PROGRESS_CAP } from './transfer';
+import { saveBlob, idleTransfer, type TransferState, mergeSelectedFiles, MATERIAL_ACCEPT, ALLOWED_MATERIAL_EXTS, IN_FLIGHT_PROGRESS_CAP } from './transfer';
 
 interface MaterialType {
     id: number;
@@ -25,6 +25,7 @@ interface Material {
     file_size_bytes: number;
     year: string;
     uploaded_at: string;
+    tags: string | null;
 }
 
 interface UploadResult {
@@ -48,6 +49,23 @@ interface MaterialList {
 }
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
+
+const TAG_PALETTE = [
+    'bg-indigo-100 text-indigo-700',
+    'bg-emerald-100 text-emerald-700',
+    'bg-amber-100 text-amber-700',
+    'bg-rose-100 text-rose-700',
+    'bg-sky-100 text-sky-700',
+    'bg-violet-100 text-violet-700',
+    'bg-teal-100 text-teal-700',
+    'bg-orange-100 text-orange-700',
+];
+const parseTags = (raw: string | null): string[] => {
+    if (!raw) return [];
+    try { return JSON.parse(raw) as string[]; } catch { return []; }
+};
+const tagColorClass = (tag: string): string =>
+    TAG_PALETTE[tag.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % TAG_PALETTE.length];
 
 interface TeachingMaterialLibraryProps {
     /** 提供時，於標頭顯示「返回考卷工坊」按鈕（教材庫掛載於考卷工坊頁籤內時使用）。 */
@@ -89,6 +107,17 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
     const [uploadBusy, setUploadBusy] = useState(false);
     const [uploadConflicts, setUploadConflicts] = useState<ConflictItem[]>([]);
     const [uploadConflictOpen, setUploadConflictOpen] = useState(false);
+
+    // 編輯教材
+    const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
+    const [editTypeId, setEditTypeId]     = useState('');
+    const [editTitle, setEditTitle]       = useState('');
+    const [editDesc, setEditDesc]         = useState('');
+    const [editTags, setEditTags]         = useState('');
+    const [editFile, setEditFile]         = useState<File | null>(null);
+    const [editFileKey, setEditFileKey]   = useState(0);
+    const [editBusy, setEditBusy]         = useState(false);
+    const [editError, setEditError]       = useState<string | null>(null);
 
     const fetchList = useCallback(async () => {
         setLoading(true);
@@ -273,6 +302,76 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
         }
     };
 
+    const startEdit = (m: Material) => {
+        setEditingMaterial(m);
+        setUploadOpen(false);
+        setEditTypeId(String(m.material_type_id));
+        setEditTitle(m.title);
+        setEditDesc(m.description ?? '');
+        setEditTags(parseTags(m.tags).join(', '));
+        setEditFile(null);
+        setEditFileKey(k => k + 1);
+        setEditError(null);
+    };
+    const cancelEdit = () => { setEditingMaterial(null); setEditError(null); };
+
+    const handleSaveEdit = async () => {
+        if (!editingMaterial) return;
+        if (!editTypeId) { setEditError('請選擇教材類型'); return; }
+        setEditError(null);
+
+        if (editFile) {
+            requireNas('替換教材', async (token) => {
+                setEditBusy(true);
+                const fd = new FormData();
+                fd.append('material_type_id', editTypeId);
+                if (editTitle) fd.append('title', editTitle);
+                if (editDesc) fd.append('description', editDesc);
+                if (editTags) fd.append('tags', editTags);
+                fd.append('nas_session_token', token);
+                fd.append('files', editFile);
+                const ctrl = new AbortController();
+                abortRef.current = ctrl;
+                setTransfer({ open: true, title: '替換教材檔案', progress: 0, status: 'transferring', error: null });
+                try {
+                    await api.post(
+                        `/admin/teaching-materials/${editingMaterial.id}/replace-file`,
+                        fd,
+                        { signal: ctrl.signal, onUploadProgress: onProgress },
+                    );
+                    setTransfer(s => ({ ...s, progress: 100, status: 'success' }));
+                    cancelEdit();
+                    fetchList();
+                } catch (err) {
+                    if (isCancel(err)) return;
+                    const e2 = err as AxiosError<{ detail: string }>;
+                    setTransfer(s => ({ ...s, status: 'error', error: e2.response?.data?.detail || '替換失敗' }));
+                } finally {
+                    setEditBusy(false);
+                    abortRef.current = null;
+                }
+            });
+        } else {
+            setEditBusy(true);
+            try {
+                const tagsArray = editTags.split(',').map(t => t.trim()).filter(Boolean);
+                await api.put(`/admin/teaching-materials/${editingMaterial.id}`, {
+                    material_type_id: Number(editTypeId),
+                    title: editTitle || undefined,
+                    description: editDesc || null,
+                    tags: tagsArray.length ? tagsArray : null,
+                });
+                cancelEdit();
+                fetchList();
+            } catch (err) {
+                const e2 = err as AxiosError<{ detail: string }>;
+                setEditError(e2.response?.data?.detail || '儲存失敗');
+            } finally {
+                setEditBusy(false);
+            }
+        }
+    };
+
     const onSearch = () => { setPage(1); fetchList(); };
 
     const columns: DataTableColumn<Material>[] = [
@@ -297,7 +396,15 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                 <>
                     <div className="text-sm font-bold text-gray-800 truncate max-w-[280px]">{m.title}</div>
                     <div className="text-xs text-gray-400 truncate max-w-[280px]">{m.original_filename}</div>
-                    {m.description && <div className="text-xs text-gray-400 truncate max-w-[280px]">{m.description}</div>}
+                    {parseTags(m.tags).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                            {parseTags(m.tags).map(tag => (
+                                <span key={tag} className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${tagColorClass(tag)}`}>
+                                    {tag}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </>
             ),
         },
@@ -321,6 +428,10 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
             header: '操作',
             render: m => (
                 <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => startEdit(m)}
+                        className="p-1.5 text-gray-500 hover:bg-gray-100 rounded cursor-pointer" title="編輯">
+                        <Pencil className="w-4 h-4" />
+                    </button>
                     <button type="button" onClick={() => requireNas('下載教材', token => doSingleDownload(token, m))} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer" title="下載">
                         <Download className="w-4 h-4" />
                     </button>
@@ -454,6 +565,76 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                         <p className="text-xs text-red-600 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" />{uploadError}</p>
                     )}
                     {uploadResultMsg && <p className="text-xs text-green-600 font-bold">{uploadResultMsg}</p>}
+                </div>
+            )}
+
+            {/* 編輯教材 */}
+            {editingMaterial && (
+                <div className="bg-white p-4 rounded-2xl shadow-sm border-2 border-amber-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-gray-500 uppercase">
+                            編輯教材 — {editingMaterial.original_filename}
+                            {editingMaterial.plan_id != null ? ` （計畫 #${editingMaterial.plan_id}）` : ' （通用）'}
+                        </label>
+                        <button type="button" onClick={cancelEdit}
+                            className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <select value={editTypeId} onChange={e => setEditTypeId(e.target.value)}
+                            className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm font-bold focus:outline-none focus:border-amber-500">
+                            <option value="">選擇教材類型…</option>
+                            {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                        <input type="text" placeholder="標題" value={editTitle}
+                            onChange={e => setEditTitle(e.target.value)}
+                            className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500" />
+                        <input type="text" placeholder="簡述（選填）" value={editDesc}
+                            onChange={e => setEditDesc(e.target.value)}
+                            className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500" />
+                        <input type="text" placeholder="標籤（逗號分隔，選填）" value={editTags}
+                            onChange={e => setEditTags(e.target.value)}
+                            className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500" />
+                        <div className="md:col-span-2">
+                            <p className="text-xs text-gray-500 mb-1">替換檔案（選填，單檔，需 NAS 登入）</p>
+                            <label className="inline-flex items-center gap-2 px-3 py-2 border-2 border-dashed border-amber-300 bg-white rounded-lg text-sm font-bold text-amber-600 hover:border-amber-500 hover:bg-amber-50 cursor-pointer transition-colors">
+                                <FileText className="w-4 h-4 shrink-0" />
+                                <span>{editFile ? editFile.name : '選擇新檔案…'}</span>
+                                <input key={editFileKey} type="file" accept={MATERIAL_ACCEPT} className="hidden"
+                                    onChange={e => {
+                                        const f = e.target.files?.[0] ?? null;
+                                        if (f) {
+                                            const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+                                            if (!ALLOWED_MATERIAL_EXTS.includes(ext)) {
+                                                setEditError(`不允許的格式：${ext}`);
+                                                setEditFileKey(k => k + 1);
+                                            } else {
+                                                setEditFile(f);
+                                                setEditError(null);
+                                            }
+                                        }
+                                    }} />
+                            </label>
+                            {editFile && (
+                                <button type="button" onClick={() => { setEditFile(null); setEditFileKey(k => k + 1); }}
+                                    className="ml-2 text-xs text-gray-400 hover:text-red-500 cursor-pointer">清除</button>
+                            )}
+                        </div>
+                        <div className="md:col-span-2 flex items-center justify-end gap-2">
+                            <button type="button" onClick={cancelEdit}
+                                className="px-4 py-2 text-sm font-bold text-gray-600 hover:text-gray-800 cursor-pointer">取消</button>
+                            <button type="button" onClick={handleSaveEdit} disabled={editBusy}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg hover:bg-amber-600 disabled:bg-amber-300 cursor-pointer">
+                                {editBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null} 儲存
+                            </button>
+                        </div>
+                    </div>
+                    {editError && (
+                        <p className="text-xs text-red-600 font-bold flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />{editError}
+                        </p>
+                    )}
                 </div>
             )}
 
