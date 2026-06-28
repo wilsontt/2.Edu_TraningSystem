@@ -124,16 +124,22 @@ def run_migration() -> None:
             initial_pw = os.environ.get("INITIAL_ADMIN_PASSWORD", "")
             if initial_pw:
                 try:
-                    from passlib.context import CryptContext
-                    _ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
-                    pw_hash = _ctx.hash(initial_pw)
+                    import bcrypt
+
+                    pw_hash = bcrypt.hashpw(
+                        initial_pw.encode("utf-8"),
+                        bcrypt.gensalt(rounds=12),
+                    ).decode("utf-8")
                     cursor.execute(
                         "UPDATE users SET password_hash = ? WHERE emp_id = 'admin'",
                         (pw_hash,),
                     )
                     print("  [users] admin.password_hash 已設定（INITIAL_ADMIN_PASSWORD）")
-                except ImportError:
-                    print("  [warning] passlib 未安裝，跳過 password_hash 設定")
+                except ImportError as exc:
+                    raise SystemExit(
+                        "bcrypt 未安裝，無法設定 admin 密碼。"
+                        "請使用 backend/.venv/bin/python3 執行此遷移腳本。"
+                    ) from exc
             else:
                 print("  [info] INITIAL_ADMIN_PASSWORD 未設定；admin 暫無 break-glass 密碼")
         else:

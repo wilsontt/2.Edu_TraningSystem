@@ -16,3 +16,10 @@ def normalize_ad_username(raw: str) -> str:
 
 def is_super_admin_role(role_name: str) -> bool:
     return role_name in SUPER_ADMIN_ROLE_NAMES
+
+
+def is_management_role(user) -> bool:
+    """使用者角色是否屬於管理角色（路徑 C 阻擋用）。"""
+    if not user or not user.role:
+        return False
+    return user.role.name in SUPER_ADMIN_ROLE_NAMES

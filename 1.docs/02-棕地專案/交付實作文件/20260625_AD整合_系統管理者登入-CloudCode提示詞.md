@@ -106,10 +106,23 @@
 - [ ] `models.py` 與遷移欄位一致
 - [ ] `get_settings()` 在 `AD_ENABLED=false` 時 `ad_enabled is False`
 - [ ] 原有 SMB `get_settings().smb_configured` 行為不壞
+- [ ] break-glass 密碼雜湊使用 **`bcrypt` 套件直接**（`auth_utils.hash_password` / `verify_password`），**禁止** break-glass 路徑使用 `passlib` + bcrypt（與 bcrypt 5.x 不相容，見 §10）
+
+### break-glass 初始密碼（W1 遷移必讀）
+執行前**備份** `data/education_training.db`，且**必須**使用 backend 虛擬環境 Python（不可使用系統 `python3`）：
+
+```bash
+cp data/education_training.db data/education_training.db.bak.$(date +%Y%m%d)
+export INITIAL_ADMIN_PASSWORD='你的初始密碼'   # 勿提交版控；生產環境須符合 ISO 複雜度
+cd backend
+.venv/bin/python3 migrations/add_ad_auth_user_fields.py
+```
+
+成功時輸出須含 `[users] admin.password_hash 已設定（INITIAL_ADMIN_PASSWORD）`。若出現 `passlib 未安裝` 或 `跳過 password_hash` → **視為失敗**，見 §10。
 
 ### 交付
 - 新增／修改檔案清單 + **Read 過的檔案清單**（§1.1 #1）
-- 遷移執行指令與備份提醒
+- 遷移執行指令與備份提醒（含 §10 驗證 SQL）
 - **不要**開始 W2
 
 ---
@@ -346,6 +359,10 @@ W1～W5 已完成。
 | 測試寫入 `education_training.db` | in-memory / override `get_db` |
 | 未 Read 就改檔 | 交付須附 Read 檔案清單 |
 | SQLite 併發測試 | 注意 database locked；測試用獨立 DB |
+| 用系統 `python3` 跑 AD 遷移 | **必須** `backend/.venv/bin/python3 migrations/add_ad_auth_user_fields.py` |
+| break-glass 用 `passlib` 雜湊／驗證 | 使用 `auth_utils.hash_password` / `verify_password`（`bcrypt` 直接）；`passlib` 僅保留給 Email OTP 的 `sha256_crypt` |
+| 遷移只 warning、未 exit 1 | `password_hash` 未寫入時須 **exit 1**，不可靜默完成 |
+| 重啟後仍 403「帳號未設定密碼」 | 查 DB `password_hash IS NULL` → 依 §10 重跑遷移 |
 
 ---
 
@@ -360,9 +377,64 @@ SMTP_HOST=
 SMTP_PORT=587
 SMTP_USE_TLS=true
 BREAK_GLASS_EMP_ID=admin
-INITIAL_ADMIN_PASSWORD=              # 僅首次遷移注入 break-glass
+INITIAL_ADMIN_PASSWORD=              # 僅首次遷移注入 break-glass（見 §10）
 ```
 
 ---
 
-**最後更新**：2026-06-25（§1.1 AI 防腦補守則；503 fallback 移至 W5；遷移／測試／bool 驗收強化）
+## 10. 附錄：break-glass 登入失敗排查（實際發生案例）
+
+**現象**（2026-06-28 開發環境）：
+
+| 症狀 | API | 前端 |
+|------|-----|------|
+| 遷移後仍無法登入 | `POST /api/auth/login/local` → **403** | 「帳號未設定密碼，請聯絡系統管理員」 |
+| 遷移輸出異常 | — | 終端顯示 `[warning] passlib 未安裝，跳過 password_hash 設定` |
+
+### 根因（兩層）
+
+1. **遷移未寫入密碼**：使用**系統** `python3`（非 `backend/.venv`）執行遷移 → venv 內的 `bcrypt` 不可用 → `admin.password_hash` 維持 `NULL` → 403。
+2. **passlib 與 bcrypt 5.x 不相容**（若仍用 passlib 做 break-glass）：`passlib 1.7.4` + `bcrypt 5.0` 在 `verify` 時拋錯（`module 'bcrypt' has no attribute '__about__'`），即使 DB 已有雜湊也無法登入。
+
+### 正確做法
+
+**break-glass 密碼**一律經 `backend/app/auth_utils.py` 的 `hash_password` / `verify_password`（`bcrypt` 套件）；遷移腳本 `add_ad_auth_user_fields.py` 亦直接使用 `bcrypt`。`passlib` 僅用於 Email OTP（`sha256_crypt`），不用於 break-glass。
+
+**重設 admin 初始密碼**：
+
+```bash
+# 1. 備份
+cp data/education_training.db data/education_training.db.bak.$(date +%Y%m%d)
+
+# 2. 設定初始密碼（環境變數，勿寫進 .env 提交）
+export INITIAL_ADMIN_PASSWORD='你的密碼'
+
+# 3. 用 venv 執行遷移（可重複執行）
+cd backend
+.venv/bin/python3 migrations/add_ad_auth_user_fields.py
+```
+
+**驗證 DB**（`password_hash` 須非 NULL）：
+
+```bash
+sqlite3 data/education_training.db \
+  "SELECT emp_id, is_protected, password_hash IS NOT NULL AS has_pw FROM users WHERE emp_id='admin';"
+# 預期：admin|1|1
+```
+
+**驗證 API**（重啟後端後）：
+
+```bash
+curl -s -X POST http://localhost:8000/api/auth/login/local \
+  -H "Content-Type: application/json" \
+  -d '{"emp_id":"admin","password":"你的密碼"}'
+# 預期：HTTP 200，body 含 access_token、auth_src=local
+```
+
+### 依賴說明
+
+`backend/requirements.txt` 須同時列出 `bcrypt` 與 `passlib`（OTP 用）。break-glass **不可**依賴 `passlib[bcrypt]` 與 bcrypt 5.x 的組合。
+
+---
+
+**最後更新**：2026-06-28（§10 break-glass 登入失敗排查；bcrypt／passlib 相容性；W1 遷移 venv 強制）

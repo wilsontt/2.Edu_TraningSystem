@@ -4,7 +4,8 @@ sqlalchemy
 pydantic
 pydantic-settings
 python-jose[cryptography]
-passlib[bcrypt]
+bcrypt
+passlib
 python-multipart
 captcha
 pillow

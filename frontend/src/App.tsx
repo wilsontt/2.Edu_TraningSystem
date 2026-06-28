@@ -26,6 +26,8 @@ import PersonalScorePage from './components/personal/PersonalScorePage';
 import CheckInPage from './components/exam/CheckInPage';
 import AttendanceOverviewPage from './components/attendance/AttendanceOverviewPage';
 import type { User } from './types';
+import { hasAdminMenu } from './utils/authGuards';
+import ChangePasswordPage from './components/ChangePasswordPage';
 import { useRef } from 'react';
 import { CrownBrand } from '@shared-ui/crown-brand';
 import { NavCalendarCluster, PortalTopNav } from '@shared-ui/portal-nav';
@@ -301,6 +303,9 @@ const App = () => {
               <Navigate to="/" />
             )
           } />
+          <Route path="/login/change-password" element={
+            !user ? <ChangePasswordPage /> : <Navigate to="/" />
+          } />
           <Route path="*" element={
             !user ? (
               <Navigate to="/login" replace />
@@ -319,16 +324,16 @@ const App = () => {
                     <Route path="/teaching-materials" element={<Navigate to="/exams" replace />} />
                     <Route path="/reports" element={<PersonalScorePage />} />
                     <Route path="/reports/personal" element={<PersonalScorePage />} />
-                    <Route path="/admin/departments" element={user.role === 'Admin' ? <DepartmentManager /> : <Navigate to="/" />} />
-                    <Route path="/admin/categories" element={user.role === 'Admin' ? <CategoryManager /> : <Navigate to="/" />} />
-                    <Route path="/admin/users" element={user.role === 'Admin' ? <UserManager /> : <Navigate to="/" />} />
-                    <Route path="/admin/job-titles" element={user.role === 'Admin' ? <JobTitleManager /> : <Navigate to="/" />} />
-                    <Route path="/admin/roles" element={user.role === 'Admin' ? <RoleManager /> : <Navigate to="/" />} />
-                    <Route path="/admin/permissions" element={user.role === 'Admin' ? <PermissionManager /> : <Navigate to="/" />} />
-                    <Route path="/admin/role-scopes" element={user.role === 'Admin' ? <RoleDepartmentScopeManager /> : <Navigate to="/" />} />
-                    <Route path="/admin/qrcode" element={user.role === 'Admin' ? <QRCodeManager /> : <Navigate to="/" />} />
-                    <Route path="/admin/backup" element={user.role === 'Admin' || user.functions?.includes('menu:admin:backup') ? <BackupScheduleManager /> : <Navigate to="/" />} />
-                    <Route path="/admin/reports" element={user.role === 'Admin' ? <ReportDashboard /> : <Navigate to="/" />} />
+                    <Route path="/admin/departments" element={hasAdminMenu(user) ? <DepartmentManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/categories" element={hasAdminMenu(user) ? <CategoryManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/users" element={hasAdminMenu(user) ? <UserManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/job-titles" element={hasAdminMenu(user) ? <JobTitleManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/roles" element={hasAdminMenu(user) ? <RoleManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/permissions" element={hasAdminMenu(user) ? <PermissionManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/role-scopes" element={hasAdminMenu(user) ? <RoleDepartmentScopeManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/qrcode" element={hasAdminMenu(user) ? <QRCodeManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/backup" element={hasAdminMenu(user) || user.functions?.includes('menu:admin:backup') ? <BackupScheduleManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/reports" element={hasAdminMenu(user) ? <ReportDashboard /> : <Navigate to="/" />} />
                     <Route path="*" element={<Navigate to="/" />} />
                   </Routes>
                 </main>

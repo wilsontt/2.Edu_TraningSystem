@@ -1,10 +1,8 @@
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from .database import SessionLocal, engine, Base
 from . import models
+from .auth_utils import hash_password
 from .config import get_settings
-
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def init_db():
@@ -76,7 +74,6 @@ def init_db():
             {"name": "職務管理", "code": "menu:admin:jobtitle", "path": "/admin/job-titles", "parent_id": db_functions["menu:admin"].id},
             {"name": "角色管理", "code": "menu:admin:role", "path": "/admin/roles", "parent_id": db_functions["menu:admin"].id},
             {"name": "權限管理", "code": "menu:admin:perm", "path": "/admin/permissions", "parent_id": db_functions["menu:admin"].id},
-            {"name": "功能清單管理", "code": "menu:admin:func", "path": "/admin/functions", "parent_id": db_functions["menu:admin"].id},
             {"name": "排程備份", "code": "menu:admin:backup", "path": "/admin/backup", "parent_id": db_functions["menu:admin"].id},
         ]
         
@@ -129,7 +126,7 @@ def init_db():
         admin_user = db.query(models.User).filter(models.User.emp_id == "admin").first()
         if not admin_user:
             pw_hash = (
-                _pwd_context.hash(settings.initial_admin_password)
+                hash_password(settings.initial_admin_password)
                 if settings.initial_admin_password
                 else None
             )

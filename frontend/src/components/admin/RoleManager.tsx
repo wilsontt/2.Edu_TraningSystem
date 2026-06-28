@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import { Plus, Shield, Check, X, Loader2, AlertCircle, PenTool, Trash2, Search } from 'lucide-react';
 import api from '../../api';
 import ConfirmModal from '../ConfirmModal';
+import { isProtectedSystemRole } from '../../utils/authGuards';
 
 /** 角色資料結構 */
 interface Role {
@@ -330,7 +331,7 @@ const RoleManager = () => {
                 key={role.id} 
                 className={`p-6 border-2 border-gray-100 rounded-2xl hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-100/50 transition-all duration-200 group cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-gray-100'}`}
                 onDoubleClick={() => {
-                  if (role.name !== 'Admin') {
+                  if (!isProtectedSystemRole(role.name)) {
                     openEditModal(role);
                   }
                 }}
@@ -344,7 +345,7 @@ const RoleManager = () => {
                 </div>
                 <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center justify-between group/title">
                     {role.name}
-                    {role.name !== 'Admin' && (
+                    {!isProtectedSystemRole(role.name) && (
                         <div className="flex gap-1">
                             <button 
                                 onClick={() => openEditModal(role)}
