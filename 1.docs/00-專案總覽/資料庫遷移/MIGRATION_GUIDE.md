@@ -44,6 +44,7 @@ cd backend
 #### 方法一：使用遷移腳本（推薦）
 
 ```bash
+# 本機開發測試- 資料庫移轉
 cd backend
 .venv/bin/python3 migrate_qrcode_and_attendance.py
 ```
@@ -53,6 +54,80 @@ cd backend
 - 建立 `attendance_records` 表（報到記錄）
 - 建立 `login_tokens` 表（登入 QRcode token）
 - 建立必要的索引
+
+
+#### ds1 Docker：在容器內執行遷移
+
+> 主機 `backend/` **沒有** `.venv`；須用 `docker compose exec training-backend`。
+
+```bash
+cd /opt/apps/enterprise-portal/deploy
+
+# 備份
+cp -a "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/education_training.db" \
+      "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/education_training.db.bak.$(date +%Y%m%d_%H%M%S)"
+
+# AD 整合遷移（break-glass 緊急登入）
+export INITIAL_ADMIN_PASSWORD='你的初始管理員密碼'
+docker compose exec \
+  -e INITIAL_ADMIN_PASSWORD \
+  training-backend \
+  python migrations/add_ad_auth_user_fields.py
+```
+
+成功應看到：`[users] admin.password_hash 已設定（INITIAL_ADMIN_PASSWORD）`
+
+其他遷移（依版本需求擇一或依序執行，皆可重複跑）：
+
+```bash
+docker compose exec training-backend python migrations/add_job_titles_and_user_job_title.py
+docker compose exec training-backend python migrations/add_training_plan_enhancements.py
+docker compose exec training-backend python migrations/add_attendance_absence_reasons.py
+```
+
+#### ds1 Docker：遷移後設定 AD 環境變數（必做，否則「AD 管理」顯示未啟用）
+
+資料庫遷移**只改 DB 結構**；「AD 整合未啟用」代表容器內 `AD_ENABLED=false` 或缺少 `AD_SERVER_URI`／`AD_BASE_DN`／`AD_DOMAIN`（映像不含 `backend/.env`）。
+
+1. 編輯 `deploy/.env`（參考 `deploy/.env.example` 的 `TRAINING_*` 區塊）：
+
+```bash
+vi /opt/apps/enterprise-portal/deploy/.env
+```
+
+範例（請改為貴司實際 DC／網域；驗收環境參考 `10.9.82.28:389`）：
+
+```env
+TRAINING_JWT_SECRET_KEY=<openssl rand -hex 32 產生的值>
+TRAINING_AD_ENABLED=true
+TRAINING_AD_SERVER_URI=ldap://10.9.82.28:389
+TRAINING_AD_USE_SSL=false
+TRAINING_AD_BASE_DN=DC=yourco,DC=com
+TRAINING_AD_DOMAIN=yourco.com
+TRAINING_AD_ADMIN_GROUP=IT Admins
+```
+
+2. 確認 `docker-compose.yml` 的 `training-backend.environment` 已映射 `TRAINING_*` → `AD_*`（本 repo `deploy/docker-compose.yml` 已含）。
+
+3. **重建容器**以載入新環境變數（僅 `restart` 不夠，若 compose 未改過須 `up -d --force-recreate`）：
+
+```bash
+cd /opt/apps/enterprise-portal/deploy
+docker compose up -d --force-recreate training-backend
+```
+
+4. 驗證容器內設定：
+
+```bash
+docker compose exec training-backend python -c \
+  "from app.config import get_settings; s=get_settings(); print('ad_enabled=', s.ad_enabled, 'ad_configured=', s.ad_configured)"
+# 預期：ad_enabled= True ad_configured= True
+```
+
+| 登入分頁 | 所需條件 |
+|----------|----------|
+| **AD 管理** | `TRAINING_AD_ENABLED=true` + DC／Base DN／Domain 正確 |
+| **緊急登入**（break-glass） | 僅需遷移寫入 `admin.password_hash`；**不受** `AD_ENABLED` 影響 |
 
 #### 方法二：使用 SQLAlchemy 自動建立表
 
@@ -197,6 +272,9 @@ sqlite3 data/education_training.db \
 ---
 
 ## 常見問題
+
+### Q: AD 管理登入顯示「AD 整合未啟用」
+A: 資料庫遷移與 AD 設定無關。請在 `deploy/.env` 設定 `TRAINING_AD_ENABLED=true` 及 `TRAINING_AD_SERVER_URI`、`TRAINING_AD_BASE_DN`、`TRAINING_AD_DOMAIN`，並執行 `docker compose up -d --force-recreate training-backend`。若暫時無法啟用 AD，請改用登入頁「**緊急登入**」分頁（break-glass，需先完成 `add_ad_auth_user_fields.py` 遷移）。
 
 ### Q: 執行遷移時出現 "no such file or directory: .venv/bin/pip"
 A: 請確認您的虛擬環境路徑。可以使用 `which python3` 來確認 Python 路徑，然後使用對應的 pip。

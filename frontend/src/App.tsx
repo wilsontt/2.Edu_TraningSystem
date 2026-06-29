@@ -104,8 +104,8 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
             >
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
-            <Link to="/" className="flex min-w-0">
-              <CrownBrand logoSrc={logoUrl} subtitle="Education System" compact />
+            <Link to="/" className="flex min-w-0 overflow-hidden">
+              <CrownBrand logoSrc={logoUrl} subtitle="Education System" compact className="gap-2 sm:gap-3" />
             </Link>
           </div>
         }
@@ -163,27 +163,27 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
           </div>
         }
         right={
-          <>
-            <div className="flex items-center gap-1.5 sm:gap-3 pr-1 sm:pr-4 sm:border-r sm:border-gray-200 min-w-0">
-              <div className="text-right min-w-0 flex-1">
-                <p className="text-[11px] sm:text-xs text-gray-500 font-medium leading-tight sm:truncate">
+          <div className="hidden lg:flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-3 pr-4 border-r border-gray-200 min-w-0">
+              <div className="text-right min-w-0">
+                <p className="text-xs text-gray-500 font-medium leading-tight truncate">
                   {user.role === 'Admin' ? 'IT管理員' : user.dept_name}
                 </p>
-                <p className="text-xs sm:text-sm font-bold text-gray-800 leading-tight sm:truncate">
+                <p className="text-sm font-bold text-gray-800 leading-tight truncate">
                   {user.name}
-                  <span className="text-gray-400 font-normal hidden sm:inline"> ({user.emp_id})</span>
+                  <span className="text-gray-400 font-normal"> ({user.emp_id})</span>
                 </p>
               </div>
-              <NavCalendarCluster className="shrink-0 [&>div:last-child]:hidden sm:[&>div:last-child]:flex" />
+              <NavCalendarCluster className="shrink-0" />
             </div>
             <button
               type="button"
               onClick={onLogout}
-              className="hidden sm:block text-gray-500 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-full shrink-0"
+              className="text-gray-500 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-full shrink-0"
             >
               <LogOut className="w-5 h-5" />
             </button>
-          </>
+          </div>
         }
       />
       {isMobileMenuOpen && (
@@ -192,6 +192,16 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
           className="absolute top-full left-0 right-0 bg-white border-b border-gray-200 shadow-lg lg:hidden animate-in fade-in slide-in-from-top-2 duration-200 z-40"
         >
           <div className="p-4 space-y-2">
+            <div className="px-4 py-3 mb-1 bg-gray-50 rounded-xl border border-gray-100">
+              <p className="text-xs text-gray-500 font-medium">
+                {user.role === 'Admin' ? 'IT管理員' : user.dept_name}
+              </p>
+              <p className="text-sm font-bold text-gray-800 mt-0.5">{user.name}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{user.emp_id}</p>
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <NavCalendarCluster />
+              </div>
+            </div>
             {navItems.map((item) => (
               <Link
                 key={item.path}
