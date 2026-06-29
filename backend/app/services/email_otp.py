@@ -186,11 +186,17 @@ def request_otp(
         expires_at=expires_at,
     )
     db.add(otp_row)
-    db.commit()
+    db.flush()  # 寫入但不 commit；SMTP 失敗時可 rollback，避免耗盡限額
 
     # 寄信（匯入在此以避免循環依賴）
     from .smtp_mailer import send_otp_email
-    send_otp_email(user.email, otp_code, username, settings)
+    try:
+        send_otp_email(user.email, otp_code, username, settings)
+    except Exception:
+        db.rollback()
+        raise
+
+    db.commit()
 
     masked = _mask_email(user.email)
     return {

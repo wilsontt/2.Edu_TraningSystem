@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 import type { User, CaptchaData, LoginResponse, Department, MustChangePasswordResponse } from '../types';
 
-/** 與後端 AD_USERNAME_PATTERN 一致：英數字開頭，可含 . _ -，1–20 碼 */
-const AD_USERNAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,19}$/;
+/** 與後端 AD_USERNAME_PATTERN 一致：英數字開頭，可含 . _ -，1–64 碼 */
+const AD_USERNAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 
 type LoginTab = 'employee' | 'admin' | 'local';
 
@@ -521,8 +521,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     placeholder="請輸入 AD 帳號（如 it01）"
                     className="block w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium"
                     value={adUsername}
-                    onChange={(e) => setAdUsername(e.target.value.slice(0, 20))}
-                    maxLength={20}
+                    onChange={(e) => setAdUsername(e.target.value)}
+                    maxLength={64}
                     autoComplete="username"
                   />
                 </div>

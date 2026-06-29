@@ -28,6 +28,18 @@ async def startup_event():
     """
     Base.metadata.create_all(bind=engine)
     print("Database tables initialized - 系統資料庫初始化完成")
+
+    # 生產環境安全檢查：JWT_SECRET_KEY 不得使用預設開發值
+    from .config import get_settings
+    _settings = get_settings()
+    _DEFAULT_JWT_KEY = "crown-secret-key-for-internal-education-system"
+    if _settings.jwt_secret_key == _DEFAULT_JWT_KEY:
+        import warnings
+        warnings.warn(
+            "⚠️  JWT_SECRET_KEY 使用預設開發值，生產環境必須透過環境變數設定強密鑰！",
+            stacklevel=1,
+        )
+
     from .services.scheduler import start_scheduler
     start_scheduler()
     print("Backup scheduler started - 排程備份服務已啟動")

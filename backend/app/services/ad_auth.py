@@ -98,7 +98,7 @@ def authenticate_ad(
 
         if settings.ad_use_nested_groups:
             raw_groups = _expand_nested_groups(
-                conn, settings.ad_base_dn, safe_username
+                conn, settings.ad_base_dn, entry.entry_dn
             )
 
         groups = [cn for dn in raw_groups if (cn := _extract_cn(dn))]
@@ -138,12 +138,14 @@ def _extract_cn(dn: str) -> str | None:
 
 
 def _expand_nested_groups(
-    conn, base_dn: str, safe_username: str
+    conn, base_dn: str, user_dn: str
 ) -> list[str]:
-    """使用 LDAP_MATCHING_RULE_IN_CHAIN 展開巢狀群組（AD 專屬 OID）。"""
+    """使用 LDAP_MATCHING_RULE_IN_CHAIN 展開巢狀群組（AD 專屬 OID）。
+    user_dn 必須是完整 Distinguished Name（entry.entry_dn），不可使用 sAMAccountName 拼接。
+    """
     nested_filter = (
         f"(&(objectClass=group)"
-        f"(member:1.2.840.113556.1.4.1941:=CN={safe_username},{base_dn}))"
+        f"(member:1.2.840.113556.1.4.1941:={user_dn}))"
     )
     conn.search(
         search_base=base_dn,

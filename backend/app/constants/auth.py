@@ -5,8 +5,9 @@ SUPER_ADMIN_ROLE_NAMES: frozenset = frozenset({
     "Admin", "System Admin", "系統管理", "系統管理者"
 })
 
-# AD username 白名單：首碼英數，後續可含 . _ -，共 1–20 碼
-AD_USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,19}$")
+# AD username 白名單：首碼英數，後續可含 . _ -，共 1–64 碼
+# Windows SAMAccountName 上限 20 碼，但 AD 其他格式（如 first.last.dept）可能更長
+AD_USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
 
 
 def normalize_ad_username(raw: str) -> str:

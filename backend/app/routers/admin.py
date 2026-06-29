@@ -355,6 +355,15 @@ def update_user(emp_id: str, user_update: schemas.UserUpdate, db: Session = Depe
     if not db_user:
         raise HTTPException(status_code=404, detail="使用者不存在")
     
+    # 保護 is_protected 帳號的角色與單位不被變更（必須在賦值前檢查，否則比較永遠相等）
+    if db_user.is_protected:
+        if user_update.role_id is not None and user_update.role_id != db_user.role_id:
+            raise HTTPException(status_code=400, detail="受保護帳號的角色不能變更")
+        if user_update.dept_id is not None and user_update.dept_id != db_user.dept_id:
+            raise HTTPException(status_code=400, detail="受保護帳號的部門不能變更")
+        if user_update.status is not None and user_update.status != 'active':
+            raise HTTPException(status_code=400, detail="受保護帳號不能被停用")
+
     if user_update.name is not None:
         db_user.name = user_update.name
     if user_update.dept_id is not None:
@@ -364,16 +373,7 @@ def update_user(emp_id: str, user_update: schemas.UserUpdate, db: Session = Depe
     if user_update.job_title_id is not None:
         db_user.job_title_id = user_update.job_title_id if user_update.job_title_id else None
     if user_update.status is not None:
-        if db_user.is_protected and user_update.status != 'active':
-            raise HTTPException(status_code=400, detail="受保護帳號不能被停用")
         db_user.status = user_update.status
-
-    # 保護 is_protected 帳號的角色與單位不被變更
-    if db_user.is_protected:
-        if user_update.role_id is not None and user_update.role_id != db_user.role_id:
-            raise HTTPException(status_code=400, detail="受保護帳號的角色不能變更")
-        if user_update.dept_id is not None and user_update.dept_id != db_user.dept_id:
-             raise HTTPException(status_code=400, detail="受保護帳號的部門不能變更")
         
     try:
         db.commit()
