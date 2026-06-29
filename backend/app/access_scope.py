@@ -85,7 +85,17 @@ def apply_active_user_filter(query):
     return query.filter(models.User.status == "active")
 
 
-def get_scope_emp_ids(db: Session, current_user: models.User, active_only: bool = False) -> Optional[List[str]]:
+def apply_trainee_filter(query):
+    """SQLAlchemy User 查詢：僅訓練員（is_trainee=True），排除 JIT 管理帳號。"""
+    return query.filter(models.User.is_trainee == True)
+
+
+def get_scope_emp_ids(
+    db: Session,
+    current_user: models.User,
+    active_only: bool = False,
+    trainees_only: bool = False,
+) -> Optional[List[str]]:
     """
     回傳可見 emp_id 範圍：
     - None: all
@@ -108,8 +118,13 @@ def get_scope_emp_ids(db: Session, current_user: models.User, active_only: bool 
             }
 
     if scope == "all":
-        if active_only:
-            return [row[0] for row in apply_active_user_filter(db.query(models.User.emp_id)).all()]
+        if active_only or trainees_only:
+            q = db.query(models.User.emp_id)
+            if active_only:
+                q = apply_active_user_filter(q)
+            if trainees_only:
+                q = apply_trainee_filter(q)
+            return [row[0] for row in q.all()]
         return None
 
     if scope == "department":
@@ -130,10 +145,14 @@ def get_scope_emp_ids(db: Session, current_user: models.User, active_only: bool 
         query = db.query(models.User.emp_id).filter(models.User.dept_id.in_(allowed_dept_ids))
         if active_only:
             query = query.filter(models.User.status == "active")
+        if trainees_only:
+            query = apply_trainee_filter(query)
         return [row[0] for row in query.all()]
 
     # self
     if active_only and current_user.status != "active":
+        return []
+    if trainees_only and not current_user.is_trainee:
         return []
     return [current_user.emp_id]
 

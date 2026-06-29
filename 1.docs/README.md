@@ -72,7 +72,7 @@
 - **[規格與計畫/2.成績中心開發任務.md](02-棕地專案/規格與計畫/2.成績中心開發任務.md)** — 成績中心歷史任務清單（含狀態補註）。
 - **[plans/20260612_AD整合_系統管理者登入_PLAN.md](02-棕地專案/plans/20260612_AD整合_系統管理者登入_PLAN.md)** — IT 管理者 AD（LDAPS + IT_Admin）；JIT 自動建檔、`is_trainee` 隔離；**方案乙**：AD 斷線 Email OTP 備援 + break-glass；ISO 27001（僅 break-glass）。
 - **[plans/20260612_AD整合_系統管理者登入_技術設計.md](02-棕地專案/plans/20260612_AD整合_系統管理者登入_技術設計.md)** — AD 整合 Wave 分工、API 契約、輸入安全、Security Review（2026-06-25）。
-- **[交付實作文件/20260625_AD整合_系統管理者登入-CloudCode提示詞.md](02-棕地專案/交付實作文件/20260625_AD整合_系統管理者登入-CloudCode提示詞.md)** — Cloud Code 開發用 Session／Wave W1～W6 提示詞。
+- **[交付實作文件/20260625_AD整合_系統管理者登入-CloudCode提示詞.md](02-棕地專案/交付實作文件/20260625_AD整合_系統管理者登入-CloudCode提示詞.md)** — Cloud Code 開發用 Session／Wave W1～W6 提示詞；**§10** break-glass 登入失敗排查（bcrypt／venv 遷移）。
 - **[plans/20260612_系統備援_NAS儲存與排程備份_PLAN.md](02-棕地專案/plans/20260612_系統備援_NAS儲存與排程備份_PLAN.md)** — NAS(SMB) 三模式連線、禁止長連線、排程備份專用帳號、materials 目錄骨架、DB＋materials 排程 ZIP 備份（2026-06-18 修訂）。
 - **[plans/20260617_教材上傳列管與教材庫_PLAN.md](02-棕地專案/plans/20260617_教材上傳列管與教材庫_PLAN.md)** — 教材上傳列管、NAS 登入與傳輸 UI、Audit、教材庫搜尋與批次下載（2026-06-18 修訂；依賴 NAS 儲存層）。
 - **[plans/20260618_教育訓練_建議事項_PLAN.md](02-棕地專案/plans/20260618_教育訓練_建議事項_PLAN.md)** — 2026-06-18 七項建議定案（教材 NAS 登入、考卷僅 Audit、QR 方案 A、行動 UI、受課對象 UX、考試中心 bug、security-review）。

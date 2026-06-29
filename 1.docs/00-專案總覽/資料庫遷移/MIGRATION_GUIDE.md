@@ -153,6 +153,49 @@ cd backend
 - ✅ 錯誤處理：包含完整的錯誤處理和回滾機制
 - ✅ 詳細日誌：顯示每個步驟的執行結果
 
+## AD 整合：break-glass 帳號遷移（`add_ad_auth_user_fields.py`）
+
+**適用**：棕地專案「AD 整合 — 系統管理者登入」Wave W1 之後。
+
+### 執行步驟
+
+```bash
+# 1. 備份（必做）
+cp data/education_training.db data/education_training.db.bak.$(date +%Y%m%d)
+
+# 2. 設定 break-glass 初始密碼（僅注入用，勿提交版控）
+export INITIAL_ADMIN_PASSWORD='符合政策的初始密碼'
+
+# 3. 必須使用 backend 虛擬環境 Python
+cd backend
+.venv/bin/python3 migrations/add_ad_auth_user_fields.py
+```
+
+成功輸出須包含：`[users] admin.password_hash 已設定（INITIAL_ADMIN_PASSWORD）`。
+
+### 驗證
+
+```bash
+sqlite3 data/education_training.db \
+  "SELECT password_hash IS NOT NULL FROM users WHERE emp_id='admin';"
+# 預期回傳 1
+```
+
+重啟後端後以 `POST /api/auth/login/local` 測試（路徑 B break-glass）。
+
+### break-glass 登入 403「帳號未設定密碼」
+
+| 原因 | 處理 |
+|------|------|
+| 用**系統** `python3` 跑遷移，venv 內 `bcrypt` 未載入 | 改為 `backend/.venv/bin/python3 migrations/add_ad_auth_user_fields.py` |
+| 未設定 `INITIAL_ADMIN_PASSWORD` | 匯出環境變數後重跑遷移 |
+| 遷移只 warning、腳本仍 exit 0 | 確認 `password_hash` 非 NULL；必要時更新遷移腳本後重跑 |
+| `passlib` + `bcrypt 5.x` 驗證失敗 | break-glass 須用 `auth_utils.hash_password` / `verify_password`（`bcrypt` 直接），見 Cloud Code 提示詞 §10 |
+
+詳細案例與 curl 範例：`1.docs/02-棕地專案/交付實作文件/20260625_AD整合_系統管理者登入-CloudCode提示詞.md` §10。
+
+---
+
 ## 常見問題
 
 ### Q: 執行遷移時出現 "no such file or directory: .venv/bin/pip"

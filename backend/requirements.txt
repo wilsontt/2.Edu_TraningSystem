@@ -4,7 +4,8 @@ sqlalchemy
 pydantic
 pydantic-settings
 python-jose[cryptography]
-passlib[bcrypt]
+bcrypt
+passlib
 python-multipart
 captcha
 pillow
@@ -16,3 +17,5 @@ pandas
 qrcode[pil]
 smbprotocol
 apscheduler
+ldap3
+pytest

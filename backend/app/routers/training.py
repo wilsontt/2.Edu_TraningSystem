@@ -91,11 +91,11 @@ def get_training_form_users(
     db: Session = Depends(get_db),
     current_user=check_permission("menu:plan"),
 ):
-    """訓練計畫表單：個人授課對象（僅在職帳號）。"""
+    """訓練計畫表單：個人授課對象（僅在職訓練員帳號）。"""
     users = (
         db.query(models.User)
         .options(joinedload(models.User.department))
-        .filter(models.User.status == "active")
+        .filter(models.User.status == "active", models.User.is_trainee == True)
         .order_by(models.User.emp_id.asc())
         .all()
     )
@@ -403,13 +403,14 @@ def get_attendance_stats(
         dept_ids = [dept.id for dept in plan.target_departments]
         dept_users = db.query(models.User).filter(
             models.User.dept_id.in_(dept_ids),
-            models.User.status == "active"
+            models.User.status == "active",
+            models.User.is_trainee == True,
         ).all()
         for user in dept_users:
             all_target_user_ids.add(user.emp_id)
     if plan.target_users:
         for user in plan.target_users:
-            if user.status == "active":
+            if user.status == "active" and user.is_trainee:
                 all_target_user_ids.add(user.emp_id)
 
     # 套用可視範圍
@@ -851,33 +852,35 @@ def calculate_expected_attendance(
     calculated_count = 0
     all_target_user_ids = set()
     
-    # 計算部門人數
+    # 計算部門人數（僅訓練員）
     if plan.target_departments:
         dept_ids = [dept.id for dept in plan.target_departments]
         dept_users = db.query(models.User).filter(
             models.User.dept_id.in_(dept_ids),
-            models.User.status == "active"
+            models.User.status == "active",
+            models.User.is_trainee == True,
         ).all()
         for user in dept_users:
             all_target_user_ids.add(user.emp_id)
-    
-    # 計算個人受課對象人數（排除已在部門中的）
+
+    # 計算個人受課對象人數（排除已在部門中的，僅訓練員）
     if plan.target_users:
         # 如果沒有部門，直接計算個人數量
         if not plan.target_departments:
-            calculated_count = len([u for u in plan.target_users if u.status == "active"])
+            calculated_count = len([u for u in plan.target_users if u.status == "active" and u.is_trainee])
         else:
             # 如果有部門，只計算不在部門中的個人
             dept_ids = [dept.id for dept in plan.target_departments]
             dept_user_ids = set(
                 db.query(models.User.emp_id).filter(
                     models.User.dept_id.in_(dept_ids),
-                    models.User.status == "active"
+                    models.User.status == "active",
+                    models.User.is_trainee == True,
                 ).all()
             )
             dept_user_ids = {uid[0] for uid in dept_user_ids}
-            # 計算個人受課對象中不在部門的
-            personal_count = len([u for u in plan.target_users if u.status == "active" and u.emp_id not in dept_user_ids])
+            # 計算個人受課對象中不在部門的（僅訓練員）
+            personal_count = len([u for u in plan.target_users if u.status == "active" and u.is_trainee and u.emp_id not in dept_user_ids])
             calculated_count = len(all_target_user_ids) + personal_count
     else:
         calculated_count = len(all_target_user_ids)

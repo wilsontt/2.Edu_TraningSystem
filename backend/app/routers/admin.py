@@ -8,10 +8,31 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List
 from .. import models, schemas
 from ..database import get_db
-from ..access_scope import apply_active_user_filter
+from ..access_scope import apply_active_user_filter, apply_trainee_filter
+from ..constants.auth import is_super_admin_role
 from .auth import check_permission
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+# 已廢止、不再出現在權限樹的功能代碼
+_DEPRECATED_FUNCTION_CODES = frozenset({"menu:admin:func"})
+
+_ADMIN_CHILDREN_NAMES_ORDER = [
+    "單位管理", "分類管理", "人員管理", "職務管理",
+    "角色管理", "權限管理", "QRcode 管理", "排程備份",
+]
+
+
+def _filter_deprecated_functions(nodes: list) -> list:
+    """遞迴移除已廢止功能節點。"""
+    result = []
+    for node in nodes:
+        if node.code in _DEPRECATED_FUNCTION_CODES:
+            continue
+        if node.children:
+            node.children = _filter_deprecated_functions(list(node.children))
+        result.append(node)
+    return result
 
 # ----------------------------------------------------------------
 # 單位管理 (Department Management) - 權限: menu:admin:dept
@@ -311,10 +332,11 @@ def delete_job_title(id: int, db: Session = Depends(get_db), current_user=check_
 @router.get("/users", response_model=List[schemas.UserDetail])
 def get_users(
     include_inactive: bool = Query(False, description="是否包含停用帳號（僅人員管理使用）"),
+    trainees_only: bool = Query(True, description="僅顯示訓練員帳號；設 false 可包含管理帳號"),
     db: Session = Depends(get_db),
     current_user=check_permission("menu:admin:user"),
 ):
-    """取得使用者列表；預設僅在職帳號。"""
+    """取得使用者列表；預設僅在職訓練員帳號。"""
     query = db.query(models.User).options(
         joinedload(models.User.department),
         joinedload(models.User.role),
@@ -322,6 +344,8 @@ def get_users(
     )
     if not include_inactive:
         query = apply_active_user_filter(query)
+    if trainees_only:
+        query = apply_trainee_filter(query)
     return query.all()
 
 @router.put("/users/{emp_id}", response_model=schemas.UserDetail)
@@ -340,16 +364,16 @@ def update_user(emp_id: str, user_update: schemas.UserUpdate, db: Session = Depe
     if user_update.job_title_id is not None:
         db_user.job_title_id = user_update.job_title_id if user_update.job_title_id else None
     if user_update.status is not None:
-        if emp_id.lower() == 'admin' and user_update.status != 'active':
-            raise HTTPException(status_code=400, detail="系統預設管理員不能被停用")
+        if db_user.is_protected and user_update.status != 'active':
+            raise HTTPException(status_code=400, detail="受保護帳號不能被停用")
         db_user.status = user_update.status
 
-    # 保護 Admin 帳號的角色與單位不被變更
-    if emp_id.lower() == 'admin':
+    # 保護 is_protected 帳號的角色與單位不被變更
+    if db_user.is_protected:
         if user_update.role_id is not None and user_update.role_id != db_user.role_id:
-            raise HTTPException(status_code=400, detail="系統預設管理員的角色不能變更")
+            raise HTTPException(status_code=400, detail="受保護帳號的角色不能變更")
         if user_update.dept_id is not None and user_update.dept_id != db_user.dept_id:
-             raise HTTPException(status_code=400, detail="系統預設管理員的部門不能變更")
+             raise HTTPException(status_code=400, detail="受保護帳號的部門不能變更")
         
     try:
         db.commit()
@@ -366,9 +390,9 @@ def delete_user(emp_id: str, db: Session = Depends(get_db), current_user = check
     if not db_user:
         raise HTTPException(status_code=404, detail="使用者不存在")
     
-    # 保護 admin 帳號不被刪除
-    if emp_id.lower() == 'admin':
-        raise HTTPException(status_code=400, detail="系統預設管理員不能被刪除")
+    # 保護 is_protected 帳號不被刪除
+    if db_user.is_protected:
+        raise HTTPException(status_code=400, detail="受保護帳號不能被刪除")
     
     # 檢查是否有關聯的考試記錄
     exam_records_count = db.query(models.ExamRecord).filter(models.ExamRecord.emp_id == emp_id).count()
@@ -423,8 +447,8 @@ def update_role(role_id: int, role: schemas.RoleCreate, db: Session = Depends(ge
     if not db_role:
         raise HTTPException(status_code=404, detail="角色不存在")
     
-    if db_role.name == "Admin":
-        raise HTTPException(status_code=400, detail="系統管理員角色 (Admin) 無法更名")
+    if is_super_admin_role(db_role.name):
+        raise HTTPException(status_code=400, detail=f"系統內建角色 ({db_role.name}) 無法更名")
 
     db_role.name = role.name
     try:
@@ -442,8 +466,8 @@ def delete_role(role_id: int, db: Session = Depends(get_db), current_user = chec
     if not db_role:
         raise HTTPException(status_code=404, detail="角色不存在")
     
-    if db_role.name == "Admin":
-        raise HTTPException(status_code=400, detail="無法刪除系統管理員角色")
+    if is_super_admin_role(db_role.name):
+        raise HTTPException(status_code=400, detail=f"無法刪除系統內建角色 ({db_role.name})")
     
     if db_role.users:
         raise HTTPException(status_code=400, detail="該角色尚有成員，無法刪除")
@@ -478,7 +502,6 @@ def get_functions(db: Session = Depends(get_db), current_user = check_permission
     # 若 Children 在 DB 有資料，lazy load 應該會抓到。
     # 排列順序依導覽列：考試中心、訓練計畫、報到總覽、考卷工坊、成績中心、系統管理（及其子項）
     NAV_ROOT_ORDER = ["menu:home", "menu:plan", "menu:attendance-overview", "menu:exam", "menu:report", "menu:admin"]
-    ADMIN_CHILDREN_NAMES_ORDER = ["單位管理", "分類管理", "人員管理", "職務管理", "角色管理", "權限管理", "功能清單管理", "QRcode 管理"]
 
     roots = db.query(models.SystemFunction).filter(models.SystemFunction.parent_id == None).options(
         joinedload(models.SystemFunction.children),
@@ -487,94 +510,22 @@ def get_functions(db: Session = Depends(get_db), current_user = check_permission
     roots_sorted = sorted(roots, key=lambda f: code_to_order.get(f.code, 999))
     for node in roots_sorted:
         if node.children and node.code == "menu:admin":
-            name_to_order = {n: i for i, n in enumerate(ADMIN_CHILDREN_NAMES_ORDER)}
+            node.children = _filter_deprecated_functions(list(node.children))
+            name_to_order = {n: i for i, n in enumerate(_ADMIN_CHILDREN_NAMES_ORDER)}
             node.children.sort(key=lambda c: name_to_order.get(c.name, 999))
-    return roots_sorted
+    return _filter_deprecated_functions(roots_sorted)
 
 @router.get("/roles/{role_id}/permissions", response_model=List[int])
 def get_role_permissions(role_id: int, db: Session = Depends(get_db), current_user = check_permission("menu:admin:perm")):
-    """取得特定角色的功能 ID 列表。角色為 Admin 時永遠回傳全部功能 ID（Admin 永遠擁有全部權限）。"""
+    """取得特定角色的功能 ID 列表。超級管理角色永遠回傳全部功能 ID。"""
     role = db.query(models.Role).filter(models.Role.id == role_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
-    if role.name == "Admin":
-        all_funcs = db.query(models.SystemFunction).all()
-        return [f.id for f in all_funcs]
-    return [f.id for f in role.functions]
-
-@router.post("/functions", response_model=schemas.SystemFunction)
-async def create_system_function(func: schemas.SystemFunctionCreate, db: Session = Depends(get_db), current_user = check_permission("menu:admin:func")):
-    """新增系統功能"""
-    # 檢查是否已存在相同的 code
-    existing = db.query(models.SystemFunction).filter(models.SystemFunction.code == func.code).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="功能代碼 (Code) 已存在")
-
-    db_func = models.SystemFunction(
-        name=func.name,
-        code=func.code,
-        parent_id=func.parent_id,
-        path=func.path
-    )
-    db.add(db_func)
-    try:
-        db.commit()
-        db.refresh(db_func)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="新增失敗，可能是代碼重複")
-    return db_func
-
-
-
-@router.put("/functions/{id}", response_model=schemas.SystemFunction)
-async def update_function(id: int, func: schemas.SystemFunctionCreate, db: Session = Depends(get_db), current_user = check_permission("menu:admin:func")):
-    """更新系統功能"""
-    db_func = db.query(models.SystemFunction).filter(models.SystemFunction.id == id).first()
-    if not db_func:
-        raise HTTPException(status_code=404, detail="功能不存在")
-    
-    # 檢查 Code 使否與其他重複
-    existing = db.query(models.SystemFunction).filter(models.SystemFunction.code == func.code, models.SystemFunction.id != id).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="功能代碼 (Code) 已被其他功能使用")
-
-    # update fields
-    db_func.name = func.name
-    db_func.code = func.code
-    db_func.parent_id = func.parent_id
-    db_func.path = func.path
-
-    try:
-        db.commit()
-        db.refresh(db_func)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="更新失敗")
-    return db_func
-
-@router.delete("/functions/{id}")
-async def delete_function(id: int, db: Session = Depends(get_db), current_user = check_permission("menu:admin:func")):
-    """刪除系統功能 (需無子節點)"""
-    db_func = db.query(models.SystemFunction).filter(models.SystemFunction.id == id).first()
-    if not db_func:
-        raise HTTPException(status_code=404, detail="功能不存在")
-    
-    # 檢查是否有子節點
-    if db_func.children:
-        raise HTTPException(status_code=400, detail="該功能尚有子節點，無法刪除")
-    
-    # 檢查是否被角色引用 (Many-to-Many 刪除時通常只移除關聯，但這裡為了安全，提醒使用者先移除角色權限比較好，或者自動移除)
-    # 這裡我們自動移除關聯 (SQLAlchemy default cascade might not set, let's explicit check or just delete)
-    # models.role_functions table is not mapped as a class, but relationship secondary handles it.
-    
-    # Let's check roles count first
-    if db_func.roles:
-        raise HTTPException(status_code=400, detail="該功能已被指派給角色，請先移除角色權限")
-
-    db.delete(db_func)
-    db.commit()
-    return {"message": "刪除成功"}
+    all_funcs = db.query(models.SystemFunction).all()
+    active_ids = [f.id for f in all_funcs if f.code not in _DEPRECATED_FUNCTION_CODES]
+    if is_super_admin_role(role.name):
+        return active_ids
+    return [f.id for f in role.functions if f.code not in _DEPRECATED_FUNCTION_CODES]
 
 @router.put("/roles/{role_id}/permissions")
 def update_role_permissions(role_id: int, update: schemas.RolePermissionUpdate, db: Session = Depends(get_db), current_user = check_permission("menu:admin:perm")):
@@ -583,9 +534,9 @@ def update_role_permissions(role_id: int, update: schemas.RolePermissionUpdate, 
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
     
-    # 保護 Admin 角色的權限不被變更
-    if role.name == 'Admin':
-        raise HTTPException(status_code=400, detail="系統管理者 (Admin) 的權限無法變更")
+    # 保護超級管理角色權限不被變更
+    if is_super_admin_role(role.name):
+        raise HTTPException(status_code=400, detail=f"系統內建角色 ({role.name}) 的權限無法變更")
     
     # 清除舊權限
     role.functions = []
@@ -617,8 +568,8 @@ def get_role_department_scope(
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
 
-    # Admin 永遠是所有部門（避免尚未插入 row 時 UI/Response 顯示不正確）
-    if role.name == "Admin":
+    # 超級管理角色永遠是所有部門
+    if is_super_admin_role(role.name):
         return {
             "role_id": role_id,
             "scope_type": "all",
@@ -655,8 +606,8 @@ def update_role_department_scope(
     if scope_type not in valid_scopes:
         raise HTTPException(status_code=400, detail="scope_type 只能是 all / department / self")
 
-    # 保護 Admin 預設全域
-    if role.name == "Admin":
+    # 保護超級管理角色預設全域
+    if is_super_admin_role(role.name):
         scope_type = "all"
 
     # 驗證部門 ID

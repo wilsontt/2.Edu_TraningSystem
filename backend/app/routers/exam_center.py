@@ -170,11 +170,10 @@ def get_my_exams(
     # 一般使用者只抓 user.dept_id 相符的。
     
     today = date.today()
-    
-    # Admin、系統管理者：可看所有未封存計畫；
-    # 一般使用者：受課對象包含自己，或「未設定受課對象」的計畫（全公司）才看得到
-    role_name = (current_user.role and current_user.role.name) or ""
-    is_admin_or_system = is_admin_or_system_role(role_name)
+
+    # 管理帳號（is_trainee=False）不參與訓練考試流程
+    if not current_user.is_trainee:
+        return []
 
     # 為了相容舊資料庫，is_archived 可能為 NULL，視同未封存
     base_query = db.query(models.TrainingPlan).options(
@@ -186,19 +185,16 @@ def get_my_exams(
         )
     )
 
-    if is_admin_or_system:
-        plans = base_query.order_by(models.TrainingPlan.training_date.desc()).all()
-    else:
-        # 條件：未設定受課對象（全公司） OR 個人受訓對象含自己 OR 受課單位含自己部門
-        no_targets = and_(
-            ~models.TrainingPlan.target_departments.any(),
-            ~models.TrainingPlan.target_users.any(),
-        )
-        in_target_users = models.TrainingPlan.target_users.any(emp_id=current_user.emp_id)
-        or_conds = [no_targets, in_target_users]
-        if current_user.dept_id is not None:
-            or_conds.append(models.TrainingPlan.target_departments.any(id=current_user.dept_id))
-        plans = base_query.filter(or_(*or_conds)).order_by(models.TrainingPlan.training_date.desc()).all()
+    # 條件：未設定受課對象（全公司） OR 個人受訓對象含自己 OR 受課單位含自己部門
+    no_targets = and_(
+        ~models.TrainingPlan.target_departments.any(),
+        ~models.TrainingPlan.target_users.any(),
+    )
+    in_target_users = models.TrainingPlan.target_users.any(emp_id=current_user.emp_id)
+    or_conds = [no_targets, in_target_users]
+    if current_user.dept_id is not None:
+        or_conds.append(models.TrainingPlan.target_departments.any(id=current_user.dept_id))
+    plans = base_query.filter(or_(*or_conds)).order_by(models.TrainingPlan.training_date.desc()).all()
 
     results = []
 

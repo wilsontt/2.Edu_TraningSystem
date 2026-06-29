@@ -611,3 +611,89 @@ class BatchPrintIndividualRequest(BaseModel):
     plan_ids: List[int] = Field(default_factory=list)
     emp_ids: List[str] = Field(default_factory=list)
     score_data_mode: Literal["last_attempt", "exam_history"] = "last_attempt"
+
+
+# ----------------------------------------------------------------
+# AD 整合認證相關模型 (AD Auth Schemas) — W1
+# ----------------------------------------------------------------
+
+class AdminLoginRequest(BaseModel):
+    """路徑 A：AD 管理登入請求（username = AD sAMAccountName）"""
+    username: str = Field(..., max_length=20)
+    password: str = Field(..., max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        from .constants.auth import AD_USERNAME_PATTERN
+        if not AD_USERNAME_PATTERN.match(v.strip()):
+            raise ValueError("AD 使用者名稱格式不符（1-20 碼英數或 ._-，首碼須為英數）")
+        return v.strip().lower()
+
+
+class LocalLoginRequest(BaseModel):
+    """路徑 B：break-glass 本地管理員登入（僅 is_protected=true 帳號）"""
+    emp_id: str = Field(..., max_length=50)
+    password: str = Field(..., max_length=128)
+
+
+class EmailOtpRequestBody(BaseModel):
+    """路徑 D：Email OTP 備援 — 請求驗證碼（AD 斷線時才允許）"""
+    username: str = Field(..., max_length=20)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        from .constants.auth import AD_USERNAME_PATTERN
+        if not AD_USERNAME_PATTERN.match(v.strip()):
+            raise ValueError("使用者名稱格式不符")
+        return v.strip().lower()
+
+
+class EmailOtpVerifyBody(BaseModel):
+    """路徑 D：Email OTP 備援 — 驗證 OTP 並取得 JWT"""
+    username: str = Field(..., max_length=20)
+    otp_code: str = Field(..., min_length=6, max_length=6)
+
+    @field_validator("otp_code")
+    @classmethod
+    def validate_otp_code(cls, v: str) -> str:
+        if not re.match(r"^\d{6}$", v):
+            raise ValueError("OTP 必須為 6 位數字")
+        return v
+
+
+class ChangePasswordRequest(BaseModel):
+    """路徑 B：break-glass 強制改密（must_change_password=true 時觸發）"""
+    emp_id: str = Field(..., max_length=50)
+    change_token: str
+    new_password: str = Field(..., min_length=1)
+
+
+class LoginUserInfo(BaseModel):
+    """登入成功後回傳的使用者資訊（嵌入 AuthLoginResponse）"""
+    emp_id: str
+    name: str
+    dept_name: str
+    role: str
+    functions: List[str] = []
+
+
+class AuthLoginResponse(BaseModel):
+    """認證成功統一回應格式（路徑 A / B / D）"""
+    access_token: str
+    token_type: str = "bearer"
+    auth_src: Literal["ad", "local", "email_fallback"]
+    user: LoginUserInfo
+
+
+class EmailOtpRequestResponse(BaseModel):
+    """路徑 D：OTP 寄送成功回應"""
+    masked_email: str
+    expires_in_seconds: int
+
+
+class MustChangePasswordResponse(BaseModel):
+    """路徑 B：密碼已到期，要求前端跳轉改密頁"""
+    must_change_password: bool = True
+    change_token: str
