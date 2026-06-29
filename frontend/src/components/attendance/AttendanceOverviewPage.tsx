@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { BarChart3, Loader2, X } from 'lucide-react';
 import api from '../../api';
 import BulkAbsenceReasonModal from './BulkAbsenceReasonModal';
+import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
 
 interface PlanSummary {
@@ -115,10 +117,16 @@ const AttendanceOverviewPage = () => {
         attendance_filter: selectedAttendanceFilter,
         include_signature: false,
       }, { responseType: 'blob' });
+      const planTitle = modalPlan?.title ?? `plan-${modalStats.plan_id}`;
+      const fallbackName = `${planTitle}_報到清單_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`;
+      const filename = parseFilenameFromContentDisposition(
+        res.headers['content-disposition'] as string | undefined,
+        fallbackName,
+      );
       const url = window.URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `attendance-print-${modalStats.plan_id}.pdf`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

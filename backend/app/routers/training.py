@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_, and_, select
 from typing import List, Optional
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
+from urllib.parse import quote
 import qrcode
 import base64
 import os
@@ -23,6 +25,36 @@ from ..access_scope import get_scope_emp_ids, intersect_emp_ids
 router = APIRouter(prefix="/training", tags=["training"])
 
 _ADMIN_ROLE_NAMES = frozenset({"Admin", "System Admin", "系統管理", "系統管理者"})
+
+# 報到清單 PDF 表格欄位 x 座標（A4）；報到時間／未報到原因欄較窄，姓名／部門／計畫較寬
+_ATTENDANCE_PDF_MARGIN = 36
+_ATTENDANCE_PDF_X = [36, 66, 116, 186, 296, 386, 466]
+_ATTENDANCE_PDF_FONT_SIZE = 9
+_ATTENDANCE_PDF_COL_GAP = 4
+
+
+def _fit_pdf_text(text: str, font: str, size: float, max_width: float) -> str:
+    """依 ReportLab 字寬截斷文字，避免欄位內容重疊到下一欄。"""
+    from reportlab.pdfbase import pdfmetrics
+
+    s = str(text or "").strip()
+    if not s:
+        return "-"
+    if pdfmetrics.stringWidth(s, font, size) <= max_width:
+        return s
+    ellipsis = "…"
+    while s and pdfmetrics.stringWidth(s + ellipsis, font, size) > max_width:
+        s = s[:-1]
+    return (s + ellipsis) if s else "-"
+
+
+def _attendance_pdf_col_widths(x_positions: list[int], page_width: float) -> list[float]:
+    right_edge = page_width - _ATTENDANCE_PDF_MARGIN
+    widths: list[float] = []
+    for i, x in enumerate(x_positions):
+        next_x = x_positions[i + 1] if i + 1 < len(x_positions) else right_edge
+        widths.append(max(20.0, next_x - x - _ATTENDANCE_PDF_COL_GAP))
+    return widths
 
 
 def _user_has_function_code(current_user: models.User, code: str) -> bool:
@@ -700,13 +732,16 @@ def print_attendance_list_pdf(
     else:
         rows = [{"kind": "absent", **u} for u in not_checked_in_users if u.get("absence_reason_code")]
 
-    # 共用報表字體註冊
-    from .report import register_chinese_fonts
+    from .report import register_chinese_fonts, _sanitize_filename_segment
+
     chinese_font = register_chinese_fonts()
+    x_positions = _ATTENDANCE_PDF_X
+    font_size = _ATTENDANCE_PDF_FONT_SIZE
 
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+    col_widths = _attendance_pdf_col_widths(x_positions, width)
     y = height - 36
 
     # Title
@@ -741,10 +776,9 @@ def print_attendance_list_pdf(
     y -= 12
 
     headers = ["ITEM", "員工編號", "姓名", "部門", "授課計劃", "報到時間", "未報到原因"]
-    x_positions = [36, 70, 130, 190, 250, 355, 455]
-    p.setFont(chinese_font, 9)
+    p.setFont(chinese_font, font_size)
     for i, h in enumerate(headers):
-        p.drawString(x_positions[i], y, h)
+        p.drawString(x_positions[i], y, _fit_pdf_text(h, chinese_font, font_size, col_widths[i]))
     y -= 12
     p.line(36, y + 6, width - 36, y + 6)
     y -= 8
@@ -752,13 +786,13 @@ def print_attendance_list_pdf(
     for idx, row in enumerate(rows, start=1):
         if y < 48:
             # 每頁底部顯示頁碼
-            p.setFont(chinese_font, 9)
+            p.setFont(chinese_font, font_size)
             p.drawRightString(width - 36, 24, f"第 {p.getPageNumber()} 頁")
             p.showPage()
             y = height - 36
-            p.setFont(chinese_font, 9)
+            p.setFont(chinese_font, font_size)
             for i, h in enumerate(headers):
-                p.drawString(x_positions[i], y, h)
+                p.drawString(x_positions[i], y, _fit_pdf_text(h, chinese_font, font_size, col_widths[i]))
             y -= 12
             p.line(36, y + 6, width - 36, y + 6)
             y -= 8
@@ -788,12 +822,30 @@ def print_attendance_list_pdf(
             p.setFillColorRGB(0, 0, 0)
 
         p.drawString(x_positions[0], y, str(idx))
-        p.drawString(x_positions[1], y, str(row.get("emp_id", ""))[:10])
-        p.drawString(x_positions[2], y, str(row.get("name", ""))[:8])
-        p.drawString(x_positions[3], y, str(row.get("dept_name", ""))[:8])
-        p.drawString(x_positions[4], y, str(plan.title)[:14])
-        p.drawString(x_positions[5], y, checkin_time_text)
-        p.drawString(x_positions[6], y, reason_text[:18])
+        p.drawString(
+            x_positions[1], y,
+            _fit_pdf_text(row.get("emp_id", ""), chinese_font, font_size, col_widths[1]),
+        )
+        p.drawString(
+            x_positions[2], y,
+            _fit_pdf_text(row.get("name", ""), chinese_font, font_size, col_widths[2]),
+        )
+        p.drawString(
+            x_positions[3], y,
+            _fit_pdf_text(row.get("dept_name", ""), chinese_font, font_size, col_widths[3]),
+        )
+        p.drawString(
+            x_positions[4], y,
+            _fit_pdf_text(plan.title, chinese_font, font_size, col_widths[4]),
+        )
+        p.drawString(
+            x_positions[5], y,
+            _fit_pdf_text(checkin_time_text, chinese_font, font_size, col_widths[5]),
+        )
+        p.drawString(
+            x_positions[6], y,
+            _fit_pdf_text(reason_text, chinese_font, font_size, col_widths[6]),
+        )
         y -= 14
 
         if include_signature:
@@ -806,10 +858,13 @@ def print_attendance_list_pdf(
 
     p.save()
     buffer.seek(0)
+    now_ts = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y%m%d_%H%M%S")
+    safe_plan = _sanitize_filename_segment(plan.title)
+    filename = f"{safe_plan}_報到清單_{now_ts}.pdf"
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=attendance_{plan_id}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
 
 
