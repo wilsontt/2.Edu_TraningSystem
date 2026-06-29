@@ -5,13 +5,28 @@ SUPER_ADMIN_ROLE_NAMES: frozenset = frozenset({
     "Admin", "System Admin", "系統管理", "系統管理者"
 })
 
-# AD username 白名單：首碼英數，後續可含 . _ -，共 1–20 碼
-AD_USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,19}$")
+# AD username 白名單：首碼英數，後續可含 . _ -，共 1–64 碼
+# Windows SAMAccountName 上限 20 碼，但 AD 其他格式（如 first.last.dept）可能更長
+AD_USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
+
+
+def extract_sam_account(raw: str) -> str:
+    """從三種 AD 格式提取 sAMAccountName：
+    - username                → username
+    - username@domain.com     → username（UPN 格式）
+    - DOMAIN\\username        → username（Windows NetBIOS 格式）
+    """
+    raw = raw.strip()
+    if "\\" in raw:
+        return raw.split("\\", 1)[1]   # DOMAIN\username → username
+    if "@" in raw:
+        return raw.split("@")[0]        # user@domain → username
+    return raw
 
 
 def normalize_ad_username(raw: str) -> str:
-    """去除前後空白後轉小寫，作為系統內統一 emp_id。"""
-    return raw.strip().lower()
+    """提取 sAMAccountName 並轉小寫，作為系統內統一 emp_id。"""
+    return extract_sam_account(raw).lower()
 
 
 def is_super_admin_role(role_name: str) -> bool:

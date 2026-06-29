@@ -55,13 +55,14 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 480
 
     # ----------------------------------------------------------------
-    # AD / LDAPS（W1 AD 整合）
+    # AD 整合（W1 AD 整合）
     # ----------------------------------------------------------------
     ad_enabled: bool = False
-    ad_server_uri: str = ""           # 例：ldaps://dc.yourco.com:636
+    ad_server_uri: str = ""           # LDAP：ldap://dc.yourco.com:389  LDAPS：ldaps://dc.yourco.com:636
+    ad_use_ssl: bool = False          # false = LDAP（port 389）；true = LDAPS（port 636，需 DC 有效憑證）
     ad_base_dn: str = ""              # 例：DC=yourco,DC=com
     ad_domain: str = ""               # UPN 網域，例：yourco.com
-    ad_admin_group: str = "IT_Admin"  # DC 上的群組名稱
+    ad_admin_group: str = "IT Admins"  # DC 上的群組名稱
     ad_admin_role_name: str = "系統管理"  # JIT 掛載的本地 RBAC 角色
     ad_default_dept_name: str = "IT部"   # JIT 預設部門
     ad_use_nested_groups: bool = False

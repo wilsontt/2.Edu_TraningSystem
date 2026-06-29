@@ -50,7 +50,12 @@ def authenticate_ad(
     if not settings.ad_configured:
         raise AdConnectionError("AD 未設定（AD_ENABLED=false 或缺少必要設定）")
 
-    if not AD_USERNAME_PATTERN.match(username.strip()):
+    # 支援三種格式：username、user@domain.com、DOMAIN\username
+    # schema 通常已標準化，此處防禦性處理以確保服務層獨立正確
+    from ..constants.auth import extract_sam_account
+    sam_account = extract_sam_account(username)
+
+    if not AD_USERNAME_PATTERN.match(sam_account):
         return None  # 格式錯誤，視為帳密錯
 
     try:
@@ -59,13 +64,13 @@ def authenticate_ad(
     except ImportError as exc:
         raise AdConnectionError("ldap3 套件未安裝，無法連線 AD") from exc
 
-    safe_username = escape_filter_chars(username.strip())
+    safe_username = escape_filter_chars(sam_account)
     upn = f"{safe_username}@{settings.ad_domain}"
 
     try:
         server = ldap3.Server(
             settings.ad_server_uri,
-            use_ssl=True,
+            use_ssl=settings.ad_use_ssl,
             get_info=ldap3.ALL,
         )
         conn = ldap3.Connection(
@@ -98,7 +103,7 @@ def authenticate_ad(
 
         if settings.ad_use_nested_groups:
             raw_groups = _expand_nested_groups(
-                conn, settings.ad_base_dn, safe_username
+                conn, settings.ad_base_dn, entry.entry_dn
             )
 
         groups = [cn for dn in raw_groups if (cn := _extract_cn(dn))]
@@ -138,12 +143,14 @@ def _extract_cn(dn: str) -> str | None:
 
 
 def _expand_nested_groups(
-    conn, base_dn: str, safe_username: str
+    conn, base_dn: str, user_dn: str
 ) -> list[str]:
-    """使用 LDAP_MATCHING_RULE_IN_CHAIN 展開巢狀群組（AD 專屬 OID）。"""
+    """使用 LDAP_MATCHING_RULE_IN_CHAIN 展開巢狀群組（AD 專屬 OID）。
+    user_dn 必須是完整 Distinguished Name（entry.entry_dn），不可用 sAMAccountName 拼接。
+    """
     nested_filter = (
         f"(&(objectClass=group)"
-        f"(member:1.2.840.113556.1.4.1941:=CN={safe_username},{base_dn}))"
+        f"(member:1.2.840.113556.1.4.1941:={user_dn}))"
     )
     conn.search(
         search_base=base_dn,

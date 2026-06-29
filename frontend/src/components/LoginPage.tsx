@@ -10,8 +10,13 @@ import {
 } from 'lucide-react';
 import type { User, CaptchaData, LoginResponse, Department, MustChangePasswordResponse } from '../types';
 
-/** 與後端 AD_USERNAME_PATTERN 一致：英數字開頭，可含 . _ -，1–20 碼 */
-const AD_USERNAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,19}$/;
+/**
+ * AD 帳號支援三種格式（前端僅基本格式檢查，後端統一標準化）：
+ *   username              → tzou.wilson_admin
+ *   UPN                   → tzou.wilson_admin@crownvantw.com
+ *   NetBIOS domain\user   → CROWNVANTW\tzou.wilson_admin
+ */
+const AD_USERNAME_REGEX = /^[a-zA-Z0-9][\w._@\\-]{0,127}$/;
 
 type LoginTab = 'employee' | 'admin' | 'local';
 
@@ -155,7 +160,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     if (!adUsername || !adPassword) { setAdError('請輸入帳號與密碼'); return; }
     if (!AD_USERNAME_REGEX.test(adUsername)) {
-      setAdError('帳號格式不符（英數字開頭，可含 . _ -，最長 20 字元）');
+      setAdError('帳號格式不符（支援 username、user@domain.com 或 DOMAIN\\username）');
       return;
     }
     setAdLoading(true);
@@ -195,10 +200,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     try {
       await api.post('/auth/login/admin/email/request', { username: adUsername });
       setOtpSent(true);
-      setAdInfo('OTP 已發送，請查看您的信箱');
+      setAdInfo('OTP 已發送，請查看您的信箱，並在下方輸入驗證碼');
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        setAdError(err.response?.data?.detail || 'OTP 發送失敗');
+        const status = err.response?.status;
+        const detail = err.response?.data?.detail || 'OTP 發送失敗';
+        if (status === 403) {
+          // 帳號未曾透過 AD 登入，系統中無 Email 紀錄
+          setAdError(`${detail}。首次登入須先在 AD 可連線時完成登入；若 AD 持續無法使用，請改用「緊急登入」分頁。`);
+          setShowEmailOtpFlow(false);
+        } else {
+          setAdError(detail);
+        }
       } else {
         setAdError('系統發生錯誤，請稍後再試');
       }
@@ -521,8 +534,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     placeholder="請輸入 AD 帳號（如 it01）"
                     className="block w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium"
                     value={adUsername}
-                    onChange={(e) => setAdUsername(e.target.value.slice(0, 20))}
-                    maxLength={20}
+                    onChange={(e) => setAdUsername(e.target.value)}
+                    maxLength={128}
                     autoComplete="username"
                   />
                 </div>

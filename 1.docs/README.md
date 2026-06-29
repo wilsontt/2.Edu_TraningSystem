@@ -70,7 +70,7 @@
 
 - **[交付實作文件/README.md](02-棕地專案/交付實作文件/README.md)** — 20260428～20260502 成績中心相關任務單狀態總覽與程式落點摘要。
 - **[規格與計畫/2.成績中心開發任務.md](02-棕地專案/規格與計畫/2.成績中心開發任務.md)** — 成績中心歷史任務清單（含狀態補註）。
-- **[plans/20260612_AD整合_系統管理者登入_PLAN.md](02-棕地專案/plans/20260612_AD整合_系統管理者登入_PLAN.md)** — IT 管理者 AD（LDAPS + IT_Admin）；JIT 自動建檔、`is_trainee` 隔離；**方案乙**：AD 斷線 Email OTP 備援 + break-glass；ISO 27001（僅 break-glass）。
+- **[plans/20260612_AD整合_系統管理者登入_PLAN.md](02-棕地專案/plans/20260612_AD整合_系統管理者登入_PLAN.md)** — IT 管理者 AD（LDAP + IT Admins）；JIT 自動建檔、`is_trainee` 隔離；**方案乙**：AD 斷線 Email OTP 備援 + break-glass；ISO 27001（僅 break-glass）。
 - **[plans/20260612_AD整合_系統管理者登入_技術設計.md](02-棕地專案/plans/20260612_AD整合_系統管理者登入_技術設計.md)** — AD 整合 Wave 分工、API 契約、輸入安全、Security Review（2026-06-25）。
 - **[交付實作文件/20260625_AD整合_系統管理者登入-CloudCode提示詞.md](02-棕地專案/交付實作文件/20260625_AD整合_系統管理者登入-CloudCode提示詞.md)** — Cloud Code 開發用 Session／Wave W1～W6 提示詞；**§10** break-glass 登入失敗排查（bcrypt／venv 遷移）。
 - **[plans/20260612_系統備援_NAS儲存與排程備份_PLAN.md](02-棕地專案/plans/20260612_系統備援_NAS儲存與排程備份_PLAN.md)** — NAS(SMB) 三模式連線、禁止長連線、排程備份專用帳號、materials 目錄骨架、DB＋materials 排程 ZIP 備份（2026-06-18 修訂）。
@@ -111,7 +111,7 @@
 - **2026-06-18**：新增 `20260618_教育訓練_建議事項_PLAN.md`（七項建議定案）；修訂 NAS PLAN（SMB 三模式、排程備份帳號）、教材 PLAN（NAS 登入、傳輸 UI、Audit）、AD PLAN（交叉引用）。
 - **2026-06-17**：新增 `20260617_教材上傳列管與教材庫_PLAN.md`（教材業務規格，與 NAS 備援 PLAN 分離）；修訂 NAS PLAN 交叉引用。
 - **2026-06-25**：修訂 `20260612_AD整合_系統管理者登入_PLAN.md` — **方案乙**（AD 斷線 Email OTP 備援、JIT 同步 `email`、AD 帳號白名單）；新增 [`20260612_AD整合_系統管理者登入_技術設計.md`](02-棕地專案/plans/20260612_AD整合_系統管理者登入_技術設計.md)。
-- **2026-06-16**：修訂 `20260612_AD整合_系統管理者登入_PLAN.md` — AD 對映改為 **JIT 自動建檔（免對照表）**、**IT_Admin 不受訓**（`is_trainee` 排除於考試／受課／報到／統計）。
+- **2026-06-16**：修訂 `20260612_AD整合_系統管理者登入_PLAN.md` — AD 對映改為 **JIT 自動建檔（免對照表）**、**IT Admins 不受訓**（`is_trainee` 排除於考試／受課／報到／統計）。
 - **2026-06-13**：修訂同份 PLAN — break-glass 本地 ADMIN、ISO 27001 密碼政策。
 - **2026-06-12**：新增兩份草案 PLAN — AD 整合、系統備援 NAS；置於 `02-棕地專案/plans/`。
 - **2026-06-12**：文件大整併。`0.standards/` 與 `3.系統測試/` 併入 `1.docs/`，改採三層（總覽／綠地／棕地）結構；去除 T3-T8 重複計畫檔；非文件檔（匯入範本、考卷來源、教材 PDF）移至 `tests/fixtures/` 與 `data/教材/`；同步更新根 README、CLAUDE.md 與全部交叉連結。

@@ -618,17 +618,19 @@ class BatchPrintIndividualRequest(BaseModel):
 # ----------------------------------------------------------------
 
 class AdminLoginRequest(BaseModel):
-    """路徑 A：AD 管理登入請求（username = AD sAMAccountName）"""
-    username: str = Field(..., max_length=20)
+    """路徑 A：AD 管理登入請求（支援 sAMAccountName 或 user@domain.com 格式）"""
+    username: str = Field(..., max_length=128)
     password: str = Field(..., max_length=128)
 
     @field_validator("username")
     @classmethod
     def validate_username(cls, v: str) -> str:
-        from .constants.auth import AD_USERNAME_PATTERN
-        if not AD_USERNAME_PATTERN.match(v.strip()):
-            raise ValueError("AD 使用者名稱格式不符（1-20 碼英數或 ._-，首碼須為英數）")
-        return v.strip().lower()
+        from .constants.auth import AD_USERNAME_PATTERN, extract_sam_account
+        # 支援三種格式：username、user@domain.com、DOMAIN\username
+        sam = extract_sam_account(v)
+        if not AD_USERNAME_PATTERN.match(sam):
+            raise ValueError("AD 帳號格式不符（英數字開頭，可含 . _ -）")
+        return sam.lower()
 
 
 class LocalLoginRequest(BaseModel):
@@ -639,21 +641,31 @@ class LocalLoginRequest(BaseModel):
 
 class EmailOtpRequestBody(BaseModel):
     """路徑 D：Email OTP 備援 — 請求驗證碼（AD 斷線時才允許）"""
-    username: str = Field(..., max_length=20)
+    username: str = Field(..., max_length=128)
 
     @field_validator("username")
     @classmethod
     def validate_username(cls, v: str) -> str:
-        from .constants.auth import AD_USERNAME_PATTERN
-        if not AD_USERNAME_PATTERN.match(v.strip()):
-            raise ValueError("使用者名稱格式不符")
-        return v.strip().lower()
+        from .constants.auth import AD_USERNAME_PATTERN, extract_sam_account
+        sam = extract_sam_account(v)
+        if not AD_USERNAME_PATTERN.match(sam):
+            raise ValueError("帳號格式不符（英數字開頭，可含 . _ -）")
+        return sam.lower()
 
 
 class EmailOtpVerifyBody(BaseModel):
     """路徑 D：Email OTP 備援 — 驗證 OTP 並取得 JWT"""
-    username: str = Field(..., max_length=20)
+    username: str = Field(..., max_length=128)
     otp_code: str = Field(..., min_length=6, max_length=6)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        from .constants.auth import AD_USERNAME_PATTERN, extract_sam_account
+        sam = extract_sam_account(v)
+        if not AD_USERNAME_PATTERN.match(sam):
+            raise ValueError("帳號格式不符（英數字開頭，可含 . _ -）")
+        return sam.lower()
 
     @field_validator("otp_code")
     @classmethod

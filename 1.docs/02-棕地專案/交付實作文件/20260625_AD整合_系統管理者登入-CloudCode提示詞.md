@@ -31,7 +31,7 @@
 #### 四條登入路徑（必須全部實作，不可混淆）
 | 路徑 | 端點 | 說明 |
 |------|------|------|
-| **A** AD 日常 | `POST /auth/login/admin` | LDAPS + `IT_Admin`；JIT 建檔含 `email` |
+| **A** AD 日常 | `POST /auth/login/admin` | LDAP + `IT Admins`；JIT 建檔含 `email` |
 | **D** Email OTP 備援 | `POST /auth/login/admin/email/request`、`/verify` | **僅 AD 不可達時**；不存 AD 密碼 |
 | **B** break-glass | `POST /auth/login/local`、`/password/change` | 僅 `is_protected`；90 天密碼政策**只適用此路徑** |
 | **C** 員工免密 | `POST /auth/login` | 不變；管理角色 → 403 |
@@ -43,8 +43,8 @@
 - TypeScript **禁 `any`**；後端 **async/await**
 - 資料庫變更：執行前說明備份；腳本放 `backend/migrations/`，**可重複執行且不報錯**
 - **機敏資料不得入版控**：`JWT_SECRET_KEY`、`SMTP_PASSWORD`、AD 密碼、OTP 明文
-- AD `username`：**白名單** `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,19}$` + LDAP `escape_filter_chars`
-- `SUPER_ADMIN_ROLE_NAMES` 是**本地 RBAC 角色名**，**不是** AD 群組；AD 准入只看 `IT_Admin`
+- AD `username`：支援三種格式（`username`、`user@domain.com`、`DOMAIN\username`），後端 `extract_sam_account()` 提取 sAMAccountName 後驗證白名單 `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$` + LDAP `escape_filter_chars`；前端 `max_length=128`
+- `SUPER_ADMIN_ROLE_NAMES` 是**本地 RBAC 角色名**，**不是** AD 群組；AD 准入只看 `IT Admins`
 - JIT 管理帳號：`is_trainee=false`；掛 `AD_ADMIN_ROLE_NAME`（預設 `系統管理`）
 - 每 Wave 結束：`npm run lint`、`npm run build`（專案根目錄）；後端相關 Wave 加說明如何手動驗證
 - **每 Wave 必須遵守 §1.1「AI 防腦補守則」**
@@ -144,7 +144,7 @@ W1 已完成。
    - 單元測試：`sqlite:///:memory:` 或 pytest `tmp_path` 專用 `.db`
    - 整合測試：`from fastapi.testclient import TestClient` + `app.dependency_overrides[get_db] = ...`
    - **禁止**連線 `data/education_training.db`
-2. `backend/app/services/ad_auth.py` — LDAPS bind、`AdAuthResult`、群組檢查、`AdConnectionError`
+2. `backend/app/services/ad_auth.py` — LDAP bind、`AdAuthResult`、群組檢查、`AdConnectionError`
 3. `backend/app/services/jit_provision.py` — upsert、撞號 409、`email` 同步
 4. `backend/app/services/password_policy.py` — 複雜度、90 天（僅 break-glass）
 5. `backend/app/services/email_otp.py` — `is_ad_unreachable`、`can_use_email_fallback`、`request_otp`、`verify_otp`
@@ -202,7 +202,7 @@ W2 已完成。
 | AD **連線失敗**（DC 不可達） | 503 | `{ "detail": "...", "fallback": "email" }` ← 供 W5 展開 OTP |
 | `AD_ENABLED=false` | 503 | `{ "detail": "AD 整合未啟用" }` — **不含** `fallback: "email"` |
 | AD 帳密錯 | 401 | — |
-| 非 IT_Admin | 403 | — |
+| 非 IT Admins | 403 | — |
 | AD 正常時 email/request | 400 | 「請使用 AD 登入」 |
 | OTP 頻率 | 429 | — |
 | break-glass 鎖定 | 423 | — |
@@ -344,7 +344,7 @@ W1～W5 已完成。
 
 | 錯誤 | 正確做法 |
 |------|----------|
-| 把 `IT_Admin` 寫進 `SUPER_ADMIN_ROLE_NAMES` | AD 群組 ≠ 本地角色名 |
+| 把 `IT Admins` 寫進 `SUPER_ADMIN_ROLE_NAMES` | AD 群組 ≠ 本地角色名 |
 | AD 正常時允許 Email OTP | 必須 `is_ad_unreachable()` 且回 400 |
 | 在 DB 存 AD 密碼 hash | 僅 break-glass 有 `password_hash` |
 | 90 天強制改密套在 AD 帳號 | 僅路徑 B break-glass |

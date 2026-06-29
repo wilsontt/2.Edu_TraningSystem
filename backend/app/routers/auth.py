@@ -393,10 +393,11 @@ async def login_admin(req: AdminLoginRequest, request: Request, db: Session = De
     except AdConnectionError as exc:
         mark_ad_unreachable()
         _audit("ad_login_connection_error", req.username, "ad", client_ip, str(exc))
-        return JSONResponse(
-            status_code=503,
-            content={"detail": f"AD 伺服器暫時無法連線：{exc}", "fallback": "email"},
-        )
+        body: dict = {"detail": f"AD 伺服器暫時無法連線：{exc}"}
+        # 僅在 Email OTP 備援已設定且啟用時才告知前端展開 OTP UI
+        if settings.ad_fallback_email_configured:
+            body["fallback"] = "email"
+        return JSONResponse(status_code=503, content=body)
 
     if ad_result is None:
         _audit("ad_login_bad_credentials", req.username, "ad", client_ip)
