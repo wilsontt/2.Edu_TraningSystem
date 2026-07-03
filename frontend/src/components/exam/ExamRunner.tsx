@@ -3,7 +3,7 @@
  * 負責處理線上考試的核心流程，包含題目載入、倒數計時、作答暫存、提交評分及結果顯示。
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle, Send, Loader2, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -77,6 +77,7 @@ const ExamRunner = () => {
 
     // 離開確認模態框狀態
     const [exitModal, setExitModal] = useState(false);
+    const [submitModalOpen, setSubmitModalOpen] = useState(false);
     
     // 提示展開狀態（以題目 ID 為 key）
     const [hintExpanded, setHintExpanded] = useState<Record<number, boolean>>({});
@@ -175,13 +176,35 @@ const ExamRunner = () => {
     /** 時間到自動交卷 */
     const handleTimeUp = () => {
         alert("時間到！系統將自動交卷。");
-        handleSubmit(true);
+        void handleSubmit(true);
     };
+
+    const isQuestionAnswered = (answer: string | undefined): boolean =>
+        Boolean(answer && answer.trim().length > 0);
+
+    const submitSummary = useMemo(() => {
+        if (!examData) return { answered: [] as number[], unanswered: [] as number[] };
+        const answered: number[] = [];
+        const unanswered: number[] = [];
+        examData.questions.forEach((q, index) => {
+            const no = index + 1;
+            if (isQuestionAnswered(answers[q.id])) answered.push(no);
+            else unanswered.push(no);
+        });
+        return { answered, unanswered };
+    }, [examData, answers]);
+
+    const formatQuestionNumbers = (nums: number[]): string =>
+        nums.length > 0 ? nums.map((n) => `第 ${n} 題`).join('、') : '無';
 
     /** 提交試卷 */
     const handleSubmit = async (force = false) => {
-        if (!force && !window.confirm("確定要交卷嗎？交卷後無法修改。")) return;
-        
+        if (!force) {
+            setSubmitModalOpen(true);
+            return;
+        }
+
+        setSubmitModalOpen(false);
         try {
             setSubmitting(true);
             const res = await api.post(`/exam/submit/${planId}`, {
@@ -503,6 +526,40 @@ const ExamRunner = () => {
                     )}
                 </div>
             </div>
+
+            {/* 交卷確認對話框 */}
+            <ConfirmModal
+                isOpen={submitModalOpen}
+                title="確定要交卷嗎？"
+                message={
+                    <div className="space-y-3 text-sm">
+                        {examData.title && (
+                            <p className="text-indigo-800 font-black">{examData.title}</p>
+                        )}
+                        <p>交卷後無法修改，請確認作答狀況：</p>
+                        <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2">
+                            <p className="text-green-800 font-black mb-1">
+                                已作答（{submitSummary.answered.length} 題）
+                            </p>
+                            <p className="text-green-700 font-medium">{formatQuestionNumbers(submitSummary.answered)}</p>
+                        </div>
+                        <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2">
+                            <p className="text-orange-800 font-black mb-1">
+                                未作答（{submitSummary.unanswered.length} 題）
+                            </p>
+                            <p className="text-orange-700 font-medium">{formatQuestionNumbers(submitSummary.unanswered)}</p>
+                        </div>
+                        {submitSummary.unanswered.length > 0 && (
+                            <p className="text-amber-700 text-xs">尚有未作答題目，交卷後將以空白計分。</p>
+                        )}
+                    </div>
+                }
+                confirmText="確定交卷"
+                cancelText="繼續作答"
+                onConfirm={() => { void handleSubmit(true); }}
+                onCancel={() => setSubmitModalOpen(false)}
+                isBusy={submitting}
+            />
 
             {/* 離開確認對話框 */}
             <ConfirmModal 

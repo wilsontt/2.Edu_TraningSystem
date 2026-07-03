@@ -3,17 +3,18 @@
  * 這是系統中最核心的管理介面之一，整合了：
  * 1. 計畫列表 (含分頁、搜尋、篩選、封存)
  * 2. 計畫新增與編輯彈窗 (支援多部門、多人員指定)
- * 3. 報到統計詳情 (包含應到/實到人次、未到原因編輯)
- * 4. QRcode 管理與考試導向連結
+ * 3. 報到統計詳情 (包含應到/實到人次、未到原因編輯、列印清冊)
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { format } from 'date-fns';
 import { AxiosError } from 'axios';
-import { Plus, Calendar, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, QrCode, Copy, Check, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Archive, MoreVertical } from 'lucide-react';
+import { Plus, Calendar, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Archive, MoreVertical } from 'lucide-react';
 import api from '../../api';
 import Pagination from '../common/Pagination';
 import BulkAbsenceReasonModal from '../attendance/BulkAbsenceReasonModal';
 import PlanMaterialsSection from '../teaching/PlanMaterialsSection';
+import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
 
 // ----------------------------------------------------------------
@@ -160,16 +161,6 @@ const TrainingPlanManager = () => {
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [selectedAttendanceFilter, setSelectedAttendanceFilter] = useState<AttendanceListFilter>('expected');
   
-  // 報到 QRcode 狀態
-  const [checkinQRCode, setCheckinQRCode] = useState<{
-    plan_id: number;
-    plan_title: string;
-    qrcode_url: string;
-    checkin_url: string;
-  } | null>(null);
-  const [generatingQRCode, setGeneratingQRCode] = useState(false);
-  const [copiedCheckinUrl, setCopiedCheckinUrl] = useState(false);
-  
   // 刪除狀態
   const [deleteTarget, setDeleteTarget] = useState<TrainingPlan | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -228,6 +219,11 @@ const TrainingPlanManager = () => {
     () => formData.target_user_ids.filter((id) => !deptDerivedUserIds.has(id)),
     [formData.target_user_ids, deptDerivedUserIds],
   );
+
+  /** 依表單受課對象即時計算應到人數（與後端 calculate-expected-attendance 邏輯一致） */
+  const calculateExpectedAttendanceFromForm = useCallback(() => {
+    return deptDerivedUserIds.size + explicitExtraUserIds.length;
+  }, [deptDerivedUserIds, explicitExtraUserIds]);
   // emp_id → 使用者資料，供受課對象卡片顯示姓名/部門
   const usersByEmpId = useMemo(() => {
     const map = new Map<string, { emp_id: string; name: string; dept_name: string; dept_id: number | null }>();
@@ -257,6 +253,12 @@ const TrainingPlanManager = () => {
   // 下拉選單資料
   const [categories, setCategories] = useState<MainCategory[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+
+  /** 受課單位可選清單：隱藏底線開頭部門（如 _停用，供離職人員歸檔用） */
+  const selectableTargetDepartments = useMemo(
+    () => departments.filter((d) => !d.name.startsWith('_')),
+    [departments],
+  );
   
   // 載入報到統計
   const fetchAttendanceStats = async (planId: number) => {
@@ -265,6 +267,53 @@ const TrainingPlanManager = () => {
       setAttendanceStats(prev => ({ ...prev, [planId]: res.data }));
     } catch (err: unknown) {
       console.error('載入報到統計失敗', err);
+    }
+  };
+
+  const handlePrintCurrentList = async () => {
+    if (!selectedPlanId) return;
+    const stats = attendanceStats[selectedPlanId];
+    if (!stats) return;
+
+    const expectedList = [
+      ...stats.checked_in_users.map((u) => ({ emp_id: u.emp_id, isLeave: false })),
+      ...stats.not_checked_in_users.map((u) => ({ emp_id: u.emp_id, isLeave: !!u.absence_reason_code })),
+    ];
+    const targetList =
+      selectedAttendanceFilter === 'expected'
+        ? expectedList
+        : selectedAttendanceFilter === 'actual'
+          ? stats.checked_in_users.map((u) => ({ emp_id: u.emp_id, isLeave: false }))
+          : selectedAttendanceFilter === 'absent'
+            ? stats.not_checked_in_users.filter((u) => !u.absence_reason_code).map((u) => ({ emp_id: u.emp_id, isLeave: false }))
+            : stats.not_checked_in_users.filter((u) => !!u.absence_reason_code).map((u) => ({ emp_id: u.emp_id, isLeave: true }));
+
+    if (targetList.length === 0) {
+      alert('目前清單無資料可列印');
+      return;
+    }
+
+    try {
+      const res = await api.post(`/training/plans/${selectedPlanId}/attendance/print/pdf`, {
+        attendance_filter: selectedAttendanceFilter,
+        include_signature: false,
+      }, { responseType: 'blob' });
+      const planTitle = plans.find((p) => p.id === selectedPlanId)?.title ?? `plan-${selectedPlanId}`;
+      const fallbackName = `${planTitle}_報到清單_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`;
+      const filename = parseFilenameFromContentDisposition(
+        res.headers['content-disposition'] as string | undefined,
+        fallbackName,
+      );
+      const url = window.URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch {
+      alert('列印失敗');
     }
   };
 
@@ -1241,19 +1290,14 @@ const TrainingPlanManager = () => {
                     <label className="text-xs font-bold text-gray-500 uppercase">應到人數 (選填)</label>
                     <button
                       type="button"
-                      onClick={async () => {
-                        try {
-                          // 計算應到人數需要 plan_id，但新增時還沒有，所以只在編輯模式下可用
-                          if (editId) {
-                            const res = await api.get(`/training/plans/${editId}/calculate-expected-attendance`);
-                            setFormData({...formData, expected_attendance: res.data.calculated_count.toString()});
-                          }
-                        } catch (err: unknown) {
-                          console.error('計算應到人數失敗', err);
-                        }
+                      onClick={() => {
+                        const count = calculateExpectedAttendanceFromForm();
+                        setFormData((prev) => ({
+                          ...prev,
+                          expected_attendance: count.toString(),
+                        }));
                       }}
                       className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
-                      disabled={!editId}
                     >
                       自動計算
                     </button>
@@ -1282,12 +1326,10 @@ const TrainingPlanManager = () => {
                           <button
                               type="button"
                               onClick={() => {
-                                  // 檢查是否已經全選
-                                  const allDeptIds = departments.map(d => d.id.toString());
+                                  const allDeptIds = selectableTargetDepartments.map(d => d.id.toString());
                                   const isAllSelected = allDeptIds.length > 0 && 
                                       allDeptIds.every(id => formData.target_dept_ids.includes(id));
                                   
-                                  // 僅切換受課單位；個人受課對象（額外新增）不受影響
                                   setFormData(prev => ({
                                     ...prev,
                                     target_dept_ids: isAllSelected ? [] : allDeptIds,
@@ -1296,7 +1338,7 @@ const TrainingPlanManager = () => {
                               className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
                           >
                               {(() => {
-                                  const allDeptIds = departments.map(d => d.id.toString());
+                                  const allDeptIds = selectableTargetDepartments.map(d => d.id.toString());
                                   const isAllSelected = allDeptIds.length > 0 && 
                                       allDeptIds.every(id => formData.target_dept_ids.includes(id));
                                   return isAllSelected ? '取消全選' : '全選';
@@ -1305,14 +1347,14 @@ const TrainingPlanManager = () => {
                           <button
                               type="button"
                               onClick={() => {
-                                  // 僅將開課單位加入受課單位；個人受課對象不受影響
-                                  if (formData.dept_id) {
-                                      setFormData(prev => {
-                                          const newIds = new Set(prev.target_dept_ids);
-                                          newIds.add(prev.dept_id);
-                                          return { ...prev, target_dept_ids: Array.from(newIds) };
-                                      });
-                                  }
+                                  if (!formData.dept_id) return;
+                                  const dept = departments.find((d) => d.id.toString() === formData.dept_id);
+                                  if (!dept || dept.name.startsWith('_')) return;
+                                  setFormData(prev => {
+                                      const newIds = new Set(prev.target_dept_ids);
+                                      newIds.add(prev.dept_id);
+                                      return { ...prev, target_dept_ids: Array.from(newIds) };
+                                  });
                               }}
                               className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
                           >
@@ -1322,7 +1364,7 @@ const TrainingPlanManager = () => {
                   </div>
                   <div className="border-2 border-indigo-200 rounded-xl p-3 max-h-55 overflow-y-auto bg-indigo-50/30">
                       <div className="grid grid-cols-2 gap-2">
-                          {departments.map(dept => (  
+                          {selectableTargetDepartments.map(dept => (
                               // 移除 p-2，避免內部元素之間有間距
                               <label key={dept.id} className="flex items-center gap-2 p-0 rounded-lg hover:bg-white transition-colors duration-200 cursor-pointer">
                                   <input
@@ -1571,17 +1613,26 @@ const TrainingPlanManager = () => {
                 <BarChart3 className="w-5 h-5 text-indigo-600" />
                 報到統計 - {plans.find(p => p.id === selectedPlanId)?.title}
               </h3>
-              <button 
-                onClick={() => {
-                  setIsAttendanceModalOpen(false);
-                  setSelectedPlanId(null);
-                  setSelectedAttendanceFilter('expected');
-                  setAbsenceReasonEdit(null);
-                }} 
-                className="p-2 hover:bg-white/50 rounded-xl transition-all duration-200 cursor-pointer"
-              >
-                <X className="w-5 h-5 text-gray-400" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { void handlePrintCurrentList(); }}
+                  className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 cursor-pointer"
+                >
+                  列印目前清單
+                </button>
+                <button 
+                  onClick={() => {
+                    setIsAttendanceModalOpen(false);
+                    setSelectedPlanId(null);
+                    setSelectedAttendanceFilter('expected');
+                    setAbsenceReasonEdit(null);
+                  }} 
+                  className="p-2 hover:bg-white/50 rounded-xl transition-all duration-200 cursor-pointer"
+                >
+                  <X className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
             </div>
             
             <div className="p-6 overflow-y-auto space-y-6">
@@ -1631,185 +1682,6 @@ const TrainingPlanManager = () => {
                         <div className="text-sm font-bold text-purple-600 mb-1">請假人數</div>
                         <div className="text-2xl font-black text-purple-800">{leaveCount}</div>
                       </button>
-                    </div>
-
-                    {/* 報到 QRcode 與應到人數設定：左右排列 */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* 報到 QRcode 生成 */}
-                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-bold text-indigo-700 flex items-center gap-2">
-                          <QrCode className="w-4 h-4" />
-                          報到 QRcode
-                        </h4>
-                        <button
-                          onClick={async () => {
-                            try {
-                              setGeneratingQRCode(true);
-                              const res = await api.post(
-                                `/training/plans/${selectedPlanId}/checkin-qrcode/generate`,
-                                {},
-                                {
-                                  headers: {
-                                    // 傳遞前端 URL（含 /training 等部署子路徑），供後端組合報到連結，避免掃碼 404
-                                    'X-Frontend-URL': `${window.location.origin}${import.meta.env.BASE_URL || '/'}`.replace(/\/$/, '')
-                                  }
-                                }
-                              );
-                              setCheckinQRCode(res.data);
-                            } catch (err: unknown) {
-                              if (err instanceof AxiosError) {
-                                alert(err.response?.data?.detail || '產生報到 QRcode 失敗');
-                              } else {
-                                alert('產生報到 QRcode 失敗');
-                              }
-                            } finally {
-                              setGeneratingQRCode(false);
-                            }
-                          }}
-                          disabled={generatingQRCode}
-                          className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-bold transition-all duration-200 disabled:bg-indigo-300 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
-                        >
-                          {generatingQRCode ? (
-                            <>
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                              <span>產生中...</span>
-                            </>
-                          ) : (
-                            <>
-                              <QrCode className="w-3 h-3" />
-                              <span>產生 QRcode</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                      {checkinQRCode && checkinQRCode.plan_id === selectedPlanId && (
-                        <div className="mt-3 flex flex-col items-center gap-3 p-4 bg-white rounded-lg border border-indigo-300">
-                          <img 
-                            src={checkinQRCode.qrcode_url} 
-                            alt="Check-in QRcode" 
-                            className="w-48 h-48"
-                          />
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded">
-                              {checkinQRCode.checkin_url}
-                            </span>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(checkinQRCode.checkin_url).then(() => {
-                                  setCopiedCheckinUrl(true);
-                                  setTimeout(() => setCopiedCheckinUrl(false), 2000);
-                                });
-                              }}
-                              className="p-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors duration-200 cursor-pointer"
-                              title="複製連結"
-                            >
-                              {copiedCheckinUrl ? (
-                                <Check className="w-3 h-3" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
-                            </button>
-                          </div>
-                          <p className="text-xs text-gray-500 text-center">
-                            掃描此 QRcode 可快速進入報到頁面
-                          </p>
-                        </div>
-                      )}
-                      {!checkinQRCode || checkinQRCode.plan_id !== selectedPlanId ? (
-                        <p className="text-xs text-gray-500 text-center mt-2">
-                          點擊上方按鈕產生報到 QRcode
-                        </p>
-                      ) : null}
-                    </div>
-
-                    {/* 應到人數設定 */}
-                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-sm font-bold text-gray-700">應到人數設定</label>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const res = await api.get(`/training/plans/${selectedPlanId}/calculate-expected-attendance`);
-                              await api.put(`/training/plans/${selectedPlanId}/expected-attendance`, {
-                                expected_attendance: res.data.calculated_count
-                              });
-                              // 重新載入統計
-                              await fetchAttendanceStats(selectedPlanId);
-                              // 重新載入計畫列表以更新 expected_attendance（使用當前篩選條件）
-                              const statusMap = {
-                                'active': 'active',
-                                'expired': 'expired',
-                                'archived': 'archived'
-                              };
-                              const status = statusMap[activeTab];
-                              const params = new URLSearchParams();
-                              params.append('status', status);
-                              if (filterYear) params.append('year', filterYear);
-                              if (filterDeptId) params.append('dept_id', filterDeptId);
-                              if (filterCategoryId) params.append('category_id', filterCategoryId);
-                              const plansRes = await api.get(`/training/plans?${params.toString()}`);
-                              setPlans(plansRes.data);
-                            } catch (err: unknown) {
-                              if (err instanceof AxiosError) {
-                                alert(err.response?.data?.detail || '更新失敗');
-                              } else {
-                                alert('更新失敗');
-                              }
-                            }
-                          }}
-                          className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
-                        >
-                          自動計算
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="number"
-                          min="0"
-                          className="w-32 px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200"
-                          value={stats.expected_count}
-                          onChange={async (e) => {
-                            const newValue = parseInt(e.target.value) || 0;
-                            try {
-                              await api.put(`/training/plans/${selectedPlanId}/expected-attendance`, {
-                                expected_attendance: newValue
-                              });
-                              // 更新本地狀態
-                              setAttendanceStats(prev => ({
-                                ...prev,
-                                [selectedPlanId]: {
-                                  ...prev[selectedPlanId],
-                                  expected_count: newValue,
-                                  attendance_rate: prev[selectedPlanId].actual_count / newValue * 100
-                                }
-                              }));
-                              // 重新載入計畫列表（使用當前篩選條件）
-                              const statusMap = {
-                                'active': 'active',
-                                'expired': 'expired',
-                                'archived': 'archived'
-                              };
-                              const status = statusMap[activeTab];
-                              const params = new URLSearchParams();
-                              params.append('status', status);
-                              if (filterYear) params.append('year', filterYear);
-                              if (filterDeptId) params.append('dept_id', filterDeptId);
-                              if (filterCategoryId) params.append('category_id', filterCategoryId);
-                              const plansRes = await api.get(`/training/plans?${params.toString()}`);
-                              setPlans(plansRes.data);
-                            } catch (err: unknown) {
-                              if (err instanceof AxiosError) {
-                                alert(err.response?.data?.detail || '更新失敗');
-                              } else {
-                                alert('更新失敗');
-                              }
-                            }
-                          }}
-                        />
-                        <span className="text-xs text-gray-500">人</span>
-                      </div>
-                    </div>
                     </div>
 
                     {/* 報到統計卡片切換單一清單 */}

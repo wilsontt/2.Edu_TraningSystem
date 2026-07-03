@@ -115,6 +115,9 @@ const ExamDashboard = () => {
         }
     };
 
+    const pendingExam = exams.find((e) => e.plan_id === pendingStartExamId);
+    const pendingExamTitle = pendingExam?.title ?? '訓練計畫';
+
     return (
         <>
         <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
@@ -188,6 +191,7 @@ const ExamDashboard = () => {
                                 <div className="pt-4 border-t border-indigo-100/50">
                                     <CheckInButton
                                         planId={exam.plan_id}
+                                        planTitle={exam.title}
                                         refreshKey={location.key}
                                         onCheckInSuccess={() => navigate(`/exam/run/${exam.plan_id}`)}
                                     />
@@ -223,8 +227,9 @@ const ExamDashboard = () => {
                             <X className="w-4 h-4 text-gray-500" />
                         </button>
                     </div>
-                    <div className="px-5 py-4 text-sm text-gray-700 leading-relaxed">
-                        此訓練尚未報到，請先完成報到再開始考試。是否立即報到？
+                    <div className="px-5 py-4 text-sm text-gray-700 leading-relaxed space-y-2">
+                        <p className="font-bold text-indigo-800">{pendingExamTitle}</p>
+                        <p>「{pendingExamTitle}」尚未報到，請先完成報到再開始考試。是否立即報到？</p>
                     </div>
                     <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
                         <button

@@ -7,7 +7,7 @@ interface ConfirmModalProps {
     /** 模態框標題 */
     title: string;
     /** 模態框主要訊息內容 */
-    message: string;
+    message: React.ReactNode;
     /** 額外（第三）按鈕文字（例如：儲存變更） */
     extraText?: string;
     /** 額外（第三）按鈕點擊事件 */
@@ -66,8 +66,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                     </button>
                 </div>
                 
-                <div className="p-6">
-                    <p className="text-gray-600 font-bold leading-relaxed">{message}</p>
+                <div className="p-6 max-h-[60vh] overflow-y-auto">
+                    <div className="text-gray-600 font-bold leading-relaxed">{message}</div>
                 </div>
 
                 <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">

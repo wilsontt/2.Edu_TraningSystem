@@ -5,6 +5,8 @@ import { parseBackendDateTime } from '../../utils/date';
 
 interface CheckInButtonProps {
     planId: number;
+    /** 訓練計畫名稱，用於報到確認提示 */
+    planTitle?: string;
     onCheckInSuccess?: () => void;
     /** 父層導航返回時變更此值（如 location.key），用以觸發報到狀態重新抓取（建議事項 #6 / Wave 0）。 */
     refreshKey?: string | number;
@@ -15,7 +17,7 @@ interface AttendanceStatus {
     checkin_time?: string;
 }
 
-const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess, refreshKey }) => {
+const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, planTitle, onCheckInSuccess, refreshKey }) => {
     const [status, setStatus] = useState<AttendanceStatus | null>(null);
     const [loading, setLoading] = useState(false);
     const [checkingIn, setCheckingIn] = useState(false);
@@ -39,7 +41,8 @@ const CheckInButton: React.FC<CheckInButtonProps> = ({ planId, onCheckInSuccess,
 
     // 執行報到
     const handleCheckIn = async () => {
-        if (!confirm('確定要報到嗎？報到後即可開始考試。')) {
+        const titleLabel = planTitle ? `「${planTitle}」` : '此訓練計畫';
+        if (!confirm(`確定要為${titleLabel}報到嗎？報到後即可開始考試。`)) {
             return;
         }
 
