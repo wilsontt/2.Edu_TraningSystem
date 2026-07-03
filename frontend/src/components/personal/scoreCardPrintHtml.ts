@@ -194,12 +194,12 @@ function buildExamCoverHtml(detail: ScoreDetail): string {
         </div>
       </div>
 
-      <div class="col-span-1 mb-2">
-        <div class="h-full flex flex-col">
-          <div class="flex-1 border-2 border-gray-800 p-4 flex flex-col justify-center items-center">
-            <div class="text-base text-gray-600 mb-2">總分 / Total Score</div>
-            <div class="text-7xl font-bold text-red-600 transform -rotate-3 score-handwriting"
-                 style="text-shadow:2px 2px 0px rgba(0,0,0,0.1);font-family:Caveat,'Comic Sans MS','Patrick Hand',cursive;">
+      <div class="col-span-1 mb-2" style="min-width:7.5rem;overflow:visible;">
+        <div class="h-full flex flex-col" style="overflow:visible;">
+          <div class="flex-1 border-2 border-gray-800 px-6 py-4 flex flex-col justify-center items-center" style="overflow:visible;">
+            <div class="text-base text-gray-600 mb-2 text-center">總分 / Total Score</div>
+            <div class="font-bold text-red-600 score-handwriting"
+                 style="text-shadow:2px 2px 0px rgba(0,0,0,0.1);font-family:Caveat,'Comic Sans MS','Patrick Hand',cursive;transform:rotate(-3deg);transform-origin:center center;white-space:nowrap;line-height:1;font-size:${String(detail.basic_info.total_score).length >= 3 ? '3rem' : '4.5rem'};">
               ${detail.basic_info.total_score}
             </div>
           </div>

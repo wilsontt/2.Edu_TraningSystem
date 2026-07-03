@@ -48,6 +48,19 @@ def _now_taipei_naive() -> datetime:
     return datetime.now(_TZ_TAIPEI).replace(tzinfo=None)
 
 
+_ATTENDANCE_REQUIRED_MSG = "請先完成報到後再開始考試"
+
+
+def _require_attendance_record(db: Session, emp_id: str, plan_id: int) -> None:
+    """無報到列則拒絕開考／交卷（業務鐵律：須先報到）。"""
+    exists = db.query(models.AttendanceRecord.id).filter(
+        models.AttendanceRecord.emp_id == emp_id,
+        models.AttendanceRecord.plan_id == plan_id,
+    ).first()
+    if not exists:
+        raise HTTPException(status_code=403, detail=_ATTENDANCE_REQUIRED_MSG)
+
+
 def _history_already_covers_record_submit(
     history_list: List[dict],
     record_submit_time: Optional[datetime],
@@ -304,6 +317,8 @@ def start_exam(
         if not (record and not record.is_passed):
             raise HTTPException(status_code=400, detail="Exam has expired.")
 
+    _require_attendance_record(db, current_user.emp_id, plan_id)
+
     # 建立或更新 ExamRecord 的 start_time（記錄開始作答時間）
     # 這樣在 submit_exam 時可以正確計算作答時間
     now = datetime.now()
@@ -401,6 +416,8 @@ def submit_exam(
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Training plan not found")
+
+    _require_attendance_record(db, current_user.emp_id, plan_id)
 
     # Fetch all questions
     questions = db.query(models.Question).filter(models.Question.plan_id == plan.id).all()
@@ -1278,22 +1295,21 @@ def get_attendance_status(
     current_user: models.User = Depends(get_current_user)
 ):
     """檢查當前用戶是否已報到該計畫"""
-    # 查詢報到記錄
     attendance = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.emp_id == current_user.emp_id,
         models.AttendanceRecord.plan_id == plan_id
     ).first()
-    
+
     if attendance:
         return {
             "is_checked_in": True,
             "checkin_time": attendance.checkin_time
         }
-    else:
-        return {
-            "is_checked_in": False,
-            "checkin_time": None
-        }
+
+    return {
+        "is_checked_in": False,
+        "checkin_time": None
+    }
 
 @router.post("/plan/{plan_id}/attendance/checkin", response_model=schemas.CheckInResponse)
 def check_in_attendance(

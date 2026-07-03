@@ -34,9 +34,9 @@ function ScoreCardContent({
       </div>
 
       {/* 基本資訊 + 成績資訊 */}
-      <div className="grid grid-cols-3 gap-6 mb-1">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-1">
           {/* 基本資訊 (左側 2 欄) */}
-          <div className="col-span-2 border-2 border-gray-800 mb-2 p-2">
+          <div className="sm:col-span-2 border-2 border-gray-800 mb-2 p-2">
             <div className="grid grid-cols-2 gap-x-8 gap-y-1">
               <div>
                 <div className="text-sm text-gray-600 mb-0">考生姓名 / Name</div>
@@ -68,15 +68,19 @@ function ScoreCardContent({
           </div>
           
           {/* 成績資訊 (右側 1 欄) - 僅顯示總分 */}
-          <div className="col-span-1 mb-2">
+          <div className="sm:col-span-1 mb-2 w-full min-w-0">
             <div className="h-full flex flex-col">
-              <div className="flex-1 border-2 border-gray-800 p-4 flex flex-col justify-center items-center">
-                <div className="text-base text-gray-600 mb-2">總分 / Total Score</div>
-                <div 
-                  className="text-7xl font-bold text-red-600 transform -rotate-3 score-handwriting" 
-                  style={{ 
+              <div className="flex-1 border-2 border-gray-800 px-6 py-6 sm:px-6 flex flex-col justify-center items-center min-h-[7.5rem]">
+                <div className="text-base text-gray-600 mb-2 text-center">總分 / Total Score</div>
+                <div
+                  className={clsx(
+                    'font-bold text-red-600 score-handwriting leading-none whitespace-nowrap px-2',
+                    'max-sm:rotate-0 sm:-rotate-3',
+                    String(detail.basic_info.total_score).length >= 3 ? 'text-5xl' : 'text-6xl sm:text-7xl',
+                  )}
+                  style={{
                     textShadow: '2px 2px 0px rgba(0,0,0,0.1)',
-                    fontFamily: "Caveat, 'Comic Sans MS', 'Patrick Hand', cursive"
+                    fontFamily: "Caveat, 'Comic Sans MS', 'Patrick Hand', cursive",
                   }}
                 >
                   {detail.basic_info.total_score}
@@ -87,30 +91,33 @@ function ScoreCardContent({
       </div>
 
       {/* 訓練計畫資訊 + Watermark Result */}
-      <div className="mb-5 relative">
-        <div className="flex items-end justify-between">
-          <div className="w-2/3">
-             <div className="text-sm text-gray-600 mb-1">訓練計畫 / Training Plan</div>
-             <div className="font-bold text-xl border-b-2 border-gray-800 pb-2">
-               {detail.basic_info.plan_title}
-             </div>
-          </div>
-          
-          {/* Watermark Result Stamped Area 考試結果以浮印置底方式呈現 -rotate-12 (預設值：逆時針 12 度旋轉) */}
-          <div className="absolute right-8 bottom-[-10px] transform rotate-12 pointer-events-none">
-             <div className={clsx(
-                "border-4 border-double px-8 py-2 rounded-lg flex flex-col items-center justify-center bg-white/10 backdrop-blur-sm",
-                detail.basic_info.is_passed 
-                    ? "border-green-600 text-green-600" 
-                    : "border-red-600 text-red-600"
-             )} style={{ minWidth: '180px' }}>
-                <div className="text-xs font-bold uppercase tracking-widest opacity-70 mb-0">Result</div>
-                <div className="flex items-center gap-2">
-                    <span className="text-2xl font-bold">{detail.basic_info.is_passed ? '通過' : '未通過'}</span>
-                    <span className="text-3xl font-black tracking-widest font-sans">{detail.basic_info.is_passed ? 'PASS' : 'FAIL'}</span>
-                </div>
-             </div>
-          </div>
+      <div className="mb-5 sm:relative">
+        <div className="w-full sm:w-2/3">
+           <div className="text-sm text-gray-600 mb-1">訓練計畫 / Training Plan</div>
+           <div className="font-bold text-xl border-b-2 border-gray-800 pb-2">
+             {detail.basic_info.plan_title}
+           </div>
+        </div>
+
+        {/* 行動版：浮水印獨立於下方不疊加；桌面版：維持蓋章浮印 */}
+        <div
+          className={clsx(
+            'pointer-events-none flex justify-center mt-4',
+            'sm:absolute sm:right-8 sm:bottom-[-10px] sm:mt-0 sm:rotate-12',
+          )}
+        >
+           <div className={clsx(
+              'border-4 border-double px-6 sm:px-8 py-2 rounded-lg flex flex-col items-center justify-center bg-white/80 sm:bg-white/10 sm:backdrop-blur-sm',
+              detail.basic_info.is_passed
+                  ? 'border-green-600 text-green-600'
+                  : 'border-red-600 text-red-600'
+           )} style={{ minWidth: 'min(180px, 100%)' }}>
+              <div className="text-xs font-bold uppercase tracking-widest opacity-70 mb-0">Result</div>
+              <div className="flex items-center gap-2">
+                  <span className="text-2xl font-bold">{detail.basic_info.is_passed ? '通過' : '未通過'}</span>
+                  <span className="text-3xl font-black tracking-widest font-sans">{detail.basic_info.is_passed ? 'PASS' : 'FAIL'}</span>
+              </div>
+           </div>
         </div>
       </div>
 
@@ -198,7 +205,7 @@ export default function ScoreCardPreview({
     <>
       {/* 模態框（列印時隱藏） */}
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 print:hidden" onClick={onClose}>
-        <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col print:hidden" onClick={(e) => e.stopPropagation()}>
           {/* Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
             <h3 className="text-xl font-bold text-gray-900">成績單預覽</h3>
@@ -219,9 +226,9 @@ export default function ScoreCardPreview({
             </div>
           </div>
 
-          {/* 成績單內容（螢幕預覽用） */}
-          <div className="p-4">
-            <div className="border-2 border-gray-800 p-8 score-card-preview-content">
+          {/* 成績單內容（螢幕預覽用）；內層捲動避免 overflow-y-auto 裁切旋轉分數 */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+            <div className="border-2 border-gray-800 p-4 sm:p-8 score-card-preview-content">
               <ScoreCardContent detail={detail} includeEmployeeSignature={includeEmployeeSignature} />
             </div>
           </div>

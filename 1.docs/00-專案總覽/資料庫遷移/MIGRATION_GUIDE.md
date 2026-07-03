@@ -85,6 +85,37 @@ docker compose exec training-backend python migrations/add_training_plan_enhance
 docker compose exec training-backend python migrations/add_attendance_absence_reasons.py
 ```
 
+#### 報到紀錄歷史補齊（2026-07-03）
+
+報到功能（T10）上線前已交卷、卻無 `attendance_records` 的舊資料，須以**第一次考試時間**補登報到列。  
+**部署含「開考強制報到檢查」的後端前，必須先執行本腳本**（否則舊考生會被視為未報到）。
+
+```bash
+# 1. 備份（本機）
+cp data/education_training.db data/education_training.db.bak-$(date +%Y%m%d)
+
+# 2. 執行（可重複跑，已有報到列者 skip）
+cd backend
+.venv/bin/python3 migrations/backfill_attendance_from_exam.py
+```
+
+`checkin_time` 取值順序：`MIN(exam_history.submit_time)` → `exam_records.start_time` → `exam_records.submit_time`。
+
+驗證（缺口數應為 0）：
+
+```sql
+SELECT COUNT(*) FROM exam_records er
+LEFT JOIN attendance_records ar ON ar.emp_id = er.emp_id AND ar.plan_id = er.plan_id
+WHERE er.submit_time IS NOT NULL AND ar.id IS NULL;
+```
+
+ds1 Docker：
+
+```bash
+cp -a "${DATA_ROOT}/training/education_training.db" "${DATA_ROOT}/training/education_training.db.bak.$(date +%Y%m%d_%H%M%S)"
+docker compose exec training-backend python migrations/backfill_attendance_from_exam.py
+```
+
 #### ds1 Docker：遷移後設定 AD 環境變數（必做，否則「AD 管理」顯示未啟用）
 
 資料庫遷移**只改 DB 結構**；「AD 整合未啟用」代表容器內 `AD_ENABLED=false` 或缺少 `AD_SERVER_URI`／`AD_BASE_DN`／`AD_DOMAIN`（映像不含 `backend/.env`）。

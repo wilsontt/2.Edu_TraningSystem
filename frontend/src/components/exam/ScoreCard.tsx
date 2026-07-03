@@ -1,6 +1,7 @@
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import { useEffect } from 'react';
 import { RotateCcw, ArrowRight } from 'lucide-react';
+import PassFailStamp from './PassFailStamp';
 
 interface ScoreCardProps {
     score: number;
@@ -56,7 +57,7 @@ const ScoreCard = ({ score, totalScore, isPassed, onClose }: ScoreCardProps) => 
                     </div>
 
                     {/* 分數顯示區域 */}
-                    <div className="relative inline-block py-6 px-10 mb-8">
+                    <div className="relative inline-block py-6 px-10 mb-4">
                         {/* 手寫圈選動畫：及格藍色、不及格紅色 */}
                         <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" style={{ filter: `drop-shadow(2px 2px 2px ${isPassed ? 'rgba(37, 99, 235, 0.2)' : 'rgba(220, 38, 38, 0.2)'})` }}>
                             <motion.path
@@ -93,6 +94,8 @@ const ScoreCard = ({ score, totalScore, isPassed, onClose }: ScoreCardProps) => 
                             </div>
                         </div>
                     </div>
+
+                    <PassFailStamp isPassed={isPassed} className="mb-8" />
 
                     {/* 按鈕區域 */}
                     <div className="space-y-3 font-sans">

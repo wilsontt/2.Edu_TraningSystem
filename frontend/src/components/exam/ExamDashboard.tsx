@@ -94,9 +94,9 @@ const ExamDashboard = () => {
             }
             setPendingStartExamId(planId);
             setShowNotCheckedInModal(true);
-        } catch {
-            // 若檢查失敗，仍交由 ExamRunner 防呆
-            navigate(`/exam/run/${planId}`);
+        } catch (err: unknown) {
+            const apiErr = err as { response?: { data?: { detail?: string } } };
+            alert(apiErr?.response?.data?.detail || '無法檢查報到狀態，請稍後再試');
         }
     };
 

@@ -94,16 +94,11 @@ const ExamRunner = () => {
                 setUser(userRes.data);
 
                 // 2. 檢查報到狀態
-                try {
-                    const attendanceRes = await api.get(`/exam/plan/${planId}/attendance/status`);
-                    if (!attendanceRes.data.is_checked_in) {
-                        setError("您尚未報到，請先返回考試中心完成報到後再開始考試。");
-                        setLoading(false);
-                        return;
-                    }
-                } catch (attendanceErr: unknown) {
-                    // 如果 API 不存在或出錯，允許繼續（向後兼容）
-                    console.warn('Attendance check failed, allowing exam to continue:', attendanceErr);
+                const attendanceRes = await api.get(`/exam/plan/${planId}/attendance/status`);
+                if (!attendanceRes.data.is_checked_in) {
+                    setError("您尚未報到，請先返回考試中心完成報到後再開始考試。");
+                    setLoading(false);
+                    return;
                 }
 
                 // 3. 取得考試內容

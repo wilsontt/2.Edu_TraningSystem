@@ -21,6 +21,8 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
   const [detail, setDetail] = useState<ScoreDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<number | null>(null);
+  /** 舊資料無 ExamHistory.id 時，改以 record 詳情 API 顯示成績 */
+  const [useRecordDetailFallback, setUseRecordDetailFallback] = useState(false);
 
   const [selectedPrintPlanIds, setSelectedPrintPlanIds] = useState<Set<number>>(new Set());
   const [printModeTri, setPrintModeTri] = useState<PrintModeTriState>('unset');
@@ -222,21 +224,22 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            {typeof h.id === 'number' ? (
-                                <button
-                                type="button"
-                                onClick={() => {
-                                  const hid = h.id;
-                                  if (typeof hid === 'number') setSelectedHistoryId(hid);
-                                }}
-                                className="text-blue-600 hover:text-blue-900 flex items-center justify-end gap-1 ml-auto"
-                                >
-                                <Eye className="w-4 h-4" />
-                                查看詳情
-                                </button>
-                            ) : (
-                                <span className="text-gray-400 text-xs">無詳情</span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (typeof h.id === 'number') {
+                                  setUseRecordDetailFallback(false);
+                                  setSelectedHistoryId(h.id);
+                                } else {
+                                  setUseRecordDetailFallback(true);
+                                  setSelectedHistoryId(null);
+                                }
+                              }}
+                              className="text-blue-600 hover:text-blue-900 flex items-center justify-end gap-1 ml-auto"
+                            >
+                              <Eye className="w-4 h-4" />
+                              查看詳情
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -295,13 +298,16 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
         </div>
       </div>
 
-      {/* 成績詳情 Modal (顯示特定歷史紀錄) */}
-      {selectedHistoryId && (
+      {/* 成績詳情 Modal (顯示特定歷史紀錄；無 history id 時改顯示 record 詳情) */}
+      {(selectedHistoryId !== null || useRecordDetailFallback) && (
         <ScoreDetailModal
           recordId={recordId}
-          historyId={selectedHistoryId}
-          isOpen={!!selectedHistoryId}
-          onClose={() => setSelectedHistoryId(null)}
+          historyId={useRecordDetailFallback ? undefined : selectedHistoryId ?? undefined}
+          isOpen={selectedHistoryId !== null || useRecordDetailFallback}
+          onClose={() => {
+            setSelectedHistoryId(null);
+            setUseRecordDetailFallback(false);
+          }}
           printGate="requireSignatureCheckbox"
         />
       )}
