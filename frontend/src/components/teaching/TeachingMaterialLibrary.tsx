@@ -5,7 +5,8 @@ import { PaginatedDataTable, type DataTableColumn } from '@shared-ui/data-table'
 import api from '../../api';
 import NasLoginModal from './NasLoginModal';
 import FileTransferModal from './FileTransferModal';
-import { saveBlob, idleTransfer, type TransferState, mergeSelectedFiles, MATERIAL_ACCEPT, ALLOWED_MATERIAL_EXTS, IN_FLIGHT_PROGRESS_CAP } from './transfer';
+import { saveBlob, idleTransfer, type TransferState, mergeSelectedFiles, buildMaterialAccept, IN_FLIGHT_PROGRESS_CAP } from './transfer';
+import { useMaterialFileFormats } from '../../hooks/useMaterialFileFormats';
 
 interface MaterialType {
     id: number;
@@ -73,6 +74,8 @@ interface TeachingMaterialLibraryProps {
 }
 
 const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) => {
+    const { allowedExts } = useMaterialFileFormats();
+    const materialAccept = buildMaterialAccept(allowedExts);
     const [items, setItems] = useState<Material[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -496,10 +499,10 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                                     key={uploadFileKey}
                                     type="file"
                                     multiple
-                                    accept={MATERIAL_ACCEPT}
+                                    accept={materialAccept}
                                     onChange={e => {
                                         const picked = e.target.files ? Array.from(e.target.files) : [];
-                                        const { merged, rejected, overflow } = mergeSelectedFiles(uploadFiles, picked);
+                                        const { merged, rejected, overflow } = mergeSelectedFiles(uploadFiles, picked, allowedExts);
                                         setUploadFiles(merged);
                                         setUploadFileKey(k => k + 1);
                                         if (rejected.length) setUploadError(`不允許的格式：${rejected.join('、')}`);
@@ -601,12 +604,12 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                             <label className="inline-flex items-center gap-2 px-3 py-2 border-2 border-dashed border-amber-300 bg-white rounded-lg text-sm font-bold text-amber-600 hover:border-amber-500 hover:bg-amber-50 cursor-pointer transition-colors">
                                 <FileText className="w-4 h-4 shrink-0" />
                                 <span>{editFile ? editFile.name : '選擇新檔案…'}</span>
-                                <input key={editFileKey} type="file" accept={MATERIAL_ACCEPT} className="hidden"
+                                <input key={editFileKey} type="file" accept={materialAccept} className="hidden"
                                     onChange={e => {
                                         const f = e.target.files?.[0] ?? null;
                                         if (f) {
                                             const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
-                                            if (!ALLOWED_MATERIAL_EXTS.includes(ext)) {
+                                            if (!allowedExts.includes(ext)) {
                                                 setEditError(`不允許的格式：${ext}`);
                                                 setEditFileKey(k => k + 1);
                                             } else {
@@ -657,7 +660,7 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                 </select>
                 <select value={fileFormat} onChange={e => { setFileFormat(e.target.value); setPage(1); }} className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500">
                     <option value="">全部格式</option>
-                    {['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'md', 'txt'].map(f => <option key={f} value={f}>{f}</option>)}
+                    {allowedExts.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
                 <button type="button" onClick={onSearch} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 cursor-pointer">搜尋</button>
             </div>

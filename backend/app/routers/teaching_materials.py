@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Q
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import os
 import io
 import json
@@ -31,8 +31,7 @@ from ..services.audit_log import record_file_transfer
 
 router = APIRouter(prefix="/admin/teaching-materials", tags=["teaching-materials"])
 
-# 允許上傳之副檔名白名單（教材 PLAN §5.3）；teaching/ 的 .txt 僅存檔不觸發考卷解析。
-ALLOWED_EXTS = {"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "md", "txt"}
+# 危險副檔名（雙副檔名防禦；維持程式常數，不可由 UI 關閉）
 DANGEROUS_EXTS = {"exe", "bat", "cmd", "sh", "js", "com", "scr", "msi", "zip", "rar", "7z", "jar", "ps1", "vbs"}
 
 
@@ -52,23 +51,41 @@ def _client_ip(request: Optional[Request]) -> Optional[str]:
     return request.client.host if request.client else None
 
 
-def _validate_filename(filename: str) -> str:
-    """驗證副檔名白名單與雙副檔名；回傳小寫副檔名（不含點）。"""
+def _normalize_ext(ext: str) -> str:
+    """副檔名正規化：小寫、去除前導點與空白。"""
+    return (ext or "").strip().lower().lstrip(".")
+
+
+def _validate_filename(filename: str, db: Session) -> Tuple[str, models.MaterialFileFormat]:
+    """驗證副檔名白名單（DB）與雙副檔名；回傳 (小寫副檔名, 格式主檔)。"""
     base = os.path.basename(filename or "")
     parts = base.lower().split(".")
     if len(parts) < 2 or not parts[0]:
         raise ValueError("檔名缺少副檔名")
     ext = parts[-1]
-    if ext not in ALLOWED_EXTS:
+    fmt = db.query(models.MaterialFileFormat).filter(
+        models.MaterialFileFormat.ext == ext,
+        models.MaterialFileFormat.is_active == True,  # noqa: E712
+    ).first()
+    if not fmt:
         raise ValueError(f"不允許的格式 .{ext}")
     if any(p in DANGEROUS_EXTS for p in parts[1:-1]):
         raise ValueError("可疑的雙副檔名")
-    return ext
+    return ext, fmt
 
 
-def _type_max_bytes(mt: models.MaterialType) -> int:
+def _effective_max_bytes(
+    mt: Optional[models.MaterialType],
+    fmt: Optional[models.MaterialFileFormat],
+) -> int:
+    """有效單檔上限 = min(格式上限, 類型上限, 系統硬上限)。"""
     hard = get_settings().teaching_material_max_file_bytes
-    return min(mt.max_file_bytes, hard) if mt.max_file_bytes else hard
+    caps = [hard]
+    if mt and mt.max_file_bytes:
+        caps.append(mt.max_file_bytes)
+    if fmt and fmt.max_file_bytes:
+        caps.append(fmt.max_file_bytes)
+    return min(caps)
 
 
 def _parse_tags(tags_raw: Optional[str]) -> Optional[str]:
@@ -171,7 +188,25 @@ def update_material_type(
     mt = db.query(models.MaterialType).filter(models.MaterialType.id == type_id).first()
     if not mt:
         raise HTTPException(status_code=404, detail="教材類型不存在")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if "slug" in data and data["slug"] != mt.slug:
+        in_use = db.query(models.TeachingMaterial).filter(
+            models.TeachingMaterial.material_type_id == type_id
+        ).first()
+        if in_use:
+            raise HTTPException(status_code=400, detail="類型已有教材引用，不可修改 slug")
+        if db.query(models.MaterialType).filter(
+            models.MaterialType.slug == data["slug"],
+            models.MaterialType.id != type_id,
+        ).first():
+            raise HTTPException(status_code=400, detail="slug 已存在")
+    if "name" in data and data["name"] != mt.name:
+        if db.query(models.MaterialType).filter(
+            models.MaterialType.name == data["name"],
+            models.MaterialType.id != type_id,
+        ).first():
+            raise HTTPException(status_code=400, detail="類型名稱已存在")
+    for k, v in data.items():
         setattr(mt, k, v)
     db.commit()
     db.refresh(mt)
@@ -196,6 +231,104 @@ def delete_material_type(
         db.commit()
         return {"message": "類型已有教材引用，已改為停用", "disabled": True}
     db.delete(mt)
+    db.commit()
+    return {"message": "已刪除"}
+
+
+# ----------------------------------------------------------------
+# 允許檔案格式維護（material-file-formats）—— GET 需 menu:exam；異動需 menu:admin
+# ----------------------------------------------------------------
+
+@router.get("/material-file-formats", response_model=List[schemas.MaterialFileFormat])
+def list_material_file_formats(
+    include_inactive: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    q = db.query(models.MaterialFileFormat)
+    if not include_inactive:
+        q = q.filter(models.MaterialFileFormat.is_active == True)  # noqa: E712
+    return q.order_by(
+        models.MaterialFileFormat.sort_order.asc(),
+        models.MaterialFileFormat.id.asc(),
+    ).all()
+
+
+@router.post("/material-file-formats", response_model=schemas.MaterialFileFormat)
+def create_material_file_format(
+    payload: schemas.MaterialFileFormatCreate,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:admin"),
+):
+    ext = _normalize_ext(payload.ext)
+    if not ext:
+        raise HTTPException(status_code=400, detail="副檔名不可為空")
+    if db.query(models.MaterialFileFormat).filter(models.MaterialFileFormat.ext == ext).first():
+        raise HTTPException(status_code=400, detail="副檔名已存在")
+    data = payload.model_dump()
+    data["ext"] = ext
+    fmt = models.MaterialFileFormat(**data)
+    db.add(fmt)
+    db.commit()
+    db.refresh(fmt)
+    return fmt
+
+
+@router.put("/material-file-formats/{format_id}", response_model=schemas.MaterialFileFormat)
+def update_material_file_format(
+    format_id: int,
+    payload: schemas.MaterialFileFormatUpdate,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:admin"),
+):
+    fmt = db.query(models.MaterialFileFormat).filter(
+        models.MaterialFileFormat.id == format_id
+    ).first()
+    if not fmt:
+        raise HTTPException(status_code=404, detail="檔案格式不存在")
+    data = payload.model_dump(exclude_unset=True)
+    if "ext" in data:
+        new_ext = _normalize_ext(data["ext"])
+        if not new_ext:
+            raise HTTPException(status_code=400, detail="副檔名不可為空")
+        if new_ext != fmt.ext:
+            in_use = db.query(models.TeachingMaterial).filter(
+                models.TeachingMaterial.file_format == fmt.ext
+            ).first()
+            if in_use:
+                raise HTTPException(status_code=400, detail="格式已有教材引用，不可修改副檔名")
+            if db.query(models.MaterialFileFormat).filter(
+                models.MaterialFileFormat.ext == new_ext,
+                models.MaterialFileFormat.id != format_id,
+            ).first():
+                raise HTTPException(status_code=400, detail="副檔名已存在")
+        data["ext"] = new_ext
+    for k, v in data.items():
+        setattr(fmt, k, v)
+    db.commit()
+    db.refresh(fmt)
+    return fmt
+
+
+@router.delete("/material-file-formats/{format_id}")
+def delete_material_file_format(
+    format_id: int,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:admin"),
+):
+    fmt = db.query(models.MaterialFileFormat).filter(
+        models.MaterialFileFormat.id == format_id
+    ).first()
+    if not fmt:
+        raise HTTPException(status_code=404, detail="檔案格式不存在")
+    in_use = db.query(models.TeachingMaterial).filter(
+        models.TeachingMaterial.file_format == fmt.ext
+    ).first()
+    if in_use:
+        fmt.is_active = False
+        db.commit()
+        return {"message": "格式已有教材引用，已改為停用", "disabled": True}
+    db.delete(fmt)
     db.commit()
     return {"message": "已刪除"}
 
@@ -296,7 +429,6 @@ async def upload_materials(
         raise HTTPException(status_code=400, detail="單次上傳總量超過上限")
 
     creds = _resolve_credentials(nas_session_token, nas_username, nas_password)
-    type_max = _type_max_bytes(mt)
     year = (plan.year if plan and plan.year else None) or str(datetime.utcnow().year)
     sub_category_id = plan.sub_category_id if plan else None
     tags_json = _parse_tags(tags)
@@ -309,9 +441,10 @@ async def upload_materials(
             for f, raw in payloads:
                 fname = os.path.basename(f.filename or "")
                 try:
-                    ext = _validate_filename(fname)
-                    if len(raw) > type_max:
-                        raise ValueError(f"超過類型單檔上限（{type_max} bytes）")
+                    ext, fmt = _validate_filename(fname, db)
+                    max_bytes = _effective_max_bytes(mt, fmt)
+                    if len(raw) > max_bytes:
+                        raise ValueError(f"超過單檔上限（{max_bytes} bytes）")
 
                     conflict = _find_active_conflict(db, plan_id, fname)
                     if conflict and on_conflict not in ("deactivate_and_new", "replace_in_place"):
@@ -357,7 +490,9 @@ async def upload_materials(
                         db.flush()  # 取得 id
                         stored_filename = f"{material.id}.{ext}"
                         plan_segment = str(plan_id) if plan_id is not None else "general"
-                        storage_path = f"{year}/{plan_segment}/teaching/{mt.slug}/{stored_filename}"
+                        storage_path = storage.normalize_smb_rel_path(
+                            str(year), plan_segment, "teaching", mt.slug, stored_filename,
+                        )
                         st.save(storage_path, raw)
                         material.stored_filename = stored_filename
                         material.storage_path = storage_path
@@ -637,7 +772,7 @@ async def replace_material_file(
     fname = os.path.basename(f.filename or "")
 
     try:
-        ext = _validate_filename(fname)
+        ext, fmt = _validate_filename(fname, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -654,10 +789,11 @@ async def replace_material_file(
             models.MaterialType.id == m.material_type_id
         ).first()
 
-    if effective_mt and len(raw) > _type_max_bytes(effective_mt):
+    max_bytes = _effective_max_bytes(effective_mt, fmt)
+    if len(raw) > max_bytes:
         raise HTTPException(
             status_code=400,
-            detail=f"超過類型單檔上限（{_type_max_bytes(effective_mt)} bytes）",
+            detail=f"超過單檔上限（{max_bytes} bytes）",
         )
 
     # 3. 解析 NAS 憑證

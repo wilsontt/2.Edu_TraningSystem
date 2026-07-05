@@ -149,7 +149,7 @@ def init_db():
         else:
             print(f"Admin user already exists: {admin_user.emp_id}")
 
-        # 7. 建立預設教材類型（Wave 3；冪等）
+        # 7. 建立預設教材類型（Wave 3；冪等；20260704 含影音教材）
         default_material_types = [
             ("操作手冊", "操作手冊", 52428800, 10),
             ("維護手冊", "維護手冊", 52428800, 20),
@@ -157,6 +157,7 @@ def init_db():
             ("公告通知", "公告通知", 31457280, 40),
             ("簡報教材", "簡報教材", 20971520, 50),
             ("測驗參考", "測驗參考", 20971520, 60),
+            ("影音教材", "影音教材", 524288000, 70),
             ("其他", "其他", 20971520, 99),
         ]
         for name, slug, max_bytes, order in default_material_types:
@@ -164,6 +165,28 @@ def init_db():
             if not exists:
                 db.add(models.MaterialType(
                     name=name, slug=slug, max_file_bytes=max_bytes, sort_order=order, is_active=True
+                ))
+        db.commit()
+
+        # 7b. 建立預設允許檔案格式（20260704 主檔維護 PLAN；冪等）
+        default_file_formats = [
+            ("pdf", "PDF", 52428800, 10),
+            ("doc", "Word DOC", 52428800, 20),
+            ("docx", "Word DOCX", 52428800, 21),
+            ("xls", "Excel XLS", 31457280, 30),
+            ("xlsx", "Excel XLSX", 31457280, 31),
+            ("ppt", "PowerPoint PPT", 52428800, 40),
+            ("pptx", "PowerPoint PPTX", 52428800, 41),
+            ("md", "Markdown", 5242880, 50),
+            ("txt", "純文字", 5242880, 51),
+            ("mp4", "影片 MP4", 524288000, 60),
+            ("webm", "影片 WebM", 524288000, 61),
+        ]
+        for ext, label, max_bytes, order in default_file_formats:
+            exists = db.query(models.MaterialFileFormat).filter(models.MaterialFileFormat.ext == ext).first()
+            if not exists:
+                db.add(models.MaterialFileFormat(
+                    ext=ext, label=label, max_file_bytes=max_bytes, sort_order=order, is_active=True
                 ))
         db.commit()
 

@@ -1,5 +1,5 @@
 /**
- * 教材傳輸共用工具（Wave 3）。
+ * 教材傳輸共用工具（Wave 3；20260704 允許格式改由 API 動態載入）。
  */
 
 /** 觸發瀏覽器下載一個 Blob。 */
@@ -37,10 +37,12 @@ export const idleTransfer: TransferState = {
     error: null,
 };
 
-/** 教材上傳允許之副檔名（須與後端 ALLOWED_EXTS 一致）。 */
-export const ALLOWED_MATERIAL_EXTS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'md', 'txt'];
-export const MATERIAL_ACCEPT = ALLOWED_MATERIAL_EXTS.map(e => `.${e}`).join(',');
 export const MAX_MATERIAL_FILES = 5;
+
+/** 由允許副檔名清單組出 input[type=file] 的 accept 屬性。 */
+export function buildMaterialAccept(allowedExts: string[]): string {
+    return allowedExts.map(e => `.${e}`).join(',');
+}
 
 export interface MergeFilesResult {
     merged: File[];
@@ -49,11 +51,16 @@ export interface MergeFilesResult {
 }
 
 /** 將新選取的檔案累加進既有清單（去重、擋副檔名、上限 5 檔），而非覆蓋前次選取。 */
-export function mergeSelectedFiles(existing: File[], picked: File[]): MergeFilesResult {
+export function mergeSelectedFiles(
+    existing: File[],
+    picked: File[],
+    allowedExts: string[],
+): MergeFilesResult {
+    const allowed = new Set(allowedExts.map(e => e.toLowerCase()));
     const rejected: string[] = [];
     const valid = picked.filter(f => {
         const ext = f.name.split('.').pop()?.toLowerCase();
-        const ok = !!ext && ALLOWED_MATERIAL_EXTS.includes(ext);
+        const ok = !!ext && allowed.has(ext);
         if (!ok) rejected.push(f.name);
         return ok;
     });

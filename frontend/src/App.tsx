@@ -20,6 +20,7 @@ import ReportDashboard from './components/admin/ReportDashboard';
 import ExamStudio from './components/admin/ExamStudio';
 import QRCodeManager from './components/admin/QRCodeManager';
 import BackupScheduleManager from './components/admin/BackupScheduleManager';
+import MaterialMastersManager from './components/admin/MaterialMastersManager';
 import ExamDashboard from './components/exam/ExamDashboard';
 import ExamRunner from './components/exam/ExamRunner';
 import PersonalScorePage from './components/personal/PersonalScorePage';
@@ -78,6 +79,7 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
   const adminSubItems = [
     { name: '單位管理', path: '/admin/departments', code: 'menu:admin:dept' },
     { name: '分類管理', path: '/admin/categories', code: 'menu:admin' },
+    { name: '教材主檔', path: '/admin/material-masters', code: 'menu:admin' },
     { name: '人員管理', path: '/admin/users', code: 'menu:admin:user' },
     { name: '職務管理', path: '/admin/job-titles', code: 'menu:admin:jobtitle' },
     { name: '角色管理', path: '/admin/roles', code: 'menu:admin:role' },
@@ -336,6 +338,7 @@ const App = () => {
                     <Route path="/reports/personal" element={<PersonalScorePage />} />
                     <Route path="/admin/departments" element={hasAdminMenu(user) ? <DepartmentManager /> : <Navigate to="/" />} />
                     <Route path="/admin/categories" element={hasAdminMenu(user) ? <CategoryManager /> : <Navigate to="/" />} />
+                    <Route path="/admin/material-masters" element={hasAdminMenu(user) ? <MaterialMastersManager /> : <Navigate to="/" />} />
                     <Route path="/admin/users" element={hasAdminMenu(user) ? <UserManager /> : <Navigate to="/" />} />
                     <Route path="/admin/job-titles" element={hasAdminMenu(user) ? <JobTitleManager /> : <Navigate to="/" />} />
                     <Route path="/admin/roles" element={hasAdminMenu(user) ? <RoleManager /> : <Navigate to="/" />} />

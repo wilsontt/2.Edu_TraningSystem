@@ -72,7 +72,7 @@
 
 **結論：PASS ✅**
 
-- SMTP 帳密僅由環境變數注入（`SMTP_USER`、`SMTP_PASSWORD`），不存 DB、不入版控
+- SMTP 帳密僅由環境變數注入（`SMTP_USER`、`SMTP_PASSWORD`），不存 DB、不入版控；`SMTP_PASSWORD` 建議 `enc:<Fernet密文>`（金鑰 `CREDENTIAL_SECRET`／`BACKUP_CREDENTIAL_SECRET`）
 - `config.py` 讀取後以 `settings.smtp_password`（記憶體中字串）傳遞，不落地
 
 ### 9. Break-glass 帳號保護

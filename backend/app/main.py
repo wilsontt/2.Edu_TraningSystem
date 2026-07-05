@@ -29,16 +29,32 @@ async def startup_event():
     Base.metadata.create_all(bind=engine)
     print("Database tables initialized - 系統資料庫初始化完成")
 
-    # 生產環境安全檢查：JWT_SECRET_KEY 不得使用預設開發值
+    # 生產環境安全檢查：JWT_SECRET_KEY 不得使用預設開發值；SMTP 密碼應為 enc: 密文
+    import warnings
     from .config import get_settings
+    from .services.crypto import is_encrypted_env_secret
+
     _settings = get_settings()
     _DEFAULT_JWT_KEY = "crown-secret-key-for-internal-education-system"
     if _settings.jwt_secret_key == _DEFAULT_JWT_KEY:
-        import warnings
         warnings.warn(
             "⚠️  JWT_SECRET_KEY 使用預設開發值，生產環境必須透過環境變數設定強密鑰！",
             stacklevel=1,
         )
+    if _settings.smtp_password:
+        if not is_encrypted_env_secret(_settings.smtp_password):
+            warnings.warn(
+                "⚠️  SMTP_PASSWORD 仍為明文。請執行 "
+                "scripts/encrypt_env_secret.py 改為 enc:<密文>，"
+                "並設定 CREDENTIAL_SECRET（或 BACKUP_CREDENTIAL_SECRET）。",
+                stacklevel=1,
+            )
+        elif not _settings.effective_credential_secret:
+            warnings.warn(
+                "⚠️  SMTP_PASSWORD 為 enc: 密文，但未設定 CREDENTIAL_SECRET／"
+                "BACKUP_CREDENTIAL_SECRET，寄信時將無法解密。",
+                stacklevel=1,
+            )
 
     from .services.scheduler import start_scheduler
     start_scheduler()

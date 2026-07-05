@@ -9,6 +9,10 @@ SMB（NAS）儲存抽象層 (Storage Abstraction)
 - service    ：環境變數 EXAM_SMB_*（考卷 TXT）
 - backup     ：排程設定 backup_nas_*（Wave 4）
 
+路徑慣例（Win／macOS／Linux Docker 共用）：
+- 業務層與 DB（storage_path）一律使用 `/` 邏輯相對路徑，不寫本機磁碟路徑。
+- `_unc()` 將 `/` 與 `\\` 正規為 SMB UNC（`\\\\server\\share\\...`），與執行主機 OS 無關。
+
 `smbclient`（smbprotocol）採**延遲匯入**：未安裝套件時不影響本模組載入與單元測試
 （可 mock SmbStorage 或在已安裝環境執行整合測試）。
 """
@@ -28,6 +32,27 @@ class StorageError(Exception):
 
 class StorageUnavailable(StorageError):
     """NAS 不可達、設定不全或連線／認證失敗（對應 HTTP 503）。"""
+
+
+def smb_path_segments(*parts: str) -> List[str]:
+    """將多段路徑拆成 SMB 路徑段（接受 `/` 或 `\\`，拒絕 `..`）。"""
+    segs: List[str] = []
+    for part in parts:
+        if not part:
+            continue
+        for seg in str(part).replace("\\", "/").split("/"):
+            seg = seg.strip()
+            if not seg or seg == ".":
+                continue
+            if seg == "..":
+                raise StorageError("非法路徑（禁止 ..）")
+            segs.append(seg)
+    return segs
+
+
+def normalize_smb_rel_path(*parts: str) -> str:
+    """組出以 `/` 分隔的邏輯相對路徑（寫入 DB／業務層用，跨平台一致）。"""
+    return "/".join(smb_path_segments(*parts))
 
 
 @dataclass(frozen=True)
@@ -78,14 +103,11 @@ class SmbStorage:
 
     # --- 內部工具 ---
     def _unc(self, rel_path: str = "") -> str:
-        """組出 UNC 路徑 \\\\server\\share\\root\\rel_path。"""
-        segs = [self._creds.share]
-        if self._creds.root:
-            segs.append(self._creds.root)
-        if rel_path:
-            segs.append(rel_path)
-        tail = "\\".join(s.strip("/\\").replace("/", "\\") for s in segs if s)
-        return f"\\\\{self._creds.server}\\{tail}"
+        """組出 UNC 路徑 \\\\server\\share\\root\\rel_path（與主機 OS 無關）。"""
+        segs = smb_path_segments(self._creds.share, self._creds.root, rel_path)
+        if not segs:
+            raise StorageError("SMB 路徑為空")
+        return "\\\\" + self._creds.server + "\\" + "\\".join(segs)
 
     def _require(self):
         if self._client is None:
@@ -177,17 +199,46 @@ def service_credentials() -> SmbCredentials:
     )
 
 
+def normalize_interactive_username(username: str, domain: str | None = None) -> str:
+    """正規化教材 interactive NAS 帳號。
+
+    - 已含 ``\\``、``/``、``@``：視為已帶網域（``DOMAIN/user`` 轉成 ``DOMAIN\\user``）。
+    - 純帳號且有網域設定：含 ``.`` → ``user@domain``（UPN）；否則 → ``DOMAIN\\user``（NetBIOS）。
+    - 無網域設定：原樣回傳（NAS 本機帳號）。
+    """
+    u = (username or "").strip()
+    if not u:
+        return u
+    if "\\" in u or "@" in u:
+        return u
+    if "/" in u:
+        left, _, right = u.partition("/")
+        if left and right and "\\" not in right and "@" not in right:
+            return f"{left}\\{right}"
+        return u
+    dom = (domain if domain is not None else get_settings().effective_smb_auth_domain).strip()
+    if not dom:
+        return u
+    if "." in dom:
+        return f"{u}@{dom}"
+    return f"{dom}\\{u}"
+
+
 def interactive_credentials(nas_username: str, nas_password: str) -> SmbCredentials:
-    """教材 interactive 模式 credentials（伺服器／共享來自設定，帳密由使用者當次提供）。"""
+    """教材 interactive 模式 credentials（伺服器／共享來自設定，帳密由使用者當次提供）。
+
+    帳號未含網域時，依 ``SMB_AUTH_DOMAIN``／``AD_DOMAIN`` 自動補上（見 normalize_interactive_username）。
+    """
     s = get_settings()
     if not s.smb_configured:
         raise StorageUnavailable("NAS 共享尚未設定（需 SMB_SERVER／SMB_SHARE）")
     if not (nas_username and nas_password):
         raise StorageUnavailable("缺少 NAS 帳號或密碼")
+    username = normalize_interactive_username(nas_username, s.effective_smb_auth_domain)
     return SmbCredentials(
         server=s.smb_server,
         share=s.smb_share,
-        username=nas_username,
+        username=username,
         password=nas_password,
         root=s.materials_root,
     )

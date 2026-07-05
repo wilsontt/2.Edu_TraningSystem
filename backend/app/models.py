@@ -298,6 +298,18 @@ class MaterialType(Base):
     is_active = Column(Boolean, default=True)
 
 
+class MaterialFileFormat(Base):
+    """允許上傳副檔名主檔（pdf、mp4 等）；見主檔維護 PLAN 20260704。"""
+    __tablename__ = "material_file_formats"
+    id = Column(Integer, primary_key=True, index=True)
+    ext = Column(String, unique=True)           # 小寫、無點
+    label = Column(String)                      # 顯示名稱
+    sort_order = Column(Integer, default=0)
+    max_file_bytes = Column(Integer, nullable=True)  # 該格式單檔上限；null 不另限
+    is_active = Column(Boolean, default=True)
+    mime_types = Column(Text, nullable=True)    # 預留 JSON；本期不驗證
+
+
 class TeachingMaterial(Base):
     """教材目錄卡（DB 中繼資料）；實體檔存於 NAS（見教材 PLAN §5.2.2）。"""
     __tablename__ = "teaching_materials"
@@ -309,7 +321,7 @@ class TeachingMaterial(Base):
     tags = Column(Text, nullable=True)              # JSON 字串（格式同題庫）
     original_filename = Column(String)             # 上傳原始檔名（下載檔名來源）
     stored_filename = Column(String)              # NAS 檔名，例 42.pdf
-    storage_path = Column(String)                 # 相對 MATERIALS_ROOT 的完整路徑
+    storage_path = Column(String)                 # 相對 MATERIALS_ROOT；一律 `/` 邏輯路徑（非本機磁碟路徑）
     file_format = Column(String)                  # pdf、docx、md、txt 等
     file_size_bytes = Column(Integer)
     year = Column(String)                         # 由計畫帶入

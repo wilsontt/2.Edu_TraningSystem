@@ -27,8 +27,8 @@ router = APIRouter(prefix="/admin/exams", tags=["exams"])
 
 
 def _exam_rel_path(year: str, plan_id: int, filename: str) -> str:
-    """考卷 TXT 於 NAS 之相對路徑（相對 MATERIALS_ROOT）。"""
-    return f"{year}/{plan_id}/exams/{filename}"
+    """考卷 TXT 於 NAS 之相對路徑（相對 MATERIALS_ROOT；一律 `/` 邏輯路徑）。"""
+    return storage.normalize_smb_rel_path(str(year), str(plan_id), "exams", filename)
 
 
 def _client_ip(request: Optional[Request]) -> Optional[str]:

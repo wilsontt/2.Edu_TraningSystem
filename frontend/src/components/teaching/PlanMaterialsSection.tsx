@@ -4,7 +4,8 @@ import axios, { AxiosError, type AxiosProgressEvent } from 'axios';
 import api from '../../api';
 import NasLoginModal from './NasLoginModal';
 import FileTransferModal from './FileTransferModal';
-import { saveBlob, idleTransfer, type TransferState, mergeSelectedFiles, MATERIAL_ACCEPT, ALLOWED_MATERIAL_EXTS, IN_FLIGHT_PROGRESS_CAP } from './transfer';
+import { saveBlob, idleTransfer, type TransferState, mergeSelectedFiles, buildMaterialAccept, IN_FLIGHT_PROGRESS_CAP } from './transfer';
+import { useMaterialFileFormats } from '../../hooks/useMaterialFileFormats';
 
 interface MaterialType {
     id: number;
@@ -67,6 +68,8 @@ const tagColorClass = (tag: string): string =>
  * 每次傳輸前先 NAS 登入；以 FileTransferModal 顯示進度。
  */
 const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSectionProps) => {
+    const { allowedExts } = useMaterialFileFormats();
+    const materialAccept = buildMaterialAccept(allowedExts);
     const [types, setTypes] = useState<MaterialType[]>([]);
     const [materials, setMaterials] = useState<Material[]>([]);
     const [materialTypeId, setMaterialTypeId] = useState('');
@@ -344,10 +347,10 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
                                 key={fileInputKey}
                                 type="file"
                                 multiple
-                                accept={MATERIAL_ACCEPT}
+                                accept={materialAccept}
                                 onChange={e => {
                                     const picked = e.target.files ? Array.from(e.target.files) : [];
-                                    const { merged, rejected, overflow } = mergeSelectedFiles(files, picked);
+                                    const { merged, rejected, overflow } = mergeSelectedFiles(files, picked, allowedExts);
                                     setFiles(merged);
                                     setFileInputKey(k => k + 1);
                                     if (rejected.length) setError(`不允許的格式：${rejected.join('、')}`);
@@ -491,12 +494,12 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
                             <label className="inline-flex items-center gap-2 px-3 py-2 border-2 border-dashed border-amber-300 bg-white rounded-lg text-sm font-bold text-amber-600 hover:border-amber-500 hover:bg-amber-50 cursor-pointer transition-colors">
                                 <FileText className="w-4 h-4 shrink-0" />
                                 <span>{editFile ? editFile.name : '選擇新檔案…'}</span>
-                                <input key={editFileKey} type="file" accept={MATERIAL_ACCEPT} className="hidden"
+                                <input key={editFileKey} type="file" accept={materialAccept} className="hidden"
                                     onChange={e => {
                                         const f = e.target.files?.[0] ?? null;
                                         if (f) {
                                             const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
-                                            if (!ALLOWED_MATERIAL_EXTS.includes(ext)) {
+                                            if (!allowedExts.includes(ext)) {
                                                 setEditError(`不允許的格式：${ext}`);
                                                 setEditFileKey(k => k + 1);
                                             } else {

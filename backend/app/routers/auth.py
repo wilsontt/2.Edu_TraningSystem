@@ -250,10 +250,12 @@ async def get_captcha():
         y2 = random.randint(0, height)
         draw.line(((x1, y1), (x2, y2)), fill=(240, 240, 240), width=2)
 
+    # 跨平台字型候選（Linux Docker／macOS／Windows）；皆失敗則用 Pillow 預設點陣字
     font_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/System/Library/Fonts/Helvetica.ttc",
-        "Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  # Linux（Dockerfile.backend）
+        "/System/Library/Fonts/Helvetica.ttc",  # macOS
+        "C:/Windows/Fonts/arialbd.ttf",  # Windows
+        "C:/Windows/Fonts/arial.ttf",
     ]
     font = None
     for path in font_paths:

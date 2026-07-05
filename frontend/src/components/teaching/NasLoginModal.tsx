@@ -96,7 +96,10 @@ const NasLoginModal = ({ open, onClose, onSuccess, purpose }: NasLoginModalProps
                     </button>
                 </div>
                 <form onSubmit={submit} className="px-5 py-4 space-y-4">
-                    <p className="text-xs text-gray-500">教材上傳／下載前須以 NAS 本地或網域（AD）帳號登入；密碼僅用於本次傳輸。</p>
+                    <p className="text-xs text-gray-500">
+                        教材上傳／下載前須以 NAS／網域帳號登入；密碼僅用於本次傳輸。
+                        僅輸入帳號時，後端會依系統設定（SMB_AUTH_DOMAIN 或 AD_DOMAIN）自動補上網域。
+                    </p>
                     {error && (
                         <div className="bg-red-50 border-l-4 border-red-500 p-3 text-red-700 text-sm rounded-r-lg">{error}</div>
                     )}
@@ -105,12 +108,15 @@ const NasLoginModal = ({ open, onClose, onSuccess, purpose }: NasLoginModalProps
                         <input
                             type="text"
                             autoFocus
-                            placeholder="NAS 本地帳號 或 DOMAIN\\user"
+                            placeholder="帳號（可省略網域）"
                             className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             onKeyDown={handleUsernameKeyDown}
                         />
+                        <p className="text-[11px] text-gray-400">
+                            {`亦可手動輸入完整格式：user@domain.com 或 DOMAIN\\user；本機帳號請在未設定網域時使用。`}
+                        </p>
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-xs font-bold text-gray-500 uppercase">密碼</label>

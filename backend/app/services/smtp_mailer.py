@@ -2,6 +2,7 @@
 SMTP 郵件發送服務（用於 Email OTP 備援登入）。
 
 SMTP 帳密由 Settings（環境變數）注入，嚴禁 hardcode。
+SMTP_PASSWORD 建議以 `enc:<Fernet密文>` 儲存（見 crypto.resolve_env_secret）。
 """
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from ..config import Settings, get_settings
+from .crypto import CredentialEncryptionError
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,14 @@ def send_otp_email(
     if not settings.smtp_configured:
         raise SmtpDeliveryError("SMTP 未設定，無法寄送驗證碼")
 
+    try:
+        smtp_password = settings.resolve_smtp_password()
+    except CredentialEncryptionError as exc:
+        raise SmtpDeliveryError(str(exc)) from exc
+
+    if not smtp_password:
+        raise SmtpDeliveryError("SMTP 密碼為空，無法寄送驗證碼")
+
     subject = "【系統管理登入】Email 驗證碼"
     ttl_min = settings.ad_email_otp_ttl_minutes
 
@@ -68,7 +78,7 @@ def send_otp_email(
         else:
             server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=10)
 
-        server.login(settings.smtp_user, settings.smtp_password)
+        server.login(settings.smtp_user, smtp_password)
         server.sendmail(msg["From"], [to], msg.as_string())
         server.quit()
         logger.info("OTP 驗證碼已寄至 %s（username=%s）", _mask_email(to), username)

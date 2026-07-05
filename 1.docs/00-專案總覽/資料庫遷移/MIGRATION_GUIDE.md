@@ -83,6 +83,70 @@ docker compose exec \
 docker compose exec training-backend python migrations/add_job_titles_and_user_job_title.py
 docker compose exec training-backend python migrations/add_training_plan_enhancements.py
 docker compose exec training-backend python migrations/add_attendance_absence_reasons.py
+docker compose exec training-backend python migrations/add_material_file_formats.py
+```
+
+#### SMTP 密碼密件化（2026-07-04）
+
+`SMTP_PASSWORD` 建議改為 Fernet 密文（`enc:` 前綴），執行期以 `CREDENTIAL_SECRET`（或既有 `BACKUP_CREDENTIAL_SECRET`）解密。明文仍可運作但啟動會警告。
+
+```bash
+cd backend
+
+# 1. 若尚無金鑰，產生並寫入 .env（擇一即可）
+# CREDENTIAL_SECRET=...   # 建議新部署使用此名稱
+# 或沿用既有 BACKUP_CREDENTIAL_SECRET=...
+
+# 產生金鑰：
+# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# 2. 加密 SMTP 密碼（輸出整行貼到 SMTP_PASSWORD=）
+# Windows:
+.\.venv\Scripts\python.exe scripts/encrypt_env_secret.py "你的SMTP明文密碼"
+# Linux/macOS:
+# .venv/bin/python3 scripts/encrypt_env_secret.py "你的SMTP明文密碼"
+
+# 3. 編輯 backend/.env
+# SMTP_PASSWORD=enc:gAAAAA...
+
+# 4. 完整重啟後端
+```
+
+驗證：啟動後不應再出現「SMTP_PASSWORD 仍為明文」警告；Email OTP 寄信正常。
+
+> 更換 `CREDENTIAL_SECRET` 後須重新執行加密腳本，舊密文無法用新金鑰解密。
+
+#### 教材允許格式主檔（2026-07-04）
+
+新增 `material_file_formats` 表，並冪等植入預設副檔名（含 `mp4`／`webm`）與教材類型「影音教材」。  
+對應 PLAN：[`20260704_教材主檔與允許格式維護_PLAN.md`](../../02-棕地專案/plans/20260704_教材主檔與允許格式維護_PLAN.md)。
+
+```bash
+# 1. 備份（本機）
+# Windows PowerShell 請自行複製 data\education_training.db
+
+# 2. 執行（可重複跑）
+cd backend
+# Windows:
+.\.venv\Scripts\python.exe migrations/add_material_file_formats.py
+# Linux/macOS:
+# .venv/bin/python3 migrations/add_material_file_formats.py
+```
+
+成功應看到：`Migration completed successfully.`
+
+驗證：
+
+```sql
+SELECT ext, label, max_file_bytes, is_active FROM material_file_formats ORDER BY sort_order;
+SELECT name, slug FROM material_types WHERE slug = '影音教材';
+```
+
+ds1 Docker：
+
+```bash
+cp -a "${DATA_ROOT}/training/education_training.db" "${DATA_ROOT}/training/education_training.db.bak.$(date +%Y%m%d_%H%M%S)"
+docker compose exec training-backend python migrations/add_material_file_formats.py
 ```
 
 #### 報到紀錄歷史補齊（2026-07-03）

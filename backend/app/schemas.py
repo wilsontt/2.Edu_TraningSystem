@@ -447,6 +447,35 @@ class MaterialType(MaterialTypeBase):
         from_attributes = True
 
 
+class MaterialFileFormatBase(BaseModel):
+    ext: str
+    label: str
+    sort_order: int = 0
+    max_file_bytes: Optional[int] = None
+    is_active: bool = True
+    mime_types: Optional[str] = None
+
+
+class MaterialFileFormatCreate(MaterialFileFormatBase):
+    pass
+
+
+class MaterialFileFormatUpdate(BaseModel):
+    ext: Optional[str] = None
+    label: Optional[str] = None
+    sort_order: Optional[int] = None
+    max_file_bytes: Optional[int] = None
+    is_active: Optional[bool] = None
+    mime_types: Optional[str] = None
+
+
+class MaterialFileFormat(MaterialFileFormatBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
 class TeachingMaterial(BaseModel):
     id: int
     plan_id: Optional[int] = None
