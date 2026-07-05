@@ -24,10 +24,10 @@
 | **登入與權限** | 員工編號 + 圖形驗證碼登入；QRcode 快速登入（多人共用仍須輸入編號與驗證碼）；RBAC 角色與功能選單配置。 |
 | **訓練計畫** | 年度計畫、受課單位／個人授課對象、封存、頁籤（進行中／已過期／已封存）、篩選與排序。 |
 | **報到** | 考試前報到、應到／實到統計、報到 QRcode 產生與掃描；**報到總覽**（功能碼 `menu:attendance-overview`）可檢視各訓練計畫報到統計並編輯未到原因；**已封存**計畫在報到總覽僅能檢視、不可編輯原因。 |
-| **考卷工坊** | TXT 題目上傳與解析、題庫維護、從題庫匯入、教材上傳與預覽。 |
+| **考卷工坊** | TXT 題目上傳與解析、題庫維護、從題庫匯入、教材上傳與預覽（允許副檔名與教材類型由**系統管理 → 教材主檔**維護，含影片格式）。 |
 | **考試中心** | 依訓練計畫應考、作答、提交、即時評分、重考機制；行動優先響應式介面。 |
 | **成績中心** | 管理端報表含**外層雙頁籤**（統計報表／部門績效表現）；部門路徑含手風琴展開、**部門成員成績批次列印**（三步驟精靈、名單含出席／請假時間）；個人成績頁另提供頂層**「批次列印」頁籤**（四步精靈：篩選 → 列印類型 → 人員勾選 → 產出），支援**跨訓練計畫、跨部門**批次選取，`last_attempt`（最後一次成績）／`exam_history`（考試歷程）二擇一；`individual` 與個人「成績詳情 → 預覽成績單 → 列印」**同源 HTML**（僅支援最後一次成績）；`list` 為後端 PDF，跨部門或跨計畫時自動打包為 ZIP（檔名 `{部門}-{計畫}_{yyyyMMdd}.pdf` / `批次列印_{yyyyMMdd}.zip`）；兩個入口共用 `useBatchPrint` hook，行為一致。展開區成員表以 **`ch` 欄寬常數** 集中維護。個人端成績總覽、學習分析、歷程與 PDF 導出維持既有能力。 |
-| **系統管理** | 單位、分類、人員、角色、權限、功能清單、職務等後台維運；與 RBAC 選單連動。 |
+| **系統管理** | 單位、分類、**教材主檔**（類型／允許副檔名）、人員、角色、權限、功能清單、職務等後台維運；與 RBAC 選單連動。 |
 
 ---
 
@@ -38,16 +38,68 @@
 - **後端**：Python 3.x、虛擬環境（建議 `.venv`）
 - **前端**：**Node.js 20+**（建議與生產建置一致：**Node.js 22**，見 `Dockerfile.frontend`）、npm 或等效套件管理員
 
+> **路徑差異**：Linux / macOS 使用 `.venv/bin/python3`；**Windows** 使用 `.venv\Scripts\python.exe`。下列指令依作業系統分開列出。
+
+### 0. 建立虛擬環境（僅首次，或 `backend` 下沒有 `.venv` 時）
+
+**Linux / macOS（標準方式）：**
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/python3 -m pip install -r requirements.txt
+```
+
+**Linux / macOS（已安裝 [uv](https://github.com/astral-sh/uv) 且 `python3` 來自 uv 時建議）：**
+
+若 `python3 -m venv` 出現 `ensurepip` 失敗，或啟動時 `No module named 'encodings'`、`sys.prefix = '/install'`，請改：
+
+```bash
+cd backend
+rm -rf .venv
+uv venv .venv --python 3.12
+uv pip install -r requirements.txt
+```
+
+> 完整故障對照見 [本機開發疑難排解](1.docs/00-專案總覽/本機開發疑難排解.md)。
+
+**Windows（PowerShell）：**
+
+```powershell
+cd backend
+python -m venv .venv
+# 若 python 找不到，改用：py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+確認虛擬環境存在：
+
+| 作業系統 | 檢查指令 | 預期 |
+|----------|----------|------|
+| Linux / macOS | `test -x .venv/bin/python3 && echo OK` | 印出 `OK` |
+| Windows PowerShell | `Test-Path .\.venv\Scripts\python.exe` | `True` |
+
 ### 1. 資料庫初始化（僅首次或資料庫不存在時）
+
+**Linux / macOS：**
 
 ```bash
 cd backend
 .venv/bin/python3 -c "from app.init_db import init_db; init_db()"
 ```
 
+**Windows（PowerShell）：**
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -c "from app.init_db import init_db; init_db()"
+```
+
 > ⚠️ 會建立所有資料表並寫入基礎資料（角色、部門、選單等）。若資料庫已存在請先備份。詳見 [資料庫遷移指南](1.docs/00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md)。
 
 ### 2. 後端
+
+**Linux / macOS：**
 
 ```bash
 cd backend
@@ -55,8 +107,41 @@ export PYTHONPATH=$PYTHONPATH:.
 .venv/bin/python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+**Windows（PowerShell）：**
+
+```powershell
+cd backend
+$env:PYTHONPATH = "$PWD;$env:PYTHONPATH"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+或先啟用虛擬環境再啟動：
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+$env:PYTHONPATH = "$PWD;$env:PYTHONPATH"
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
 - API 文件：<http://localhost:8000/docs>
 - 使用 `--host 0.0.0.0` 可讓區網裝置（如手機）連線
+
+#### 本機開發常見錯誤（前後端無法啟動／無法重裝）
+
+| 錯誤訊息（節錄） | 原因 | 處理 |
+|------------------|------|------|
+| `ENOENT … uv_cwd`（npm install / npm run dev） | Terminal **工作目錄失效**（舊 session、目錄被刪／移動） | **新開 terminal**，以絕對路徑 `cd` 至 `frontend/` 再執行 npm |
+| `[vite] http proxy error … ECONNREFUSED` | **後端未啟動**（port 8000） | 另開 terminal 啟動 Uvicorn；確認 `http://localhost:8000/docs` |
+| `No module named 'encodings'`、`sys.prefix = '/install'` | **`.venv` 損壞**（常見於 uv Python + `python3 -m venv`） | `rm -rf backend/.venv`，改 `uv venv .venv --python 3.12` 後重裝依賴 |
+| `ensurepip … non-zero exit status 1` | 在**損壞的 `.venv` 上**重建 venv | 先 `rm -rf .venv` 再重建 |
+| `zsh: no such file or directory: .venv/bin/python3` | venv 不存在或 symlink 斷裂 | 執行上方「0. 建立虛擬環境」 |
+| `無法辨識 '.venv/bin/python3' 詞彙是否為 Cmdlet…` | 在 PowerShell 使用了 **Linux 路徑** `.venv/bin/python3` | 改用 `.\.venv\Scripts\python.exe` |
+| `無法載入模組 '.venv'。如需詳細資訊，請執行 'Import-Module .venv'` | 路徑寫成 `.venv\bin\python3`（Windows **沒有** `bin\`，且 PowerShell 會把 `.venv` 當成模組） | 改用 `.\.venv\Scripts\python.exe`（注意前綴 `.\`） |
+| `Test-Path .\.venv\Scripts\python.exe` 為 `False`，或 `ls` 看不到 `.venv` | **尚未建立虛擬環境**（`.venv` 不在版控內） | 先執行上方「0. 建立虛擬環境」 |
+| `python` / `py` 找不到 | 系統未安裝 Python，或未加入 PATH | 安裝 [Python 3](https://www.python.org/downloads/)，安裝時勾選 **Add python.exe to PATH**，再開新終端 |
+
+詳細步驟與決策樹見 [本機開發疑難排解](1.docs/00-專案總覽/本機開發疑難排解.md)。
 
 ### 3. 前端
 
@@ -68,6 +153,8 @@ npm run dev
 
 - 開發站：<http://localhost:5173/training/>（或 Vite 顯示的區網網址；路徑須含 **`/training/`** 前綴；埠占用時 Vite 會遞延下一埠，`strictPort: false`）
 - 品質與建置：`npm run lint`（ESLint）、`npm run build`（`tsc -b` + Vite 產出）、`npm run preview`（預覽建置結果）
+
+> **npm 報 `uv_cwd` 或無法 install**：多為 terminal 工作目錄失效，請**新開 terminal** 並以絕對路徑 `cd` 至 `frontend/`。見 [本機開發疑難排解](1.docs/00-專案總覽/本機開發疑難排解.md) §5.1。
 
 **前端路由與 API 代理**（`frontend/vite.config.ts`）：
 
@@ -137,7 +224,8 @@ npm run dev
 
 - [1.docs 文件中心索引](1.docs/README.md) — 三層文件總索引（總覽／綠地／棕地）  
 - [專案系統架構分析](1.docs/00-專案總覽/專案系統架構分析.md) — 系統架構、流程、資料庫、技術棧  
-- [專案使用說明](1.docs/00-專案總覽/專案使用說明.md) — 使用情境、操作步驟、常見問題  
+- [專案使用說明](1.docs/00-專案總覽/專案使用說明.md) — 使用情境、操作步驟、常見問題
+- [本機開發疑難排解](1.docs/00-專案總覽/本機開發疑難排解.md) — 前後端無法啟動、venv／npm 故障修復  
 - [交付實作文件索引](1.docs/02-棕地專案/交付實作文件/README.md) — 成績中心棕地迭代（2026-04～05）任務單與完成狀態  
 - [驗收報告建立流程](1.docs/00-專案總覽/驗收報告建立流程.md) — 任務驗收清單、報告格式與存放規則  
 
@@ -152,6 +240,27 @@ npm run dev
 3. **恢復**：可參考 [資料庫資料遺失與恢復記錄](1.docs/02-棕地專案/reviews/2025-01-09-資料庫資料遺失與恢復記錄.md) 與 `backend/restore_training_data.py`。  
 4. **遷移**：表結構變更請依 [資料庫遷移指南](1.docs/00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md) 處理。  
 5. **結構說明**：全表欄位與關聯見 [education_training.db 結構分析](1.docs/00-專案總覽/資料庫結構分析/education_training_db_結構分析.md)。  
+
+### NAS／SMB 與跨平台路徑
+
+教材上傳、考卷 TXT、排程備份皆經 **SMB 協定**寫入 NAS（非本機磁碟路徑）。開發（Windows／macOS）與生產（Linux Docker）**共用同一套環境變數寫法**：
+
+| 變數 | 正確範例 | 說明 |
+|------|----------|------|
+| `SMB_SERVER` | `10.9.82.22` | 主機名或 IP，不可含路徑 |
+| `SMB_SHARE` | `CrownWork` | 僅共享名稱 |
+| `SMB_AUTH_DOMAIN` | （可空） | 教材 NAS 登入自動補網域；未設則用 `AD_DOMAIN` |
+| `MATERIALS_ROOT` | `教育訓練教材及考卷/materials` | 共享內相對路徑，一律 `/` |
+| `BACKUP_ROOT` | `教育訓練教材及考卷/backups` | 同上 |
+
+**禁止**：`D:\...`、`/mnt/nas/...`、`\\server\share\...`（本機路徑或 UNC 不可寫進設定）。
+
+| 環境 | 設定方式 |
+|------|----------|
+| 本機開發 | 複製 `backend/.env.example` → `backend/.env`；程式以 `config.py` 位置載入，不依賴 cwd |
+| Linux Docker | compose／環境變數注入同名變數（映像不含 `.env`） |
+
+變更 `.env` 後須**完整重啟**後端。若出現「NAS 共享尚未設定（需 SMB_SERVER／SMB_SHARE）」，代表執行中後端未讀到非空設定。完整慣例與驗證指令見 [NAS與路徑跨平台慣例](1.docs/00-專案總覽/NAS與路徑跨平台慣例.md)。
 
 ### Docker 與成績 PDF 字型
 
@@ -191,18 +300,24 @@ npm run dev
 | 類型 | 連結 |
 |------|------|
 | 憲章與規範 | [專案憲章](1.docs/01-綠地專案/0.專案憲章.md) |
-| 架構與使用 | [專案系統架構分析](1.docs/00-專案總覽/專案系統架構分析.md)、[專案使用說明](1.docs/00-專案總覽/專案使用說明.md) |
+| 架構與使用 | [專案系統架構分析](1.docs/00-專案總覽/專案系統架構分析.md)、[專案使用說明](1.docs/00-專案總覽/專案使用說明.md)、[本機開發疑難排解](1.docs/00-專案總覽/本機開發疑難排解.md)、[NAS與路徑跨平台慣例](1.docs/00-專案總覽/NAS與路徑跨平台慣例.md) |
 | 開發與交付追溯 | [1.docs 目錄](1.docs/README.md)、[交付實作文件索引](1.docs/02-棕地專案/交付實作文件/README.md)、[專案架構分析](1.docs/00-專案總覽/專案架構分析.md)、[角色與權限架構](1.docs/00-專案總覽/角色與權限管理架構說明.md) |
 | 資料庫 | [遷移指南](1.docs/00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md)、[資料遺失與恢復記錄](1.docs/02-棕地專案/reviews/2025-01-09-資料庫資料遺失與恢復記錄.md) |
 | 驗收與測試 | [驗收報告建立流程](1.docs/00-專案總覽/驗收報告建立流程.md)、[測試與修復記錄](1.docs/02-棕地專案/reviews/README.md)、[tests 目錄](tests/README.md) |
 
 ---
 
-**最後更新**：2026-05-02（技術棧、`/training/` 與代理、`@shared-ui`、T4 敘述、環境需求對齊實作）
+**最後更新**：2026-07-05（本機開發疑難排解、uv venv、npm uv_cwd／後端 encodings 故障）
 
 ---
 
 ## 九、近期更新摘要
+
+### 2026-07（本機開發／跨平台）
+
+- **本機開發疑難排解**：新增 [本機開發疑難排解](1.docs/00-專案總覽/本機開發疑難排解.md)（npm `uv_cwd`、損壞 `.venv`／`encodings`、Vite proxy `ECONNREFUSED`、uv venv 重建步驟）。
+- NAS／SMB：統一邏輯相對路徑（`/` 分段）、`config.py` 以檔案位置載入 `.env`、拒絕本機絕對路徑／UNC；文件見 [NAS與路徑跨平台慣例](1.docs/00-專案總覽/NAS與路徑跨平台慣例.md)。
+- 快速啟動：補上 Windows PowerShell 虛擬環境路徑（`.venv\Scripts\python.exe`）、`PYTHONPATH` 設定，以及「無法辨識 `.venv/bin/python3`」「無法載入模組 `.venv`」等錯誤對照表。
 
 ### 2026-05（成績中心棕地）
 
