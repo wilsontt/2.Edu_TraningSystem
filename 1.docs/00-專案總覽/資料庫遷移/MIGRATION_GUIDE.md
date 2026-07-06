@@ -90,6 +90,8 @@ docker compose exec training-backend python migrations/add_material_file_formats
 
 `SMTP_PASSWORD` 建議改為 Fernet 密文（`enc:` 前綴），執行期以 `CREDENTIAL_SECRET`（或既有 `BACKUP_CREDENTIAL_SECRET`）解密。明文仍可運作但啟動會警告。
 
+**本機開發**（`backend/.env`）：
+
 ```bash
 cd backend
 
@@ -110,6 +112,39 @@ cd backend
 # SMTP_PASSWORD=enc:gAAAAA...
 
 # 4. 完整重啟後端
+```
+
+**ds1 Docker**（`deploy/.env`；映像**不含** `backend/.env`）：
+
+```bash
+cd /opt/apps/enterprise-portal/deploy
+
+# 1. 產生金鑰
+docker compose exec training-backend python -c \
+  "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# 2. 寫入 deploy/.env（變數名必須是 TRAINING_CREDENTIAL_SECRET，不是 backend/.env 的 BACKUP_CREDENTIAL_SECRET）
+# TRAINING_CREDENTIAL_SECRET=<上一步輸出>
+
+# 3. 重建容器讓金鑰進入 training-backend
+docker compose up -d --force-recreate training-backend
+
+# 4. 加密 SMTP 密碼（輸出貼到 TRAINING_SMTP_PASSWORD=）
+docker compose exec training-backend python scripts/encrypt_env_secret.py "你的SMTP明文密碼"
+
+# 5. 編輯 deploy/.env
+# TRAINING_SMTP_PASSWORD=enc:gAAAAA...
+
+# 6. 再次 force-recreate
+docker compose up -d --force-recreate training-backend
+```
+
+若步驟 3 尚未完成、需先產生密文，可一次性注入金鑰：
+
+```bash
+docker compose exec \
+  -e CREDENTIAL_SECRET='你的Fernet金鑰' \
+  training-backend python scripts/encrypt_env_secret.py "你的SMTP明文密碼"
 ```
 
 驗證：啟動後不應再出現「SMTP_PASSWORD 仍為明文」警告；Email OTP 寄信正常。
