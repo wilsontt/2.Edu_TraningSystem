@@ -243,24 +243,28 @@ npm run dev
 
 ### NAS／SMB 與跨平台路徑
 
-教材上傳、考卷 TXT、排程備份皆經 **SMB 協定**寫入 NAS（非本機磁碟路徑）。開發（Windows／macOS）與生產（Linux Docker）**共用同一套環境變數寫法**：
+教材上傳、考卷 TXT、排程備份皆經 **SMB 協定**寫入 NAS（非本機磁碟路徑）。開發（Windows／macOS）與生產（Linux Docker）**共用同一套邏輯路徑寫法**，但**設定檔位置不同**：
 
-| 變數 | 正確範例 | 說明 |
-|------|----------|------|
-| `SMB_SERVER` | `10.9.82.22` | 主機名或 IP，不可含路徑 |
-| `SMB_SHARE` | `CrownWork` | 僅共享名稱 |
-| `SMB_AUTH_DOMAIN` | （可空） | 教材 NAS 登入自動補網域；未設則用 `AD_DOMAIN` |
-| `MATERIALS_ROOT` | `教育訓練教材及考卷/materials` | 共享內相對路徑，一律 `/` |
-| `BACKUP_ROOT` | `教育訓練教材及考卷/backups` | 同上 |
+| 變數（本機 `backend/.env`） | Docker（`deploy/.env`） | 正確範例 | 說明 |
+|----------------------------|-------------------------|----------|------|
+| `SMB_SERVER` | `TRAINING_SMB_SERVER` | `10.9.82.22` | 主機名或 IP，不可含路徑 |
+| `SMB_SHARE` | `TRAINING_SMB_SHARE` | `CrownWork` | 僅共享名稱 |
+| `SMB_AUTH_DOMAIN` | `TRAINING_SMB_AUTH_DOMAIN` | `crownvantw` | 教材 NAS 登入自動補網域；未設則用 `AD_DOMAIN` |
+| `MATERIALS_ROOT` | `TRAINING_MATERIALS_ROOT` | `教育訓練教材及考卷/materials` | 共享內相對路徑，一律 `/` |
+| `BACKUP_ROOT` | `TRAINING_BACKUP_ROOT` | `教育訓練教材及考卷/backups` | 同上 |
+| `CREDENTIAL_SECRET` | `TRAINING_CREDENTIAL_SECRET` | （Fernet 金鑰） | SMTP `enc:` 密文、備份 NAS 密碼解密 |
+| `SMTP_PASSWORD` | `TRAINING_SMTP_PASSWORD` | `enc:gAAAAA...` | 建議密文，勿明文（ISO 27001） |
 
 **禁止**：`D:\...`、`/mnt/nas/...`、`\\server\share\...`（本機路徑或 UNC 不可寫進設定）。
 
 | 環境 | 設定方式 |
 |------|----------|
-| 本機開發 | 複製 `backend/.env.example` → `backend/.env`；程式以 `config.py` 位置載入，不依賴 cwd |
-| Linux Docker | compose／環境變數注入同名變數（映像不含 `.env`） |
+| 本機開發 | 複製 `backend/.env.example` → `backend/.env`；完整重啟 Uvicorn |
+| Linux Docker | 編輯 **`/opt/apps/enterprise-portal/deploy/.env`**（範本 `deploy/.env.example`）；映像**不含** `backend/.env`；改完執行 `docker compose up -d --force-recreate training-backend` |
 
-變更 `.env` 後須**完整重啟**後端。若出現「NAS 共享尚未設定（需 SMB_SERVER／SMB_SHARE）」，代表執行中後端未讀到非空設定。完整慣例與驗證指令見 [NAS與路徑跨平台慣例](1.docs/00-專案總覽/NAS與路徑跨平台慣例.md)。
+若出現「NAS 共享尚未設定（需 SMB_SERVER／SMB_SHARE）」：本機查 `backend/.env`；**Docker 查 `deploy/.env` 的 `TRAINING_SMB_*` 是否已映射並 recreate**。  
+教材 NAS 登入錯誤 `0xc0000234` 表示 **AD 帳號鎖定**，請 IT 解鎖。  
+完整慣例、驗證指令與錯誤對照見 [NAS與路徑跨平台慣例](1.docs/00-專案總覽/NAS與路徑跨平台慣例.md)；SMTP 加密步驟見 [MIGRATION_GUIDE](1.docs/00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md)。
 
 ### Docker 與成績 PDF 字型
 

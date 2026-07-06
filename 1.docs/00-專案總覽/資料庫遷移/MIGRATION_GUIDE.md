@@ -259,6 +259,45 @@ docker compose exec training-backend python -c \
 | **AD 管理** | `TRAINING_AD_ENABLED=true` + DC／Base DN／Domain 正確 |
 | **緊急登入**（break-glass） | 僅需遷移寫入 `admin.password_hash`；**不受** `AD_ENABLED` 影響 |
 
+#### ds1 Docker：設定 NAS（SMB）環境變數（教材上傳必備）
+
+映像不含 `backend/.env`。若前端 NAS 登入顯示 **「NAS 共享尚未設定（需 SMB_SERVER／SMB_SHARE）」**，代表容器未讀到 `TRAINING_SMB_*`。
+
+1. 編輯 `deploy/.env`（完整註解見 `deploy/.env.example`）：
+
+```env
+TRAINING_SMB_SERVER=10.9.82.22
+TRAINING_SMB_SHARE=CrownWork
+TRAINING_SMB_AUTH_DOMAIN=crownvantw
+TRAINING_MATERIALS_ROOT=教育訓練教材及考卷/materials
+TRAINING_BACKUP_ROOT=教育訓練教材及考卷/backups
+TRAINING_EXAM_SMB_USERNAME=<考卷 service 帳號>
+TRAINING_EXAM_SMB_PASSWORD=<密碼或 enc:密文>
+```
+
+2. 重建容器：
+
+```bash
+cd /opt/apps/enterprise-portal/deploy
+docker compose up -d --force-recreate training-backend
+```
+
+3. 驗證：
+
+```bash
+docker compose exec training-backend python -c \
+  "from app.config import get_settings; s=get_settings(); \
+   print('smb_configured=', s.smb_configured, s.smb_server, s.smb_share, s.materials_root)"
+```
+
+| NAS 登入錯誤 | 意義 | 處理 |
+|--------------|------|------|
+| `NAS 共享尚未設定` | `TRAINING_SMB_*` 未注入 | 補 `deploy/.env` 並 recreate |
+| `0xc0000234` | AD 帳號鎖定 | 請 IT 解鎖後再試 |
+| `無法連線 NAS (IP)：...` | 網路／帳密／ACL／445 | 查 NAS 權限與防火牆 |
+
+> **教材 NAS 權限**：本系統不維護「AD 群組 → NAS」對照；誰能讀寫 `materials/` 由 **NAS ACL** 決定。詳見 [NAS與路徑跨平台慣例.md](../NAS與路徑跨平台慣例.md)。
+
 #### 方法二：使用 SQLAlchemy 自動建立表
 
 如果資料庫是全新的，可以直接使用 `init_db.py`：

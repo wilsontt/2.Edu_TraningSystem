@@ -112,6 +112,7 @@
 
 ## 最近更新
 
+- **2026-07-06**：Docker 部署 NAS／SMTP 維運文件 — 擴充 `deploy/.env.example`（`TRAINING_SMB_*`、`TRAINING_CREDENTIAL_SECRET`、錯誤對照）；[NAS與路徑跨平台慣例.md](00-專案總覽/NAS與路徑跨平台慣例.md) 補 §5.4.1～5.4.3；[MIGRATION_GUIDE](00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md) 補 Docker NAS 小節；[本機開發疑難排解](00-專案總覽/本機開發疑難排解.md) §5.6。
 - **2026-07-04**：教材 NAS 登入自動補網域（`SMB_AUTH_DOMAIN`／`AD_DOMAIN`；`storage.normalize_interactive_username`）。
 - **2026-07-04**：SMTP 密碼密件化（`SMTP_PASSWORD=enc:<Fernet>`，金鑰 `CREDENTIAL_SECRET`／`BACKUP_CREDENTIAL_SECRET`；`scripts/encrypt_env_secret.py`）；見 MIGRATION_GUIDE、AD 技術設計。
 - **2026-07-04**：新增 [`20260704_教材主檔與允許格式維護_PLAN.md`](02-棕地專案/plans/20260704_教材主檔與允許格式維護_PLAN.md)（教材類型／允許格式集中維護、影片與限額）；修訂教材母 PLAN §5.3／§5.4／§5.10。
