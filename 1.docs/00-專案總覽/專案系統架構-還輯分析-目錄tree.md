@@ -14,7 +14,7 @@
 | **前端** | React 19, TypeScript, Vite | 採用現代 SPA 架構，Tailwind CSS 4 負責樣式，Framer Motion 負責動畫。 |
 | **後端** | FastAPI (Python 3.x) | RESTful API，使用 SQLAlchemy ORM，Pydantic 進行資料驗證。 |
 | **資料庫** | SQLite | 位於 `data/education_training.db`，適合中小型企業內部使用。 |
-| **認證** | JWT + 圖形驗證碼 | 免密碼登入機制（員工編號 + 驗證碼），支援 QRcode 快速登入。 |
+| **認證** | JWT + 圖形驗證碼 + AD（棕地） | 員工免密登入；IT 管理者 AD／OTP／break-glass；`is_trainee` 隔離管理帳號 |
 | **報表** | ReportLab | 用於生成 PDF 成績單。 |
 
 ### 1.2 認證與授權流程
@@ -66,6 +66,13 @@
 - **exam_details**：單次考試中每一題的作答狀況。
 - **attendance_records**：員工報到時間紀錄。
 
+### 3.4 教材與備援模組（棕地 2026-06～07）
+- **material_types** / **material_file_formats**：教材類型與允許副檔名主檔（SSOT）。
+- **teaching_materials**：教材目錄卡；實體檔存於 NAS（`MATERIALS_ROOT`）。
+- **backup_schedule_config** / **backup_records**：SQLite 排程備份設定與執行紀錄。
+- **file_transfer_audit_logs**：考卷 TXT、教材上傳／下載稽核。
+- **admin_login_otps**：AD 斷線時 Email OTP。
+
 ---
 
 ## 四、 後端 API 串接方法 (API Integration)
@@ -77,13 +84,15 @@
 ### 4.2 核心 API 端點
 | 模組 | 前綴 | 主要操作 |
 |------|------|----------|
-| **認證** | `/auth` | `/captcha` (取得驗證碼), `/login` (登入), `/me` (取得目前權限) |
+| **認證** | `/auth` | `/captcha`, `/login`, `/login/admin`, `/login/local`, `/me` |
 | **系統管理** | `/admin` | 部門、人員、角色、功能、權限的 CRUD |
-| **訓練計畫** | `/training` | 計畫建立、更新、報到管理 |
-| **考卷工坊** | `/admin/exams` | TXT 上傳解析、題目編輯、教材管理 |
+| **訓練計畫** | `/training` | 計畫建立、更新、報到管理、報到總覽 |
+| **考卷工坊** | `/admin/exams` | TXT 上傳解析（NAS）、題目編輯 |
 | **題庫** | `/admin/question-bank` | 題庫搜尋、批次匯入至計畫 |
-| **考試中心** | `/exam` | `/my_exams` (我的考試), `/start/{id}` (開始), `/submit/{id}` (提交) |
-| **報表中心** | `/admin/reports` | 統計數據、部門績效、PDF 成績單匯出 |
+| **教材庫** | `/admin/teaching-materials` | 上傳、下載、NAS session、類型／格式主檔 |
+| **考試中心** | `/exam` | `/my_exams`, `/start/{id}`, `/submit/{id}`, 報到 |
+| **報表中心** | `/admin/reports` | 統計、部門績效、批次列印、PDF |
+| **排程備份** | `/admin/backup` | 設定、立即備份、紀錄 |
 
 ### 4.3 調用規範
 1. **資料格式**：所有請求與回應均使用 JSON 格式，遵循 Pydantic Schema 定義。
@@ -111,7 +120,7 @@
 │   └── data/               # 資料庫連結與教材存放 (部分連結至根目錄 data)
 ├── frontend/               # React 前端應用
 │   ├── src/
-│   │   ├── components/     # UI 元件 (分模組存放：admin, exam, personal)
+│   │   ├── components/     # UI 元件 (admin, exam, personal, teaching, attendance)
 │   │   ├── hooks/          # 自定義 Hooks (如 useExamProgress)
 │   │   └── api.ts          # Axios 配置與通訊封裝
 │   └── public/             # 靜態資源 (Logo 等)
@@ -128,7 +137,8 @@
 | `README.md` | 專案快速啟動與現況摘要 |
 | `1.docs/00-專案總覽/專案系統架構分析.md` | 詳細的系統流程圖與資料流程 |
 | `1.docs/00-專案總覽/資料庫結構分析/education_training_db_結構分析.md` | 資料表全欄位與關聯定義 |
-| `1.docs/02-棕地專案/交付實作文件/README.md` | 棕地迭代 (2026-04~05) 的詳細任務清單 |
+| `1.docs/02-棕地專案/棕地功能總覽.md` | 棕地波次（2026-04～07）功能與程式落點 |
+| `1.docs/02-棕地專案/交付實作文件/README.md` | 棕地任務單與結案索引 |
 
 ---
-**最後更新時間**：2026-05-01
+**最後更新時間**：2026-07-06

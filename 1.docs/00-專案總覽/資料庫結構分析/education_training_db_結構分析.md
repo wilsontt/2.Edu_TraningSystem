@@ -29,19 +29,25 @@
 
 ### 5.1 資料表一覽（依名稱排序）
 
-共 **22** 張表（英文表名＋中文名稱）：
+共 **29** 張表（英文表名＋中文名稱；含 3 張多對多關聯表）：
 
 | 資料表（英文） | 中文名稱 |
 |----------------|----------|
+| `admin_login_otps` | 管理帳號 Email OTP（AD 斷線備援） |
 | `attendance_absence_reasons` | 缺席／未到原因登記 |
 | `attendance_records` | 簽到紀錄 |
+| `backup_records` | 排程／手動備份執行紀錄 |
+| `backup_schedule_config` | 排程備份設定（單例） |
 | `departments` | 部門 |
 | `exam_details` | 考卷作答明細 |
 | `exam_history` | 考試成績／提交歷程快照 |
 | `exam_records` | 考試主紀錄 |
+| `file_transfer_audit_logs` | 檔案傳輸稽核（考卷 TXT、教材） |
 | `job_titles` | 職務 |
-| `login_tokens` | 登入 Token（一次性／限時） |
+| `login_tokens` | 登入 Token（QR 歷史；現 QR 方案 A 多為固定 URL） |
 | `main_categories` | 訓練主分類 |
+| `material_file_formats` | 教材允許副檔名主檔 |
+| `material_types` | 教材類型主檔 |
 | `plan_target_departments` | 訓練計畫對象部門（多對多） |
 | `plan_target_users` | 訓練計畫對象人員（多對多） |
 | `question_bank` | 共用題庫 |
@@ -53,6 +59,7 @@
 | `roles` | 角色 |
 | `sub_categories` | 訓練子分類 |
 | `system_functions` | 系統功能（選單／按鈕權限樹） |
+| `teaching_materials` | 教材目錄卡（實體檔於 NAS） |
 | `training_plans` | 訓練／考試計畫 |
 | `users` | 使用者（帳號） |
 
@@ -99,7 +106,13 @@ erDiagram
     training_plans ||--o{ attendance_absence_reasons : "plan_id"
     users ||--o{ attendance_absence_reasons : "emp_id"
     users ||--o{ attendance_absence_reasons : "recorded_by"
+
+    material_types ||--o{ teaching_materials : "material_type_id"
+    training_plans ||--o{ teaching_materials : "plan_id"
+    teaching_materials ||--o| teaching_materials : "replaced_by_id"
 ```
+
+> **棕地增補（2026-06～07）**：`material_types`、`material_file_formats`、`teaching_materials`、`backup_schedule_config`、`backup_records`、`admin_login_otps`、`file_transfer_audit_logs`；`users` 擴充 AD／受訓隔離欄位。完整欄位見 **5.3** 各表與 `backend/app/models.py`。
 
 > **說明**：`question_bank` 在 schema 上為獨立題庫，**未**宣告 FK 至 `users`；`created_by` 語意上常對應 `users.emp_id`，但 DB 層未強制。
 
@@ -406,8 +419,138 @@ erDiagram
 | role_id | 角色 ID | INTEGER | — | 否 | — | — | → `roles.id` |
 | status | 帳號狀態 | VARCHAR | 未宣告 | 否 | — | — | 應用預設常為 `active` |
 | job_title_id | 職務 ID | INTEGER | — | 否 | — | — | → `job_titles.id` |
+| auth_source | 認證來源 | VARCHAR | 未宣告 | 否 | — | `local` | `local`／`ad`／`email_fallback` |
+| ad_username | AD 登入帳號 | VARCHAR | 未宣告 | 否 | — | — | UNIQUE |
+| email | 電子郵件 | VARCHAR | 未宣告 | 否 | — | — | JIT 自 AD 同步；OTP 備援用 |
+| email_verified_at | Email 驗證時間 | DATETIME | — | 否 | — | — | AD 登入時更新 |
+| is_trainee | 是否受訓者 | BOOLEAN | — | 否 | — | `1` | `0`＝管理帳號，排除考試／統計 |
+| last_login_at | 最後登入時間 | DATETIME | — | 否 | — | — | — |
+| password_hash | 密碼雜湊 | VARCHAR | 未宣告 | 否 | — | — | 僅 break-glass 帳號 |
+| password_changed_at | 密碼變更時間 | DATETIME | — | 否 | — | — | ISO 27001 政策 |
+| must_change_password | 須強制改密 | BOOLEAN | — | 否 | — | `0` | — |
+| failed_login_count | 連續登入失敗次數 | INTEGER | — | 否 | — | `0` | break-glass 鎖定用 |
+| locked_until | 帳號鎖定截止 | DATETIME | — | 否 | — | — | — |
+| is_protected | 受保護帳號 | BOOLEAN | — | 否 | — | `0` | break-glass，禁止刪除／停用 |
 
 **索引**：`ix_users_emp_id`（`emp_id`）。
+
+---
+
+#### `admin_login_otps` — 管理帳號 Email OTP
+
+| 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
+|------|----------|------|----------|----|------|
+| id | 流水號 | INTEGER | 是 | 是 | — |
+| emp_id | 員工編號 | VARCHAR | 否 | — | 索引 |
+| otp_hash | OTP 雜湊 | VARCHAR | 否 | — | bcrypt，不存明文 |
+| expires_at | 過期時間 | DATETIME | 否 | — | 索引 |
+| attempt_count | 嘗試次數 | INTEGER | 否 | — | — |
+| created_at | 建立時間 | DATETIME | 否 | — | — |
+| used_at | 使用時間 | DATETIME | 否 | — | — |
+
+---
+
+#### `backup_schedule_config` — 排程備份設定（單例 id=1）
+
+| 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
+|------|----------|------|----------|----|------|
+| id | 固定為 1 | INTEGER | 是 | 是 | 單例 |
+| enabled | 是否啟用 | BOOLEAN | 否 | — | — |
+| frequency | 頻率 | VARCHAR | 否 | — | `daily`／`weekly` |
+| time_of_day | 執行時刻 | VARCHAR | 否 | — | HH:mm |
+| weekday | 星期幾 | INTEGER | 否 | — | weekly 時 0=週一 |
+| retention_count | 保留份數 | INTEGER | 否 | — | — |
+| destination | NAS 備份路徑 | VARCHAR | 否 | — | 空則用 `BACKUP_ROOT` |
+| backup_nas_username | 備份 NAS 帳號 | VARCHAR | 否 | — | — |
+| backup_nas_password_encrypted | 備份 NAS 密碼 | TEXT | 否 | — | Fernet 加密 |
+| updated_at | 更新時間 | DATETIME | 否 | — | — |
+
+---
+
+#### `backup_records` — 備份執行紀錄
+
+| 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
+|------|----------|------|----------|----|------|
+| id | 流水號 | INTEGER | 是 | 是 | — |
+| filename | 備份檔名 | VARCHAR | 否 | — | — |
+| created_at | 執行時間 | DATETIME | 否 | — | 索引 |
+| size_bytes | 檔案大小 | INTEGER | 否 | — | — |
+| status | 狀態 | VARCHAR | 否 | — | `success`／`failed` |
+| message | 訊息 | VARCHAR | 否 | — | — |
+| duration_ms | 耗時毫秒 | INTEGER | 否 | — | — |
+
+---
+
+#### `file_transfer_audit_logs` — 檔案傳輸稽核
+
+| 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
+|------|----------|------|----------|----|------|
+| id | 流水號 | INTEGER | 是 | 是 | — |
+| created_at | 時間 | DATETIME | 否 | — | 索引 |
+| emp_id | 操作者工號 | VARCHAR | 否 | — | 索引 |
+| client_ip | 來源 IP | VARCHAR | 否 | — | — |
+| nas_username | NAS 帳號 | VARCHAR | 否 | — | interactive 或 `service` |
+| action | 動作 | VARCHAR | 否 | — | upload／download／delete |
+| resource_type | 資源類型 | VARCHAR | 否 | — | `teaching_material`／`exam_txt` |
+| resource_id | 資源 ID | INTEGER | 否 | — | — |
+| plan_id | 訓練計畫 ID | INTEGER | 否 | — | — |
+| filename | 檔名 | VARCHAR | 否 | — | — |
+| bytes | 傳輸位元組 | INTEGER | 否 | — | — |
+| status | 結果 | VARCHAR | 否 | — | success／failed 等 |
+
+---
+
+#### `material_file_formats` — 教材允許副檔名主檔
+
+| 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
+|------|----------|------|----------|----|------|
+| id | 流水號 | INTEGER | 是 | 是 | — |
+| ext | 副檔名 | VARCHAR | 否 | — | UNIQUE，小寫無點 |
+| label | 顯示名稱 | VARCHAR | 否 | — | — |
+| sort_order | 排序 | INTEGER | 否 | — | — |
+| max_file_bytes | 單檔上限 | INTEGER | 否 | — | null 不另限 |
+| is_active | 是否啟用 | BOOLEAN | 否 | — | — |
+| mime_types | MIME 預留 | TEXT | 否 | — | JSON，本期不驗證 |
+
+---
+
+#### `material_types` — 教材類型主檔
+
+| 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
+|------|----------|------|----------|----|------|
+| id | 流水號 | INTEGER | 是 | 是 | — |
+| name | 類型名稱 | VARCHAR | 否 | — | UNIQUE |
+| slug | 目錄識別 | VARCHAR | 否 | — | UNIQUE |
+| sort_order | 排序 | INTEGER | 否 | — | — |
+| max_file_bytes | 類型單檔上限 | INTEGER | 否 | — | — |
+| is_active | 是否啟用 | BOOLEAN | 否 | — | — |
+
+---
+
+#### `teaching_materials` — 教材目錄卡
+
+| 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
+|------|----------|------|----------|----|------|
+| id | 流水號 | INTEGER | 是 | 是 | — |
+| plan_id | 訓練計畫 ID | INTEGER | 否 | — | FK；null＝通用教材 |
+| title | 標題 | VARCHAR | 否 | — | — |
+| material_type_id | 教材類型 | INTEGER | 否 | — | → `material_types.id` |
+| description | 簡述 | VARCHAR | 否 | — | — |
+| tags | 標籤 JSON | TEXT | 否 | — | — |
+| original_filename | 原始檔名 | VARCHAR | 否 | — | 下載檔名來源 |
+| stored_filename | NAS 檔名 | VARCHAR | 否 | — | — |
+| storage_path | 儲存相對路徑 | VARCHAR | 否 | — | 邏輯 `/` 路徑 |
+| file_format | 副檔名 | VARCHAR | 否 | — | — |
+| file_size_bytes | 檔案大小 | INTEGER | 否 | — | — |
+| year | 年度 | VARCHAR | 否 | — | — |
+| sub_category_id | 分類快照 | INTEGER | 否 | — | 跨計畫篩選 |
+| uploaded_by | 上傳者工號 | VARCHAR | 否 | — | — |
+| uploaded_at | 上傳時間 | DATETIME | 否 | — | 索引 |
+| is_active | 使用中 | BOOLEAN | 否 | — | 索引；軟刪 |
+| deactivated_at | 停用時間 | DATETIME | 否 | — | — |
+| deactivated_by | 停用者 | VARCHAR | 否 | — | — |
+| replaced_by_id | 取代者 ID | INTEGER | 否 | — | 自參照 FK |
+| replaces_id | 被取代者 ID | INTEGER | 否 | — | 自參照 FK |
 
 ---
 
@@ -444,6 +587,10 @@ erDiagram
 | users | dept_id | departments | id |
 | users | role_id | roles | id |
 | users | job_title_id | job_titles | id |
+| teaching_materials | plan_id | training_plans | id |
+| teaching_materials | material_type_id | material_types | id |
+| teaching_materials | replaced_by_id | teaching_materials | id |
+| teaching_materials | replaces_id | teaching_materials | id |
 
 ### 5.5 索引一覽
 
@@ -480,7 +627,9 @@ erDiagram
 | `README.md` | 專案說明與 DB 路徑 |
 | `backend/app/models.py` | SQLAlchemy 模型與表名對應 |
 | `backend/app/database.py` | SQLite 連線路徑解析 |
-| `1.docs/專案架構分析.md` | 架構與資料庫檔案位置 |
+| `1.docs/00-專案總覽/專案架構分析.md` | 架構與資料庫檔案位置 |
+| `1.docs/02-棕地專案/棕地功能總覽.md` | 棕地波次與新表對照 |
+| `1.docs/00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md` | 遷移腳本與 AD／教材相關欄位 |
 
 ---
 
