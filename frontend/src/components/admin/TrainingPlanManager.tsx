@@ -987,10 +987,10 @@ const TrainingPlanManager = () => {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 sm:gap-2">
                         <button 
                           onClick={() => openModal(plan)}
-                          className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                          className="p-2 min-h-11 min-w-11 flex items-center justify-center text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 cursor-pointer"
                           title="編輯計畫"
                         >
                           <PenTool className="w-4 h-4" />
@@ -1003,7 +1003,7 @@ const TrainingPlanManager = () => {
                               setAbsenceReasonEdit(null);
                               setIsAttendanceModalOpen(true);
                             }}
-                            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                            className="p-2 min-h-11 min-w-11 flex items-center justify-center text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all duration-200 cursor-pointer"
                             title="查看報到統計"
                           >
                             <BarChart3 className="w-4 h-4" />
@@ -1016,7 +1016,7 @@ const TrainingPlanManager = () => {
                               e.stopPropagation();
                               setOpenActionMenu(openActionMenu === plan.id ? null : plan.id);
                             }}
-                            className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                            className="p-2 min-h-11 min-w-11 flex items-center justify-center text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 cursor-pointer"
                             title="更多操作"
                           >
                             <MoreVertical className="w-4 h-4" />

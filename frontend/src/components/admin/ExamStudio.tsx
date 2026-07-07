@@ -728,17 +728,17 @@ const ExamStudio = () => {
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                        <div className="flex gap-1 sm:gap-2">
                                                             <button 
                                                                 onClick={() => setEditingQuestion(q)}
-                                                                className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all duration-200 cursor-pointer"
+                                                                className="p-1.5 min-h-10 min-w-10 flex items-center justify-center text-gray-500 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all duration-200 cursor-pointer"
                                                                 title="編輯"
                                                             >
                                                                 <Edit className="w-4 h-4" />
                                                             </button>
                                                             <button 
                                                                 onClick={() => handleDeleteQuestion(q.id)}
-                                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 cursor-pointer"
+                                                                className="p-1.5 min-h-10 min-w-10 flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 cursor-pointer"
                                                                 title="刪除"
                                                             >
                                                                 <Trash2 className="w-4 h-4" />
