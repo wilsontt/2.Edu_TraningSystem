@@ -97,6 +97,7 @@ erDiagram
     exam_records ||--o{ exam_details : "record_id"
     questions ||--o{ exam_details : "question_id"
     exam_records ||--o{ exam_history : "record_id"
+    exam_records ||--o{ exam_retake_authorizations : "record_id"
 
     users ||--o{ attendance_records : "emp_id"
     training_plans ||--o{ attendance_records : "plan_id"
@@ -204,8 +205,26 @@ erDiagram
 | start_time | 開始作答時間 | DATETIME | — | 否 | — | — | — |
 | submit_time | 提交時間 | DATETIME | — | 否 | — | — | — |
 | attempts | 作答次數／重考次數 | INTEGER | — | 否 | — | — | — |
+| retake_authorized | 是否已被授權重考（待使用） | BOOLEAN | — | 否 | — | False | 授權時設為 True；學員提交後自動清除為 False |
 
 **索引**：`ix_exam_records_id`（`id`）。
+
+---
+
+#### `exam_retake_authorizations` — 授權重考稽核日誌
+
+| 欄位 | 中文說明 | 類型 | 長度 | NOT NULL | PK | 預設 | FK / 備註 |
+|------|----------|------|------|----------|----|------|-----------|
+| id | 流水號 | INTEGER | — | 是 | 是 | — | — |
+| record_id | 考試主紀錄 ID | INTEGER | — | 是 | — | — | → `exam_records.id` |
+| authorized_by | 授權者員工編號 | VARCHAR | 未宣告 | 是 | — | — | → `users.emp_id` |
+| authorized_at | 授權時間 | DATETIME | — | 是 | — | — | 臺北時間（naive） |
+| reason | 授權原因 | TEXT | — | 是 | — | — | 最多 500 字 |
+| consumed_at | 重考提交時間（授權被使用） | DATETIME | — | 否 | — | NULL | 學員提交後填入 |
+| revoked_at | 撤銷時間 | DATETIME | — | 否 | — | NULL | 管理員撤銷授權時填入 |
+| revoked_by | 撤銷者員工編號 | VARCHAR | 未宣告 | 否 | — | NULL | — |
+
+**業務邏輯**：每次授權新增一筆；`consumed_at` 有值表示授權已被使用；`revoked_at` 有值表示被撤銷。同時 `consumed_at` 和 `revoked_at` 均為 NULL 表示「待使用」授權。
 
 ---
 
