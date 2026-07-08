@@ -1422,6 +1422,7 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
                                                       }}
                                                       className="inline-flex items-center px-3 py-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                     >
+                                                      <Repeat className="h-3 w-3 mr-1" />
                                                       開放重考
                                                     </button>
                                                   )}
@@ -1812,19 +1813,22 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
           planId={authorizeTarget.planId}
           empName={authorizeTarget.empName}
           planTitle={authorizeTarget.planTitle}
-          onSuccess={() => {
+          onSuccess={async () => {
             const deptId = authorizeTarget.deptId;
             setAuthorizeTarget(null);
-            // 清除快取以觸發重新抓取
-            setDeptDetails((prev) => {
-              const next = { ...prev };
-              delete next[deptId];
-              return next;
-            });
-            // 重新展開以觸發重新抓取
-            if (expandedDept === deptId) {
-              setExpandedDept(null);
-              setTimeout(() => setExpandedDept(deptId), 50);
+            // 直接重新抓取該部門詳情
+            try {
+              const token = localStorage.getItem('token');
+              const res = await fetch(
+                `${API_BASE_URL}/admin/reports/department/${deptId}/details?page=1&page_size=10`,
+                { headers: { 'Authorization': `Bearer ${token}` } }
+              );
+              if (res.ok) {
+                const data = await res.json();
+                setDeptDetails((prev) => ({ ...prev, [deptId]: data }));
+              }
+            } catch {
+              // silent fail - user can manually refresh
             }
           }}
           onClose={() => setAuthorizeTarget(null)}

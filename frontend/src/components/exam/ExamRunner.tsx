@@ -48,6 +48,8 @@ interface ExamResult {
     total_score: number;
     /** 是否通過 */
     is_passed: boolean;
+    /** 是否已授權重考（可選，後端 submit 回應通常不含此欄位） */
+    retake_authorized?: boolean;
 }
 
 /**
@@ -332,11 +334,12 @@ const ExamRunner = () => {
         <div className="fixed inset-0 h-[100dvh] bg-gray-50 flex flex-col mx-auto shadow-2xl overflow-hidden max-w-lg md:max-w-2xl lg:max-w-3xl border-x border-gray-100 z-50">
             {/* 成績卡 (Score Card) 疊加層 */}
             {result && (
-                <ScoreCard 
-                    score={result.score} 
-                    totalScore={result.total_score} 
-                    isPassed={result.is_passed} 
-                    onClose={() => navigate('/')} 
+                <ScoreCard
+                    score={result.score}
+                    totalScore={result.total_score}
+                    isPassed={result.is_passed}
+                    retakeAuthorized={result.retake_authorized ?? false}
+                    onClose={() => navigate('/')}
                 />
             )}
 
