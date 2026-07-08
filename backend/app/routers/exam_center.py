@@ -143,6 +143,41 @@ class ExamListItem(BaseModel):
     score: Optional[int]
     total_points: Optional[int]
     attempts: int = 0
+    passing_score: int = 60           # 計畫設定的及格分數
+    is_passed: Optional[bool] = None  # 是否通過（未交卷為 None）
+    can_start_exam: bool = False      # 後端統一計算：是否可開始/重考
+    retake_authorized: bool = False   # Phase 2 才啟用，目前先回傳 False
+
+
+def compute_can_start_exam(
+    plan: "models.TrainingPlan",
+    record: "Optional[models.ExamRecord]",
+    today: date,
+) -> bool:
+    """後端唯一真相：計算學員是否可以開始/重新考試。"""
+    if getattr(plan, 'is_archived', False):
+        return False
+    if today < plan.training_date:
+        return False  # pending，尚未開放
+
+    has_submitted = record is not None and record.submit_time is not None
+
+    if not has_submitted:
+        if plan.end_date and today > plan.end_date:
+            return False
+        return True
+
+    # 已交卷：未通過時自動可重考
+    if not record.is_passed:
+        return True
+
+    # 已通過：Phase 2 才有 retake_authorized，此 Phase 先回傳 False
+    retake_auth = getattr(record, 'retake_authorized', False)
+    if retake_auth:
+        return True
+
+    return False
+
 
 class QuestionItem(BaseModel):
     id: int
@@ -280,7 +315,11 @@ def get_my_exams(
             status=status,
             score=score,
             total_points=total,
-            attempts=attempts
+            attempts=attempts,
+            passing_score=plan.passing_score if plan.passing_score is not None else 60,
+            is_passed=record.is_passed if (record and record.submit_time is not None) else None,
+            can_start_exam=compute_can_start_exam(plan, record, today),
+            retake_authorized=getattr(record, 'retake_authorized', False) if record else False,
         ))
         
     return results
