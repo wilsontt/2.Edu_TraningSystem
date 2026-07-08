@@ -419,13 +419,58 @@ def delete_user(emp_id: str, db: Session = Depends(get_db), current_user = check
 
 @router.get("/roles", response_model=List[schemas.Role])
 def get_roles(db: Session = Depends(get_db), current_user = check_permission("menu:admin:role")):
-    """取得所有角色"""
+    """取得所有角色；user_count 僅計在職成員（含管理帳號）。"""
     roles = db.query(models.Role).all()
-    # Add counts (SQLAlchemy relationship lazy loading makes this easy, though not most efficient for huge datasets)
     for role in roles:
-        role.user_count = len(role.users)
+        role.user_count = len([
+            u for u in role.users
+            if (u.status or "").strip().lower() == "active"
+        ])
         role.function_count = len(role.functions)
     return roles
+
+
+@router.get("/roles/{role_id}/users")
+def get_role_users(
+    role_id: int,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:admin:role"),
+):
+    """取得特定角色的在職成員清單（含管理帳號，排除停用）。"""
+    db_role = db.query(models.Role).filter(models.Role.id == role_id).first()
+    if not db_role:
+        raise HTTPException(status_code=404, detail="角色不存在")
+
+    users = (
+        apply_active_user_filter(
+            db.query(models.User)
+            .options(
+                joinedload(models.User.department),
+                joinedload(models.User.job_title),
+            )
+            .filter(models.User.role_id == role_id)
+        )
+        .order_by(models.User.emp_id.asc())
+        .all()
+    )
+
+    return {
+        "role_id": db_role.id,
+        "role_name": db_role.name,
+        "user_count": len(users),
+        "users": [
+            {
+                "emp_id": u.emp_id,
+                "name": u.name,
+                "role_id": u.role_id,
+                "status": u.status or "inactive",
+                "department": u.department.name if u.department else None,
+                "job_title": u.job_title.name if u.job_title else None,
+            }
+            for u in users
+        ],
+    }
+
 
 @router.post("/roles", response_model=schemas.Role)
 def create_role(role: schemas.RoleCreate, db: Session = Depends(get_db), current_user = check_permission("menu:admin:role")):
