@@ -2,7 +2,7 @@
  * 成績中心｜批次列印（管理端跨人員功能）
  * 四步精靈：1 篩選（計畫狀態／訓練計畫／部門）→ 2 列印類型 → 3 人員預覽勾選 → 4 產出。
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, ChevronRight, Printer } from 'lucide-react';
 import clsx from 'clsx';
 import Pagination from '../common/Pagination';
@@ -115,7 +115,7 @@ export default function BatchPrintPage() {
     }
   }, [individualDisabled, printMode, setPrintMode, setOutputStyle]);
 
-  const filteredPlanOptions = useMemo(() => {
+  const filteredPlanOptions = (() => {
     const term = planSearch.trim().toLowerCase();
     if (!term) return planOptions;
     return planOptions.filter(
@@ -124,9 +124,9 @@ export default function BatchPrintPage() {
         (p.year || '').toLowerCase().includes(term) ||
         (p.dept_name || '').toLowerCase().includes(term),
     );
-  }, [planOptions, planSearch]);
+  })();
 
-  const filteredPreviewItems = useMemo(() => {
+  const filteredPreviewItems = (() => {
     const term = previewSearch.trim().toLowerCase();
     if (!term) return previewItems;
     return previewItems.filter(
@@ -135,7 +135,7 @@ export default function BatchPrintPage() {
         item.emp_id.toLowerCase().includes(term) ||
         item.dept_name.toLowerCase().includes(term),
     );
-  }, [previewItems, previewSearch]);
+  })();
 
   const previewTotalPages = Math.max(1, Math.ceil(filteredPreviewItems.length / PREVIEW_PAGE_SIZE));
   const paginatedPreviewItems = filteredPreviewItems.slice(
