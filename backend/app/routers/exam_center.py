@@ -15,7 +15,7 @@ from sqlalchemy import func, and_, or_, case
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from .. import models, schemas
 from ..database import get_db
 from .auth import get_current_user
@@ -118,6 +118,16 @@ def _has_menu_report_permission(current_user: models.User) -> bool:
     return any(f.code == "menu:report" for f in current_user.role.functions)
 
 
+def _has_authorize_retake_permission(current_user: models.User) -> bool:
+    """判斷使用者是否具備授權重考功能碼（btn:exam:authorize-retake）或為管理員。"""
+    role_name = (current_user.role and current_user.role.name) or ""
+    if is_admin_or_system_role(role_name):
+        return True
+    if not current_user.role or not current_user.role.functions:
+        return False
+    return any(f.code == "btn:exam:authorize-retake" for f in current_user.role.functions)
+
+
 def _can_view_emp_id(db: Session, current_user: models.User, target_emp_id: str) -> bool:
     target_user = db.query(models.User).filter(models.User.emp_id == target_emp_id).first()
     if not target_user or not is_active_user_status(target_user.status):
@@ -147,6 +157,16 @@ class ExamListItem(BaseModel):
     is_passed: Optional[bool] = None  # 是否通過（未交卷為 None）
     can_start_exam: bool = False      # 後端統一計算：是否可開始/重考
     retake_authorized: bool = False   # Phase 2 才啟用，目前先回傳 False
+
+
+class AuthorizeRetakeRequest(BaseModel):
+    emp_id: str
+    plan_id: int
+    reason: str = Field(..., min_length=1, max_length=500)
+
+class RevokeRetakeRequest(BaseModel):
+    emp_id: str
+    plan_id: int
 
 
 def compute_can_start_exam(
@@ -344,8 +364,11 @@ def start_exam(
         models.ExamRecord.emp_id == current_user.emp_id
     ).first()
     
-    if record and record.is_passed:
-        raise HTTPException(status_code=400, detail="You have already completed and passed this exam.")
+    if record and record.is_passed and not getattr(record, 'retake_authorized', False):
+        raise HTTPException(
+            status_code=400,
+            detail="您已通過此測驗；如需重考請聯繫主管或稽核人員開放重考。",
+        )
         
     today = date.today()
     if today < plan.training_date:
@@ -572,7 +595,23 @@ def submit_exam(
         details=details_json
     )
     db.add(history_record)
-        
+
+    # 若本次為授權重考，消耗授權旗標
+    if existing_record and getattr(existing_record, 'retake_authorized', False):
+        existing_record.retake_authorized = False
+        pending_auth = (
+            db.query(models.ExamRetakeAuthorization)
+            .filter(
+                models.ExamRetakeAuthorization.record_id == record_id,
+                models.ExamRetakeAuthorization.consumed_at.is_(None),
+                models.ExamRetakeAuthorization.revoked_at.is_(None),
+            )
+            .order_by(models.ExamRetakeAuthorization.authorized_at.desc())
+            .first()
+        )
+        if pending_auth:
+            pending_auth.consumed_at = now
+
     db.commit()
     
     return ExamResultResponse(
@@ -582,6 +621,110 @@ def submit_exam(
         is_passed=is_passed,
         details=response_details
     )
+
+
+# --- 授權重考管理 API ---
+
+@router.post("/admin/authorize-retake")
+def authorize_retake(
+    req: AuthorizeRetakeRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """授權已通過考試的學員重考。一次授權 = 一次機會。"""
+    # 層 1：功能權限
+    if not _has_authorize_retake_permission(current_user):
+        raise HTTPException(status_code=403, detail="您沒有授權重考的權限")
+
+    # 層 2：資料範圍
+    if not _can_view_emp_id(db, current_user, req.emp_id):
+        raise HTTPException(status_code=403, detail="無權限操作此員工的考試紀錄")
+
+    # 業務驗證
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == req.plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    if getattr(plan, 'is_archived', False):
+        raise HTTPException(status_code=400, detail="封存的訓練計畫無法授權重考")
+
+    record = db.query(models.ExamRecord).filter(
+        models.ExamRecord.emp_id == req.emp_id,
+        models.ExamRecord.plan_id == req.plan_id,
+    ).first()
+    if not record or record.submit_time is None:
+        raise HTTPException(status_code=400, detail="該員工尚未完成此訓練計畫的考試")
+    if not record.is_passed:
+        raise HTTPException(status_code=400, detail="該員工尚未通過此測驗，無需授權（未通過可自動重考）")
+    if record.retake_authorized:
+        raise HTTPException(status_code=400, detail="已有待使用的重考授權，請勿重複授權")
+    if not req.reason.strip():
+        raise HTTPException(status_code=400, detail="授權原因不可為空")
+
+    # 寫入授權
+    now = _now_taipei_naive()
+    record.retake_authorized = True
+    auth_log = models.ExamRetakeAuthorization(
+        record_id=record.id,
+        authorized_by=current_user.emp_id,
+        authorized_at=now,
+        reason=req.reason.strip(),
+    )
+    db.add(auth_log)
+    db.commit()
+    db.refresh(record)
+
+    return {
+        "message": "已開放重考",
+        "emp_id": req.emp_id,
+        "plan_id": req.plan_id,
+        "record_id": record.id,
+        "authorized_at": now.isoformat(),
+        "authorized_by": current_user.emp_id,
+    }
+
+
+@router.post("/admin/revoke-retake")
+def revoke_retake(
+    req: RevokeRetakeRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """撤銷尚未使用的重考授權。"""
+    if not _has_authorize_retake_permission(current_user):
+        raise HTTPException(status_code=403, detail="您沒有撤銷重考授權的權限")
+    if not _can_view_emp_id(db, current_user, req.emp_id):
+        raise HTTPException(status_code=403, detail="無權限操作此員工的考試紀錄")
+
+    record = db.query(models.ExamRecord).filter(
+        models.ExamRecord.emp_id == req.emp_id,
+        models.ExamRecord.plan_id == req.plan_id,
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="找不到考試紀錄")
+    if not record.retake_authorized:
+        raise HTTPException(status_code=400, detail="目前沒有待使用的重考授權可撤銷")
+
+    now = _now_taipei_naive()
+    record.retake_authorized = False
+
+    # 標記最新的未消耗授權為已撤銷
+    pending_auth = (
+        db.query(models.ExamRetakeAuthorization)
+        .filter(
+            models.ExamRetakeAuthorization.record_id == record.id,
+            models.ExamRetakeAuthorization.consumed_at.is_(None),
+            models.ExamRetakeAuthorization.revoked_at.is_(None),
+        )
+        .order_by(models.ExamRetakeAuthorization.authorized_at.desc())
+        .first()
+    )
+    if pending_auth:
+        pending_auth.revoked_at = now
+        pending_auth.revoked_by = current_user.emp_id
+
+    db.commit()
+    return {"message": "已撤銷重考授權", "emp_id": req.emp_id, "plan_id": req.plan_id}
+
 
 # --- T3: 個人成績查詢 API ---
 
