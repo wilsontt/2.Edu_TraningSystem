@@ -1103,7 +1103,7 @@ const TrainingPlanManager = () => {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           {/* 調整 Form 的寬度：max-w-lg：320px 窄、max-w-xl：480px 較窄、max-w-2xl：672px 常用、 3xl：768px 較寬、4xl：896px 很寬、5xl：1024px 最寬 */}
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+          <div className={`bg-white rounded-2xl shadow-2xl w-full mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh] ${isEditing ? 'max-w-6xl' : 'max-w-2xl'}`}>
             <div className={`p-6 border-b flex items-center justify-between ${isEditing ? 'border-indigo-100 bg-linear-to-r from-indigo-50 to-purple-50' : 'border-green-100 bg-linear-to-r from-green-50 to-emerald-50'}`}>
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 {isEditing ? <PenTool className="w-5 h-5 text-indigo-600" /> : <Plus className="w-5 h-5 text-green-600" />}
@@ -1113,8 +1113,9 @@ const TrainingPlanManager = () => {
                 <X className="w-5 h-5 text-gray-400" />
               </button>
             </div>
-            {/* 訓練計劃 設定卡片 */}
-            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
+            {/* 訓練計劃 設定卡片（主體：編輯模式雙欄，新增模式單欄） */}
+            <div className={`flex flex-1 overflow-hidden min-h-0 ${isEditing ? 'flex-row' : 'flex-col'}`}>
+            <form onSubmit={handleSubmit} className={`overflow-y-auto space-y-4 p-6 ${isEditing ? 'flex-1 min-w-0' : 'flex-1'}`}>
               
               {/* 計劃與時程卡片 */}
               <div className="grid grid-cols-2 gap-4">              
@@ -1470,11 +1471,6 @@ const TrainingPlanManager = () => {
                 </div>
               </div>
 
-              {/* 教材區（編輯既有計畫時顯示）— Wave 3 */}
-              {isEditing && editId && (
-                <PlanMaterialsSection planId={editId} archived={activeTab === 'archived'} />
-              )}
-
               {/* ... (footer buttons) ... */}
               {/* 按鈕卡片 */}
               <div className="flex gap-3 pt-2 border-t border-gray-100">
@@ -1493,6 +1489,13 @@ const TrainingPlanManager = () => {
                 </button>
               </div>
             </form>
+            {/* 右欄：教材區（僅編輯模式顯示）— Wave 3 */}
+            {isEditing && editId && (
+              <div className="w-80 xl:w-96 border-l border-gray-100 overflow-y-auto flex-shrink-0 bg-gray-50/30">
+                <PlanMaterialsSection planId={editId} archived={activeTab === 'archived'} />
+              </div>
+            )}
+            </div>
           </div>
         </div>
       )}

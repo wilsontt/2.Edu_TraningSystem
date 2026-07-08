@@ -324,7 +324,7 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
     };
 
     return (
-        <div className="space-y-3 pt-2 border-t border-gray-100">
+        <div className="space-y-3 pt-2">
             <label className="text-xs font-bold text-gray-500 uppercase">教材（上傳前須 NAS 登入）</label>
 
             {!archived && (
