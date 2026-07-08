@@ -1158,7 +1158,8 @@ def get_department_details(
             models.ExamRecord.total_score,
             models.ExamRecord.is_passed,
             models.ExamRecord.submit_time,
-            models.ExamRecord.attempts
+            models.ExamRecord.attempts,
+            models.ExamRecord.retake_authorized,
         ).join(
             models.ExamRecord, models.User.emp_id == models.ExamRecord.emp_id
         ).join(
@@ -1200,9 +1201,10 @@ def get_department_details(
                 "total_score": r.total_score,
                 "is_passed": r.is_passed,
                 "submit_time": r.submit_time.isoformat() if r.submit_time else None,
-                "attempts": r.attempts
+                "attempts": r.attempts,
+                "retake_authorized": bool(r.retake_authorized or False),
             })
-        
+
         return {
             "dept_id": dept_id,
             "dept_name": dept.name,
