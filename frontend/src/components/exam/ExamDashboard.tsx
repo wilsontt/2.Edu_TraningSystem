@@ -58,8 +58,8 @@ const ExamDashboard = () => {
             const today = `${year}-${month}-${day}`;
             
             const activeExams = res.data.filter((exam: ExamItem) => {
-                // 已過期訓練不顯示（不論是否已通過或提交成績）
-                if (exam.end_date && exam.end_date < today) return false;
+                // 已授權重考的過期計畫保留顯示（retake_authorized=true 例外）
+                if (exam.end_date && exam.end_date < today && !exam.retake_authorized) return false;
                 return true;
             });
             setExams(activeExams);
