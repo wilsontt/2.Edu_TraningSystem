@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Eye, Search } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, Search, Repeat } from 'lucide-react';
 import clsx from 'clsx';
 import { API_BASE_URL } from '../../api';
 import PlanHistoryModal from './PlanHistoryModal';
+import AuthorizeRetakeModal from '../exam/AuthorizeRetakeModal';
 import Pagination from '../common/Pagination';
 import { parseBackendDateTime } from '../../utils/date';
 import {
@@ -26,6 +27,7 @@ interface HistoryRecord {
   submit_time: string | null;
   duration: number | null; // 秒數
   attempts: number;
+  retake_authorized: boolean;
   emp_id?: string;
   name?: string;
   dept_name?: string;
@@ -55,6 +57,7 @@ interface PlanTrendData {
 interface PersonalScoreHistoryProps {
   empId?: string;
   titlePrefix?: string;
+  canAuthorizeRetake?: boolean;
 }
 
 interface DetailHistoryItem {
@@ -70,7 +73,7 @@ type TrendChartPoint = {
 
 type HistorySortKey = 'time' | 'score' | 'plan' | 'name' | 'dept' | 'attempts';
 
-export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalScoreHistoryProps) {
+export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeRetake = false }: PersonalScoreHistoryProps) {
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [plansData, setPlansData] = useState<Record<number, PlanTrendData>>({});
   const [selectedPlanIds, setSelectedPlanIds] = useState<Set<number>>(new Set());
@@ -83,6 +86,8 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
   const [keywordInput, setKeywordInput] = useState('');
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [authorizeTarget, setAuthorizeTarget] = useState<{ empId: string; planId: number; empName: string; planTitle: string } | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
 
   const fetchPlansHistory = async (records: HistoryRecord[]) => {
@@ -182,7 +187,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
   useEffect(() => {
     void fetchHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, order, page, pageSize, keyword, empId]);
+  }, [sortBy, order, page, pageSize, keyword, empId, refreshKey]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -487,16 +492,32 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
                       {record.attempts}
                     </td>
                     <td className="px-4 py-4 text-center">
-                      <button
-                        onClick={() => {
-                          setSelectedRecordId(record.record_id);
-                          setShowHistoryModal(true);
-                        }}
-                        className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        查看詳情
-                      </button>
+                      <div className="flex items-center justify-center flex-wrap gap-2">
+                        <button
+                          onClick={() => {
+                            setSelectedRecordId(record.record_id);
+                            setShowHistoryModal(true);
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          查看詳情
+                        </button>
+                        {canAuthorizeRetake && record.is_passed && !record.retake_authorized && (
+                          <button
+                            onClick={() => setAuthorizeTarget({
+                              empId: record.emp_id || empId || '',
+                              planId: record.plan_id,
+                              empName: record.name || titlePrefix || '',
+                              planTitle: record.plan_title,
+                            })}
+                            className="inline-flex items-center px-3 py-1.5 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors"
+                          >
+                            <Repeat className="h-4 w-4 mr-1" />
+                            開放重考
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -530,6 +551,21 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
             setSelectedRecordId(null);
           }}
           targetEmpId={empId}
+        />
+      )}
+
+      {/* 授權重考 Modal */}
+      {authorizeTarget && (
+        <AuthorizeRetakeModal
+          empId={authorizeTarget.empId}
+          planId={authorizeTarget.planId}
+          empName={authorizeTarget.empName}
+          planTitle={authorizeTarget.planTitle}
+          onSuccess={() => {
+            setAuthorizeTarget(null);
+            setRefreshKey(k => k + 1);
+          }}
+          onClose={() => setAuthorizeTarget(null)}
         />
       )}
     </div>

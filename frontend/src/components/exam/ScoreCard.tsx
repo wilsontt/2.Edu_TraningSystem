@@ -7,10 +7,11 @@ interface ScoreCardProps {
     score: number;
     totalScore: number;
     isPassed: boolean;
+    retakeAuthorized?: boolean;
     onClose: () => void;
 }
 
-const ScoreCard = ({ score, totalScore, isPassed, onClose }: ScoreCardProps) => {
+const ScoreCard = ({ score, totalScore, isPassed, retakeAuthorized = false, onClose }: ScoreCardProps) => {
     const count = useMotionValue(0);
     const rounded = useTransform(count, latest => Math.round(latest));
     const scoreColor = isPassed ? '#2563EB' : '#DC2626';
@@ -106,7 +107,7 @@ const ScoreCard = ({ score, totalScore, isPassed, onClose }: ScoreCardProps) => 
                             回考試首頁
                             <ArrowRight className="w-4 h-4" />
                         </button>
-                        {!isPassed && (
+                        {(!isPassed || retakeAuthorized) && (
                             <button 
                                 onClick={() => window.location.reload()} // 簡單重試Demo，理想情況應重置狀態
                                 className="w-full py-3 bg-white text-gray-700 border-2 border-gray-200 rounded-xl font-bold hover:bg-gray-50 hover:border-gray-300 transition-all flex items-center justify-center gap-2 active:scale-95"

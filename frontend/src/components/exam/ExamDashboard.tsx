@@ -75,7 +75,14 @@ const ExamDashboard = () => {
         switch (status) {
             case 'completed':
                 if (is_passed === true) {
-                    return <span className="px-3 py-1.5 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center gap-1.5 shadow-sm"><CheckCircle className="w-3.5 h-3.5" /> 已通過 ({score}分)</span>;
+                    return (
+                        <div className="flex flex-col items-end gap-1">
+                            <span className="px-3 py-1.5 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center gap-1.5 shadow-sm"><CheckCircle className="w-3.5 h-3.5" /> 已通過 ({score}分)</span>
+                            {exam.retake_authorized && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">已授權重考</span>
+                            )}
+                        </div>
+                    );
                 } else {
                     return <span className="px-3 py-1.5 rounded-full bg-red-100 text-red-700 text-xs font-bold flex items-center gap-1.5 shadow-sm"><AlertCircle className="w-3.5 h-3.5" /> 未通過 ({score}分)</span>;
                 }

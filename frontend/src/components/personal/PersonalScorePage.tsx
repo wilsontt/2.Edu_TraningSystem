@@ -65,6 +65,7 @@ export default function PersonalScorePage() {
   };
   const [isAdmin, setIsAdmin] = useState(false);
   const [hasReportPermission, setHasReportPermission] = useState(false);
+  const [canAuthorizeRetake, setCanAuthorizeRetake] = useState(false);
   const [selectedEmpId, setSelectedEmpId] = useState<string | null>(null);
   const [selectedEmpName, setSelectedEmpName] = useState('');
   const [selectedDeptName, setSelectedDeptName] = useState('');
@@ -119,6 +120,10 @@ export default function PersonalScorePage() {
           (hasMenuReport &&
             (user.role_scope_type === 'department' || user.role_scope_type === 'all'));
         setHasReportPermission(canViewTeamReport);
+
+        const userFunctions: string[] = Array.isArray(user.functions) ? user.functions : [];
+        const canAuthorize = user.role === 'Admin' || userFunctions.includes('btn:exam:authorize-retake');
+        setCanAuthorizeRetake(canAuthorize);
         
         // 如果是 Admin，載入使用者列表
         if (user.role === 'Admin') {
@@ -346,9 +351,9 @@ export default function PersonalScorePage() {
             onNavigateHistory={() => navigateTab('history')}
           />
         )}
-        {activeTab === 'history' && <PersonalScoreHistory empId={selectedEmpId || undefined} titlePrefix={titlePrefix} />}
+        {activeTab === 'history' && <PersonalScoreHistory empId={selectedEmpId || undefined} titlePrefix={titlePrefix} canAuthorizeRetake={canAuthorizeRetake} />}
         {activeTab === 'analysis' && <PersonalLearningAnalysis empId={selectedEmpId || undefined} titlePrefix={titlePrefix} />}
-        {activeTab === 'team' && hasReportPermission && <ReportDashboard />}
+        {activeTab === 'team' && hasReportPermission && <ReportDashboard canAuthorizeRetake={canAuthorizeRetake} />}
         {activeTab === 'batch-print' && hasReportPermission && <BatchPrintPage />}
       </div>
     </div>
