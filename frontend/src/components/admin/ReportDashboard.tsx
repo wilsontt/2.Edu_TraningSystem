@@ -11,6 +11,7 @@ import { Download, Users, FileText, CheckCircle, TrendingUp, AlertCircle, Refres
 import Pagination from '../common/Pagination';
 import ScorePrintFlow from '../common/ScorePrintFlow';
 import DeptMemberScoreModal from './DeptMemberScoreModal';
+import AuthorizeRetakeModal from '../exam/AuthorizeRetakeModal';
 import { parseBackendDateTime } from '../../utils/date';
 import { API_BASE_URL } from '../../api';
 import { useBatchPrint, BATCH_PRINT_INDIVIDUAL_WARN_THRESHOLD } from '../../hooks/useBatchPrint';
@@ -180,11 +181,13 @@ interface RetakeUser {
 interface DeptDetailRecord {
   emp_id?: string;
   name: string;
+  plan_id: number;
   plan_title: string;
   total_score: number;
   is_passed: boolean;
   submit_time?: string;
   dept_name?: string;
+  retake_authorized: boolean;
 }
 
 interface PlanDetailRecord {
@@ -207,7 +210,7 @@ const MEMBER_TABLE_COL_WIDTHS = {
   actions:      8,  // 操作（em 為單位；容納按鈕）
 } as const;
 
-export default function ReportDashboard() {
+export default function ReportDashboard({ canAuthorizeRetake = false }: { canAuthorizeRetake?: boolean }) {
   const [overview, setOverview] = useState<OverviewStats>({
     total_exams: 0,
     total_records: 0,
@@ -254,6 +257,7 @@ export default function ReportDashboard() {
   const [deptModalOpen, setDeptModalOpen] = useState(false);
   const [deptModalId, setDeptModalId] = useState(0);
   const [deptModalName, setDeptModalName] = useState('');
+  const [authorizeTarget, setAuthorizeTarget] = useState<{ empId: string; planId: number; empName: string; planTitle: string; deptId: number } | null>(null);
 
   // 成績列印頁籤：與頂層「批次列印」頁籤共用同一套資料層（避免兩入口邏輯分叉）
   const {
@@ -1393,16 +1397,35 @@ export default function ReportDashboard() {
                                                 {record.submit_time ? parseBackendDateTime(record.submit_time)?.toLocaleString('zh-TW', { hour12: false }) : '-'}
                                               </td>
                                               <td className="px-4 py-2 text-center whitespace-nowrap">
-                                                {record.emp_id && (
-                                                  <Link
-                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || (item as DepartmentStat).name || '')}`}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
-                                                  >
-                                                    <Eye className="h-3 w-3 mr-1" />
-                                                    查看個人成績
-                                                  </Link>
-                                                )}
+                                                <div className="flex items-center justify-center flex-wrap gap-2">
+                                                  {record.emp_id && (
+                                                    <Link
+                                                      to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || (item as DepartmentStat).name || '')}`}
+                                                      onClick={(e) => e.stopPropagation()}
+                                                      className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
+                                                    >
+                                                      <Eye className="h-3 w-3 mr-1" />
+                                                      查看個人成績
+                                                    </Link>
+                                                  )}
+                                                  {canAuthorizeRetake && record.is_passed && !record.retake_authorized && record.emp_id && (
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setAuthorizeTarget({
+                                                          empId: record.emp_id!,
+                                                          planId: record.plan_id,
+                                                          empName: record.name,
+                                                          planTitle: record.plan_title,
+                                                          deptId: itemId,
+                                                        });
+                                                      }}
+                                                      className="inline-flex items-center px-3 py-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
+                                                    >
+                                                      開放重考
+                                                    </button>
+                                                  )}
+                                                </div>
                                               </td>
                                             </tr>
                                           ))}
@@ -1780,6 +1803,32 @@ export default function ReportDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 授權重考 Modal */}
+      {authorizeTarget && (
+        <AuthorizeRetakeModal
+          empId={authorizeTarget.empId}
+          planId={authorizeTarget.planId}
+          empName={authorizeTarget.empName}
+          planTitle={authorizeTarget.planTitle}
+          onSuccess={() => {
+            const deptId = authorizeTarget.deptId;
+            setAuthorizeTarget(null);
+            // 清除快取以觸發重新抓取
+            setDeptDetails((prev) => {
+              const next = { ...prev };
+              delete next[deptId];
+              return next;
+            });
+            // 重新展開以觸發重新抓取
+            if (expandedDept === deptId) {
+              setExpandedDept(null);
+              setTimeout(() => setExpandedDept(deptId), 50);
+            }
+          }}
+          onClose={() => setAuthorizeTarget(null)}
+        />
       )}
     </div>
   );
