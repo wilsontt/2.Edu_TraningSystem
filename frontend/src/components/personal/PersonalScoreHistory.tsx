@@ -460,7 +460,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix }: PersonalSco
                     <td className="px-4 py-4 font-medium text-gray-900">{record.plan_title}</td>
                     <td className={clsx(
                       "px-4 py-4 text-right font-bold",
-                      record.score >= 60 ? "text-green-600" : "text-red-500"
+                      record.is_passed ? "text-green-600" : "text-red-500"
                     )}>
                       {record.score}
                     </td>

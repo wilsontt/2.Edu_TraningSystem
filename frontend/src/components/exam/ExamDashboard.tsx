@@ -18,6 +18,10 @@ interface ExamItem {
     score: number | null;
     total_points: number;
     attempts: number;
+    passing_score: number;        // 計畫設定的及格分數
+    is_passed: boolean | null;    // 是否通過（未交卷為 null）
+    can_start_exam: boolean;      // 後端統一計算：是否可開始/重考
+    retake_authorized: boolean;   // Phase 2 啟用，目前先為 false
 }
 
 const ExamDashboard = () => {
@@ -66,10 +70,11 @@ const ExamDashboard = () => {
         }
     };
 
-    const getStatusBadge = (status: string, score: number | null) => {
+    const getStatusBadge = (exam: ExamItem) => {
+        const { status, score, is_passed } = exam;
         switch (status) {
             case 'completed':
-                if (score !== null && score >= 60) {
+                if (is_passed === true) {
                     return <span className="px-3 py-1.5 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center gap-1.5 shadow-sm"><CheckCircle className="w-3.5 h-3.5" /> 已通過 ({score}分)</span>;
                 } else {
                     return <span className="px-3 py-1.5 rounded-full bg-red-100 text-red-700 text-xs font-bold flex items-center gap-1.5 shadow-sm"><AlertCircle className="w-3.5 h-3.5" /> 未通過 ({score}分)</span>;
@@ -148,18 +153,18 @@ const ExamDashboard = () => {
                         <div
                             key={exam.plan_id}
                             className={`bg-white p-4 sm:p-6 rounded-2xl shadow-sm border transition-all duration-200 group
-                                ${(exam.status === 'active' || (exam.status === 'completed' && (exam.score !== null && exam.score < 60))) ? 'border-indigo-100 hover:shadow-lg hover:shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50/20' : 'border-gray-100 opacity-80 grayscale-[0.3]'}
-                                ${(exam.status === 'completed' && (exam.score === null || exam.score >= 60)) ? 'bg-gray-50/50' : ''}
+                                ${(exam.status === 'active' || exam.can_start_exam) ? 'border-indigo-100 hover:shadow-lg hover:shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50/20' : 'border-gray-100 opacity-80 grayscale-[0.3]'}
+                                ${(!exam.can_start_exam && exam.is_passed) ? 'bg-gray-50/50' : ''}
                             `}
                         >
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-start gap-4 flex-1">
                                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg transition-all duration-200
-                                        ${(exam.status === 'active' || (exam.status === 'completed' && exam.score !== null && exam.score < 60)) ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-200' : 
+                                        ${(exam.status === 'active' || (exam.status === 'completed' && exam.can_start_exam)) ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-200' :
                                           exam.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}
                                     `}>
-                                        {(exam.status === 'active') ? 'Go' : 
-                                         (exam.status === 'completed' && exam.score !== null && exam.score < 60) ? <span className="text-xs">Retry</span> :
+                                        {(exam.status === 'active') ? 'Go' :
+                                         (exam.status === 'completed' && exam.can_start_exam) ? <span className="text-xs">Retry</span> :
                                          <BookOpen className="w-6 h-6" />}
                                     </div>
                                     <div className="flex-1">
@@ -170,7 +175,7 @@ const ExamDashboard = () => {
                                 </div>
                                 
                                 <div className="flex items-center gap-4">
-                                    {getStatusBadge(exam.status, exam.score)}
+                                    {getStatusBadge(exam)}
                                     {exam.status === 'active' && <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all duration-200" />}
                                 </div>
                             </div>
@@ -199,7 +204,7 @@ const ExamDashboard = () => {
                             )}
                             
                             {/* 可點擊區域 - 點擊卡片進入考試 */}
-                            {(exam.status === 'active' || (exam.status === 'completed' && (exam.score !== null && exam.score < 60))) && (
+                            {exam.can_start_exam && (
                                 <div 
                                     onClick={() => {
                                         void handleStartExam(exam.plan_id);
