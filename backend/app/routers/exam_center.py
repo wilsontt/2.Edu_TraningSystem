@@ -885,6 +885,7 @@ def get_personal_history(
         list_attempts_expr.label("attempts"),
         models.User.name.label("user_name"),
         models.Department.name.label("dept_name"),
+        models.ExamRecord.retake_authorized,
     ).join(
         models.TrainingPlan, models.ExamRecord.plan_id == models.TrainingPlan.id
     ).join(
@@ -948,6 +949,7 @@ def get_personal_history(
             "submit_time": r.submit_time.isoformat() if r.submit_time else None,
             "duration": round(duration, 0) if duration else None,  # 秒數
             "attempts": int(r.attempts or 0),
+            "retake_authorized": bool(r.retake_authorized or False),
             "emp_id": target_emp_id,
             "name": r.user_name or "",
             "dept_name": r.dept_name or "",
