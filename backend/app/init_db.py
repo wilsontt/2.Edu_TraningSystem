@@ -82,7 +82,17 @@ def init_db():
             if not func:
                 func = models.SystemFunction(name=f["name"], code=f["code"], path=f["path"], parent_id=f["parent_id"])
                 db.add(func)
-        
+
+        # 功能按鈕：授權重考（掛於成績中心之下）
+        btn_sub = [
+            {"name": "開放重考", "code": "btn:exam:authorize-retake", "path": None, "parent_id": db_functions["menu:report"].id},
+        ]
+        for f in btn_sub:
+            func = db.query(models.SystemFunction).filter(models.SystemFunction.code == f["code"]).first()
+            if not func:
+                func = models.SystemFunction(name=f["name"], code=f["code"], path=f["path"], parent_id=f["parent_id"])
+                db.add(func)
+
         db.commit()
         
         # 4. 配置角色權限 (Admin / 系統管理 擁有所有權限；User 擁有首頁與成績中心)

@@ -222,11 +222,13 @@ class ExamRecord(Base):
     start_time = Column(DateTime) # 開始作答時間
     submit_time = Column(DateTime) # 提交時間
     attempts = Column(Integer, default=1) # 作答次數
-    
+    retake_authorized = Column(Boolean, default=False)  # 已通過後是否已授權重考
+
     user = relationship("User", back_populates="exam_records")
     training_plan = relationship("TrainingPlan", back_populates="exam_records")
     details = relationship("ExamDetail", back_populates="record")
     history = relationship("ExamHistory", back_populates="exam_record")
+    retake_authorizations = relationship("ExamRetakeAuthorization", back_populates="exam_record")
 
 class ExamHistory(Base):
     """考試歷史軌跡：紀錄使用者多次作答的歷史快照"""
@@ -239,6 +241,21 @@ class ExamHistory(Base):
     details = Column(Text, nullable=True) # 該次作答的完整 JSON 快照
     
     exam_record = relationship("ExamRecord", back_populates="history")
+
+class ExamRetakeAuthorization(Base):
+    """考試重考授權紀錄：記錄誰在何時以何原因授權已通過學員重考"""
+    __tablename__ = "exam_retake_authorizations"
+    id = Column(Integer, primary_key=True, index=True)
+    record_id = Column(Integer, ForeignKey("exam_records.id"), nullable=False)
+    authorized_by = Column(String, nullable=False)     # 授權者 emp_id
+    authorized_at = Column(DateTime, nullable=False)
+    reason = Column(Text, nullable=False)               # 授權原因（必填）
+    consumed_at = Column(DateTime, nullable=True)       # 學員完成授權重考後填入
+    revoked_at = Column(DateTime, nullable=True)        # 撤銷時間
+    revoked_by = Column(String, nullable=True)          # 撤銷者 emp_id
+
+    exam_record = relationship("ExamRecord", back_populates="retake_authorizations")
+
 
 class ExamDetail(Base):
     """考試每題詳情：紀錄使用者對單一題目的答案與對錯"""
