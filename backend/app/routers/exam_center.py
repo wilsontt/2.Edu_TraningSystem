@@ -14,15 +14,11 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, case
 from typing import List, Optional
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
 from .. import models, schemas
 from ..database import get_db
 from .auth import get_current_user
 from ..access_scope import get_scope_emp_ids, is_active_user_status
-
-_TZ_TAIPEI = ZoneInfo("Asia/Taipei")
-
 
 def _training_plan_status_filter_expr_exam(status: str):
     """與 GET /training/plans、報表 overview 之 plan_status 語意一致。"""
@@ -43,9 +39,12 @@ def _training_plan_status_filter_expr_exam(status: str):
     return models.TrainingPlan.is_archived == True
 
 
-def _now_taipei_naive() -> datetime:
-    """業務時區 Asia/Taipei 的牆上時間（naive datetime），報到與交卷需一致。"""
-    return datetime.now(_TZ_TAIPEI).replace(tzinfo=None)
+def _now_utc_naive() -> datetime:
+    """
+    以 UTC 儲存 naive datetime。
+    前端 parseBackendDateTime() 會將無時區 datetime 視為 UTC（補 Z）後再轉本地時區顯示。
+    """
+    return datetime.utcnow()
 
 
 _ATTENDANCE_REQUIRED_MSG = "請先完成報到後再開始考試"
@@ -527,7 +526,7 @@ def submit_exam(
         models.ExamRecord.emp_id == current_user.emp_id
     ).first()
     
-    now = _now_taipei_naive()
+    now = _now_utc_naive()
 
     if existing_record:
         # Update existing record (Re-take)
@@ -666,7 +665,7 @@ def authorize_retake(
         raise HTTPException(status_code=400, detail="授權原因不可為空")
 
     # 寫入授權
-    now = _now_taipei_naive()
+    now = _now_utc_naive()
     record.retake_authorized = True
     auth_log = models.ExamRetakeAuthorization(
         record_id=record.id,
@@ -709,7 +708,7 @@ def revoke_retake(
     if not record.retake_authorized:
         raise HTTPException(status_code=400, detail="目前沒有待使用的重考授權可撤銷")
 
-    now = _now_taipei_naive()
+    now = _now_utc_naive()
     record.retake_authorized = False
 
     # 標記最新的未消耗授權為已撤銷
@@ -1556,7 +1555,7 @@ def check_in_attendance(
     attendance = models.AttendanceRecord(
         emp_id=current_user.emp_id,
         plan_id=plan_id,
-        checkin_time=_now_taipei_naive(),
+        checkin_time=_now_utc_naive(),
         ip_address=client_ip
     )
     

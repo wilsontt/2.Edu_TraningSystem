@@ -419,7 +419,7 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
             )}
             {resultMsg && <p className="text-xs text-green-600 font-bold">{resultMsg}</p>}
 
-            <div className="border-2 border-gray-100 rounded-xl divide-y divide-gray-100 max-h-48 overflow-y-auto">
+            <div className="border-2 border-gray-100 rounded-xl divide-y divide-gray-300 max-h-100 overflow-y-auto">
                 {materials.length === 0 ? (
                     <p className="text-xs text-gray-400 text-center py-4">尚無教材</p>
                 ) : (
