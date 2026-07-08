@@ -323,9 +323,10 @@ def get_my_exams(
             # 以 ExamHistory 筆數代表實際提交次數；舊資料無 history 時至少為 1
             attempts = history_count if history_count > 0 else 1
 
-        # 過濾已過期訓練（不論是否已通過或提交成績）
+        # 過濾已過期訓練（retake_authorized=True 時例外，允許已授權重考）
         if end_date and today > end_date:
-            continue
+            if not (record and getattr(record, 'retake_authorized', False)):
+                continue
 
         results.append(ExamListItem(
             plan_id=plan.id,
@@ -374,9 +375,9 @@ def start_exam(
     if today < plan.training_date:
         raise HTTPException(status_code=400, detail="Exam has not started yet.")
     if plan.end_date and today > plan.end_date:
-        # 如果是重考 (有紀錄且未通過)，則允許忽略結束日期進行補考
-        # 若是首次參加或已通過 (雖然已通過會被前面擋住)，則檢查過期
-        if not (record and not record.is_passed):
+        is_auto_retake = record is not None and not record.is_passed
+        is_authorized_retake = record is not None and getattr(record, 'retake_authorized', False)
+        if not (is_auto_retake or is_authorized_retake):
             raise HTTPException(status_code=400, detail="Exam has expired.")
 
     _require_attendance_record(db, current_user.emp_id, plan_id)
@@ -640,6 +641,10 @@ def authorize_retake(
     if not _can_view_emp_id(db, current_user, req.emp_id):
         raise HTTPException(status_code=403, detail="無權限操作此員工的考試紀錄")
 
+    # 防止自我授權（須由他人授權）
+    if req.emp_id == current_user.emp_id:
+        raise HTTPException(status_code=400, detail="不可授權自己重考，須由其他主管或稽核人員執行")
+
     # 業務驗證
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == req.plan_id).first()
     if not plan:
@@ -650,7 +655,7 @@ def authorize_retake(
     record = db.query(models.ExamRecord).filter(
         models.ExamRecord.emp_id == req.emp_id,
         models.ExamRecord.plan_id == req.plan_id,
-    ).first()
+    ).order_by(models.ExamRecord.id.desc()).first()
     if not record or record.submit_time is None:
         raise HTTPException(status_code=400, detail="該員工尚未完成此訓練計畫的考試")
     if not record.is_passed:
@@ -698,7 +703,7 @@ def revoke_retake(
     record = db.query(models.ExamRecord).filter(
         models.ExamRecord.emp_id == req.emp_id,
         models.ExamRecord.plan_id == req.plan_id,
-    ).first()
+    ).order_by(models.ExamRecord.id.desc()).first()
     if not record:
         raise HTTPException(status_code=404, detail="找不到考試紀錄")
     if not record.retake_authorized:
