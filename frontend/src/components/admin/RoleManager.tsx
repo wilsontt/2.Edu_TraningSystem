@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AxiosError } from 'axios';
 import { Plus, Shield, Check, X, Loader2, AlertCircle, PenTool, Trash2, Search } from 'lucide-react';
 import api from '../../api';
 import ConfirmModal from '../ConfirmModal';
+import Pagination from '../common/Pagination';
 import { isProtectedSystemRole } from '../../utils/authGuards';
 
 /** 角色資料結構 */
@@ -51,6 +52,8 @@ const RoleManager = () => {
   const [targetRoleId, setTargetRoleId] = useState<number | null>(null);
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);
   const [roleUsers, setRoleUsers] = useState<Array<{emp_id: string; name: string; role_id: number}>>([]);
+  const [memberPage, setMemberPage] = useState(1);
+  const [memberPageSize, setMemberPageSize] = useState(10);
   
   // 新增/編輯狀態
   const [isAdding, setIsAdding] = useState(false);
@@ -170,18 +173,25 @@ const RoleManager = () => {
   /** 顯示詳情 (成員或權限) */
   const handleShowDetail = async (role: Role, type: 'user' | 'function') => {
     setLoadingDetail(true);
+    setMemberPage(1);
     setDetailModal({ isOpen: true, title: `載入中...`, items: [], type, roleId: role.id, roleName: role.name });
     
     try {
         let items: string[] = [];
         if (type === 'user') {
-            // 取得該角色的使用者列表 (目前改用前端過濾，未來可改為後端API)
-            const res = await api.get('/admin/users');
-            const users = res.data.filter((u: { role_id: number; name: string; emp_id: string }) => u.role_id === role.id);
-            items = users.map((u: { name: string; emp_id: string }) => `${u.name} (${u.emp_id})`);
+            // 專用 API：僅在職成員（含管理帳號）
+            const res = await api.get<{
+              role_id: number;
+              role_name: string;
+              user_count: number;
+              users: Array<{emp_id: string; name: string; role_id: number}>;
+            }>(`/admin/roles/${role.id}/users`);
+            const users = res.data.users || [];
+            items = users.map((u) => `${u.name} (${u.emp_id})`);
             setRoleUsers(users);
-            // 預載入所有用戶列表（用於新增成員）
-            setAllUsers(res.data);
+            // 預載入所有用戶列表（新增成員用；含管理帳號、僅在職）
+            const allUsersRes = await api.get('/admin/users', { params: { trainees_only: false } });
+            setAllUsers(allUsersRes.data);
             // 一併載入部門/職務清單（用於新增成員時篩選）
             const [deptRes, jtRes] = await Promise.all([
               api
@@ -298,6 +308,24 @@ const RoleManager = () => {
     }
   };
 
+  // 成員清單分頁
+  const memberTotalPages = Math.max(1, Math.ceil(roleUsers.length / memberPageSize));
+  const memberStartIndex = (memberPage - 1) * memberPageSize;
+  const paginatedRoleUsers = useMemo(
+    () => roleUsers.slice(memberStartIndex, memberStartIndex + memberPageSize),
+    [roleUsers, memberStartIndex, memberPageSize]
+  );
+
+  useEffect(() => {
+    setMemberPage(1);
+  }, [memberPageSize]);
+
+  useEffect(() => {
+    if (memberPage > memberTotalPages) {
+      setMemberPage(memberTotalPages);
+    }
+  }, [memberPage, memberTotalPages]);
+
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -399,9 +427,16 @@ const RoleManager = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
             <div className="p-6 border-b border-indigo-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
-              <h3 className="text-lg font-black text-gray-900">
-                {detailModal.title}
-              </h3>
+              <div>
+                <h3 className="text-lg font-black text-gray-900">
+                  {detailModal.title}
+                </h3>
+                {detailModal.type === 'user' && !loadingDetail && (
+                  <p className="text-sm font-bold text-indigo-600/70 mt-0.5">
+                    共 {roleUsers.length} 位成員
+                  </p>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 {detailModal.type === 'user' && detailModal.roleId && (
                   <button
@@ -413,7 +448,7 @@ const RoleManager = () => {
                       if (allUsers.length === 0) {
                         setLoadingAllUsers(true);
                         api
-                          .get('/admin/users')
+                          .get('/admin/users', { params: { trainees_only: false } })
                           .then((res) => setAllUsers(res.data))
                           .finally(() => setLoadingAllUsers(false));
                       }
@@ -432,6 +467,7 @@ const RoleManager = () => {
                     setUserSearchTerm('');
                     setUserDepartmentFilter('');
                     setUserJobTitleFilter('');
+                    setMemberPage(1);
                   }}
                   className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
                 >
@@ -455,12 +491,17 @@ const RoleManager = () => {
                             <p className="text-gray-500 font-bold">目前無成員</p>
                           </div>
                         ) : (
-                          roleUsers.map((user: {emp_id: string; name: string; role_id: number}, uIdx: number) => (
+                          paginatedRoleUsers.map((user: {emp_id: string; name: string; role_id: number}, uIdx: number) => {
+                            const displayIndex = memberStartIndex + uIdx + 1;
+                            return (
                             <div
                               key={user.emp_id}
                               className={`flex items-center justify-between p-4 rounded-xl transition-all duration-200 group cursor-pointer hover:bg-indigo-50/50 ${uIdx % 2 === 0 ? 'bg-gray-100' : 'bg-white'}`}
                             >
                               <div className="flex items-center gap-4">
+                                <span className="w-8 text-center text-sm font-black text-indigo-400 tabular-nums">
+                                  {displayIndex}
+                                </span>
                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-sm">
                                   {user.name.charAt(0)}
                                 </div>
@@ -480,7 +521,8 @@ const RoleManager = () => {
                                 </button>
                               )}
                             </div>
-                          ))
+                            );
+                          })
                         )}
                     </div>
                 ) : (
@@ -493,6 +535,16 @@ const RoleManager = () => {
                     </div>
                 )}
             </div>
+            {detailModal.type === 'user' && roleUsers.length > 0 && (
+              <Pagination
+                currentPage={memberPage}
+                totalPages={memberTotalPages}
+                pageSize={memberPageSize}
+                totalItems={roleUsers.length}
+                onPageChange={setMemberPage}
+                onPageSizeChange={(size) => { setMemberPageSize(size); setMemberPage(1); }}
+              />
+            )}
             <div className="p-4 bg-gray-50 border-t border-gray-100">
               <button
                 type="button"
@@ -503,6 +555,7 @@ const RoleManager = () => {
                   setUserSearchTerm('');
                   setUserDepartmentFilter('');
                   setUserJobTitleFilter('');
+                  setMemberPage(1);
                 }}
                 className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
