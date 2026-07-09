@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, Date, DateTime, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Text, Boolean, Date, DateTime, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from .database import Base
 import datetime
@@ -335,6 +335,55 @@ class TeachingMaterial(Base):
     replaces_id = Column(Integer, ForeignKey("teaching_materials.id"), nullable=True)
 
     material_type = relationship("MaterialType")
+
+
+class TeachingMaterialSet(Base):
+    """教材套組主檔（Wave 2）：一標題可含多檔、可綁 0~N 個訓練計畫。
+    見教材 PLAN §5.12.2。無 set_plans 綁定 = 通用教材。"""
+    __tablename__ = "teaching_material_sets"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    material_type_id = Column(Integer, ForeignKey("material_types.id"), nullable=False)
+    description = Column(String, nullable=True)
+    tags = Column(Text, nullable=True)              # JSON 字串
+    year = Column(String, nullable=False)
+    uploaded_by = Column(String, nullable=False)     # emp_id
+    uploaded_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+    is_active = Column(Boolean, default=True, index=True)
+
+    material_type = relationship("MaterialType")
+    files = relationship("TeachingMaterialFile", back_populates="material_set")
+    set_plans = relationship("TeachingMaterialSetPlan", back_populates="material_set")
+
+
+class TeachingMaterialFile(Base):
+    """套組內檔案（Wave 2）：NAS 檔名依 id 命名，實體檔存於 NAS（見教材 PLAN §5.12.1）。"""
+    __tablename__ = "teaching_material_files"
+    id = Column(Integer, primary_key=True, index=True)
+    set_id = Column(Integer, ForeignKey("teaching_material_sets.id"), nullable=False, index=True)
+    original_filename = Column(String, nullable=False)
+    stored_filename = Column(String, nullable=False)
+    storage_path = Column(String, nullable=False)    # 相對 MATERIALS_ROOT；一律 `/` 邏輯路徑
+    file_format = Column(String, nullable=False)
+    file_size_bytes = Column(Integer, nullable=False)
+    uploaded_by = Column(String, nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+    is_active = Column(Boolean, default=True, index=True)
+    migrated_from_id = Column(Integer, nullable=True)  # 遷移溯源：舊 teaching_materials.id（冪等判斷用）
+
+    material_set = relationship("TeachingMaterialSet", back_populates="files")
+
+
+class TeachingMaterialSetPlan(Base):
+    """套組 ↔ 訓練計畫（M2M）；此表對某 set 無列 = 通用教材（見教材 PLAN §5.12.2）。"""
+    __tablename__ = "teaching_material_set_plans"
+    __table_args__ = (UniqueConstraint("set_id", "plan_id", name="uq_set_plan"),)
+    id = Column(Integer, primary_key=True, index=True)
+    set_id = Column(Integer, ForeignKey("teaching_material_sets.id"), nullable=False, index=True)
+    plan_id = Column(Integer, ForeignKey("training_plans.id"), nullable=False, index=True)
+
+    material_set = relationship("TeachingMaterialSet", back_populates="set_plans")
+    plan = relationship("TrainingPlan")
 
 
 class BackupScheduleConfig(Base):
