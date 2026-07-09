@@ -97,10 +97,12 @@ app.include_router(exam_center.router, prefix="/api")     # 考試中心 (作答
 from .routers import question_bank
 app.include_router(question_bank.router, prefix="/api")   # 全域題庫管理
 app.include_router(qrcode.router, prefix="/api")          # QRcode 生成相關
-from .routers import teaching_materials
-app.include_router(teaching_materials.router, prefix="/api")  # 教材庫 (上傳/搜尋/下載)
+# Wave2 套組路由須先於 Wave1 掛載：兩者共用 prefix，且皆有 POST /batch-download；
+# FastAPI 以先註冊者優先。過渡期 Wave2 使用 file_ids，Wave1 使用 ids；Task 15 cutover 後移除 Wave1。
 from .routers import teaching_material_sets
 app.include_router(teaching_material_sets.router, prefix="/api")  # 教材套組（Wave 2）
+from .routers import teaching_materials
+app.include_router(teaching_materials.router, prefix="/api")  # 教材庫 Wave1（上傳/搜尋/下載；Task 15 後僅留主檔/NAS）
 from .routers import backup
 app.include_router(backup.router, prefix="/api")          # 排程備份設定與紀錄
 

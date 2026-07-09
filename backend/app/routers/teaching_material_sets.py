@@ -481,3 +481,174 @@ def remove_set_file(
     mf.is_active = False
     db.commit()
     return {"message": "已移除（軟刪除）"}
+
+
+# ----------------------------------------------------------------
+# 列表（檔案檢視）／下載（單檔 / 批次 ZIP）
+# ----------------------------------------------------------------
+
+@router.get("/files", response_model=schemas.TeachingMaterialFileListOut)
+def list_files(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    keyword: Optional[str] = None,
+    material_type_id: Optional[int] = None,
+    file_format: Optional[str] = None,
+    plan_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    """教材庫檔案檢視：一列一檔案（教材 PLAN §5.12.4）。"""
+    q = db.query(models.TeachingMaterialFile).join(
+        models.TeachingMaterialSet, models.TeachingMaterialSet.id == models.TeachingMaterialFile.set_id
+    ).filter(
+        models.TeachingMaterialFile.is_active == True,  # noqa: E712
+        models.TeachingMaterialSet.is_active == True,  # noqa: E712
+    )
+    if keyword:
+        like = f"%{keyword}%"
+        plan_match_ids = db.query(models.TeachingMaterialSetPlan.set_id).join(
+            models.TrainingPlan, models.TrainingPlan.id == models.TeachingMaterialSetPlan.plan_id
+        ).filter(models.TrainingPlan.title.ilike(like))
+        q = q.filter(
+            models.TeachingMaterialFile.original_filename.ilike(like)
+            | models.TeachingMaterialSet.title.ilike(like)
+            | models.TeachingMaterialSet.description.ilike(like)
+            | models.TeachingMaterialSet.tags.ilike(like)
+            | models.TeachingMaterialFile.set_id.in_(plan_match_ids)
+        )
+    if material_type_id:
+        q = q.filter(models.TeachingMaterialSet.material_type_id == material_type_id)
+    if file_format:
+        q = q.filter(models.TeachingMaterialFile.file_format == file_format)
+    if plan_id:
+        bound_ids = db.query(models.TeachingMaterialSetPlan.set_id).filter(
+            models.TeachingMaterialSetPlan.plan_id == plan_id
+        )
+        q = q.filter(models.TeachingMaterialFile.set_id.in_(bound_ids))
+
+    total = q.count()
+    rows = q.order_by(desc(models.TeachingMaterialFile.uploaded_at)).offset((page - 1) * size).limit(size).all()
+    items = []
+    for f in rows:
+        plans = db.query(models.TrainingPlan).join(
+            models.TeachingMaterialSetPlan, models.TeachingMaterialSetPlan.plan_id == models.TrainingPlan.id
+        ).filter(models.TeachingMaterialSetPlan.set_id == f.set_id).all()
+        items.append({
+            "id": f.id, "set_id": f.set_id, "set_title": f.material_set.title,
+            "original_filename": f.original_filename, "file_format": f.file_format,
+            "file_size_bytes": f.file_size_bytes, "uploaded_by": f.uploaded_by,
+            "uploaded_at": f.uploaded_at, "is_active": f.is_active,
+            "plan_titles": [p.title for p in plans],
+        })
+    return {"items": items, "total": total, "page": page, "size": size, "total_pages": (total + size - 1) // size}
+
+
+@router.get("/files/{file_id}/download")
+def download_file(
+    file_id: int,
+    request: Request,
+    nas_session_token: Optional[str] = Query(None),
+    nas_username: Optional[str] = Query(None),
+    nas_password: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    mf = db.query(models.TeachingMaterialFile).filter(
+        models.TeachingMaterialFile.id == file_id,
+        models.TeachingMaterialFile.is_active == True,  # noqa: E712
+    ).first()
+    if not mf:
+        raise HTTPException(status_code=404, detail="檔案不存在或已停用")
+
+    emp_id = getattr(current_user, "emp_id", None)
+    client_ip = _client_ip(request)
+    plan_row = db.query(models.TeachingMaterialSetPlan).filter(
+        models.TeachingMaterialSetPlan.set_id == mf.set_id
+    ).first()
+    creds = _resolve_credentials(nas_session_token, nas_username, nas_password)
+    try:
+        with storage.connection(creds) as st:
+            data = st.open(mf.storage_path)
+    except storage.StorageUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"NAS 無法連線：{e}")
+    except storage.StorageError as e:
+        record_file_transfer(
+            emp_id=emp_id, client_ip=client_ip, action="download", resource_type="teaching_material",
+            status="failed", filename=mf.original_filename, plan_id=(plan_row.plan_id if plan_row else None),
+            resource_id=mf.id, nas_username=creds.username, error_message=str(e),
+        )
+        raise HTTPException(status_code=404, detail="檔案不存在或讀取失敗")
+
+    record_file_transfer(
+        emp_id=emp_id, client_ip=client_ip, action="download", resource_type="teaching_material",
+        status="success", filename=mf.original_filename, plan_id=(plan_row.plan_id if plan_row else None),
+        resource_id=mf.id, nas_username=creds.username, bytes_=len(data),
+    )
+    return Response(
+        content=data, media_type="application/octet-stream",
+        headers={"Content-Disposition": _content_disposition(mf.original_filename)},
+    )
+
+
+@router.post("/batch-download")
+def batch_download_files(
+    req: schemas.SetBatchDownloadRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    settings = get_settings()
+    emp_id = getattr(current_user, "emp_id", None)
+    client_ip = _client_ip(request)
+
+    if not req.file_ids:
+        raise HTTPException(status_code=400, detail="未選擇教材")
+    files = db.query(models.TeachingMaterialFile).filter(
+        models.TeachingMaterialFile.id.in_(req.file_ids),
+        models.TeachingMaterialFile.is_active == True,  # noqa: E712
+    ).all()
+    if not files:
+        raise HTTPException(status_code=400, detail="所選教材皆不可下載（已停用或不存在）")
+    if len(files) > settings.teaching_material_max_batch_download_count:
+        raise HTTPException(status_code=400, detail=f"批次下載最多 {settings.teaching_material_max_batch_download_count} 份")
+    total = sum(f.file_size_bytes or 0 for f in files)
+    if total > settings.teaching_material_max_batch_download_bytes:
+        raise HTTPException(status_code=400, detail="批次下載總量超過上限")
+
+    creds = _resolve_credentials(req.nas_session_token, req.nas_username, req.nas_password)
+    buf = io.BytesIO()
+    used_names: dict = {}
+    try:
+        with storage.connection(creds) as st:
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for f in files:
+                    try:
+                        data = st.open(f.storage_path)
+                    except storage.StorageError as e:
+                        record_file_transfer(
+                            emp_id=emp_id, client_ip=client_ip, action="download",
+                            resource_type="teaching_material", status="failed",
+                            filename=f.original_filename, resource_id=f.id,
+                            nas_username=creds.username, error_message=str(e),
+                        )
+                        continue
+                    name = f.original_filename
+                    if name in used_names:
+                        name = f"{f.id}_{name}"
+                    used_names[name] = True
+                    zf.writestr(name, data)
+                    record_file_transfer(
+                        emp_id=emp_id, client_ip=client_ip, action="download",
+                        resource_type="teaching_material", status="success",
+                        filename=f.original_filename, resource_id=f.id,
+                        nas_username=creds.username, bytes_=len(data),
+                    )
+    except storage.StorageUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"NAS 無法連線：{e}")
+
+    zip_name = f"teaching_materials_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    return Response(
+        content=buf.getvalue(), media_type="application/zip",
+        headers={"Content-Disposition": _content_disposition(zip_name)},
+    )
