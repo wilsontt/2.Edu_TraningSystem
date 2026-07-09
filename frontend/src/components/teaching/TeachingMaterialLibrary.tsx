@@ -1,65 +1,26 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Library, Search, Download, Trash2, Loader2, CheckSquare, Square, PackageOpen, Upload, FileText, AlertCircle, X, PenTool, Pencil } from 'lucide-react';
-import axios, { AxiosError, type AxiosProgressEvent } from 'axios';
+import { useState, useEffect, useCallback } from 'react';
+import { Library, Search, Download, Trash2, Loader2, CheckSquare, Square, PackageOpen, Upload, Pencil, PenTool, LayoutGrid, FileStack } from 'lucide-react';
+import { type AxiosError } from 'axios';
 import { PaginatedDataTable, type DataTableColumn } from '@shared-ui/data-table';
-import api from '../../api';
 import NasLoginModal from './NasLoginModal';
 import FileTransferModal from './FileTransferModal';
-import { saveBlob, idleTransfer, type TransferState, mergeSelectedFiles, buildMaterialAccept, IN_FLIGHT_PROGRESS_CAP } from './transfer';
+import { saveBlob, buildMaterialAccept } from './transfer';
 import { useMaterialFileFormats } from '../../hooks/useMaterialFileFormats';
-
-interface MaterialType {
-    id: number;
-    name: string;
-    slug: string;
-    is_active?: boolean;
-}
-
-interface Material {
-    id: number;
-    plan_id: number | null;
-    title: string;
-    material_type_id: number;
-    description: string | null;
-    original_filename: string;
-    file_format: string;
-    file_size_bytes: number;
-    year: string;
-    uploaded_at: string;
-    tags: string | null;
-}
-
-interface UploadResult {
-    succeeded: { id: number; original_filename: string }[];
-    failed: { original_filename: string; reason: string }[];
-}
-
-interface ConflictItem {
-    filename: string;
-    existing: { id: number; title: string; original_filename: string } | null;
-}
-
-type ConflictPolicy = 'deactivate_and_new' | 'replace_in_place';
-
-interface MaterialList {
-    items: Material[];
-    total: number;
-    page: number;
-    size: number;
-    total_pages: number;
-}
+import { useNasTransfer } from '../../hooks/useNasTransfer';
+import MaterialSetUploadPanel from './MaterialSetUploadPanel';
+import MaterialSetEditPanel from './MaterialSetEditPanel';
+import {
+    fetchMaterialTypes, fetchPlanOptions, fetchSets, fetchFiles, fetchSetDetail,
+    deleteSet, downloadFile, batchDownloadFiles,
+} from '../../api/teachingMaterials';
+import type { MaterialType, MaterialSet, MaterialFileListItem, PlanOption } from '../../types/materials';
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
 const TAG_PALETTE = [
-    'bg-indigo-100 text-indigo-700',
-    'bg-emerald-100 text-emerald-700',
-    'bg-amber-100 text-amber-700',
-    'bg-rose-100 text-rose-700',
-    'bg-sky-100 text-sky-700',
-    'bg-violet-100 text-violet-700',
-    'bg-teal-100 text-teal-700',
-    'bg-orange-100 text-orange-700',
+    'bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700',
+    'bg-rose-100 text-rose-700', 'bg-sky-100 text-sky-700', 'bg-violet-100 text-violet-700',
+    'bg-teal-100 text-teal-700', 'bg-orange-100 text-orange-700',
 ];
 const parseTags = (raw: string | null): string[] => {
     if (!raw) return [];
@@ -68,236 +29,131 @@ const parseTags = (raw: string | null): string[] => {
 const tagColorClass = (tag: string): string =>
     TAG_PALETTE[tag.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % TAG_PALETTE.length];
 
+type ViewMode = 'set' | 'file';
+type SelectedEntry = { original_filename: string; set_title: string };
+
 interface TeachingMaterialLibraryProps {
-    /** 提供時，於標頭顯示「返回考卷工坊」按鈕（教材庫掛載於考卷工坊頁籤內時使用）。 */
     onBack?: () => void;
 }
 
 const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) => {
     const { allowedExts } = useMaterialFileFormats();
     const materialAccept = buildMaterialAccept(allowedExts);
-    const [items, setItems] = useState<Material[]>([]);
+    const nas = useNasTransfer();
+
+    const [view, setView] = useState<ViewMode>('set');
+    const [setItems, setSetItems] = useState<MaterialSet[]>([]);
+    const [fileItems, setFileItems] = useState<MaterialFileListItem[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [size, setSize] = useState(20);
     const [types, setTypes] = useState<MaterialType[]>([]);
+    const [planOptions, setPlanOptions] = useState<PlanOption[]>([]);
 
     const [keyword, setKeyword] = useState('');
     const [materialTypeId, setMaterialTypeId] = useState('');
     const [fileFormat, setFileFormat] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // 跨頁勾選：id -> 顯示資訊
-    const [selected, setSelected] = useState<Map<number, { original_filename: string; title: string }>>(new Map());
-
-    const [nasOpen, setNasOpen] = useState(false);
-    const [nasPurpose, setNasPurpose] = useState('');
-    const [transfer, setTransfer] = useState<TransferState>(idleTransfer);
-    const abortRef = useRef<AbortController | null>(null);
-    const pendingActionRef = useRef<((token: string) => void) | null>(null);
+    const [selected, setSelected] = useState<Map<number, SelectedEntry>>(new Map());
     const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
 
-    // 通用上傳（不綁定訓練計畫）
     const [uploadOpen, setUploadOpen] = useState(false);
-    const [uploadTypeId, setUploadTypeId] = useState('');
-    const [uploadTitle, setUploadTitle] = useState('');
-    const [uploadDesc, setUploadDesc] = useState('');
-    const [uploadTags, setUploadTags] = useState('');
-    const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-    const [uploadFileKey, setUploadFileKey] = useState(0);
-    const [uploadError, setUploadError] = useState<string | null>(null);
-    const [uploadResultMsg, setUploadResultMsg] = useState<string | null>(null);
-    const [uploadBusy, setUploadBusy] = useState(false);
-    const [uploadConflicts, setUploadConflicts] = useState<ConflictItem[]>([]);
-    const [uploadConflictOpen, setUploadConflictOpen] = useState(false);
-
-    // 編輯教材
-    const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
-    const [editTypeId, setEditTypeId]     = useState('');
-    const [editTitle, setEditTitle]       = useState('');
-    const [editDesc, setEditDesc]         = useState('');
-    const [editTags, setEditTags]         = useState('');
-    const [editFile, setEditFile]         = useState<File | null>(null);
-    const [editFileKey, setEditFileKey]   = useState(0);
-    const [editBusy, setEditBusy]         = useState(false);
-    const [editError, setEditError]       = useState<string | null>(null);
+    const [editingSetId, setEditingSetId] = useState<number | null>(null);
+    const [editingSet, setEditingSet] = useState<MaterialSet | null>(null);
 
     const fetchList = useCallback(async () => {
         setLoading(true);
         try {
-            const params: Record<string, string | number> = { page, size };
-            if (keyword) params.keyword = keyword;
-            if (materialTypeId) params.material_type_id = materialTypeId;
-            if (fileFormat) params.file_format = fileFormat;
-            const res = await api.get<MaterialList>('/admin/teaching-materials/', { params });
-            setItems(res.data.items);
-            setTotal(res.data.total);
+            const params = { page, size, keyword: keyword || undefined, material_type_id: materialTypeId || undefined, file_format: fileFormat || undefined };
+            if (view === 'set') {
+                const res = await fetchSets(params);
+                setSetItems(res.items);
+                setTotal(res.total);
+            } else {
+                const res = await fetchFiles(params);
+                setFileItems(res.items);
+                setTotal(res.total);
+            }
         } catch (err) {
             console.error('載入教材庫失敗', err);
         } finally {
             setLoading(false);
         }
-    }, [page, size, keyword, materialTypeId, fileFormat]);
+    }, [view, page, size, keyword, materialTypeId, fileFormat]);
 
-    useEffect(() => {
-        api.get<MaterialType[]>('/admin/teaching-materials/material-types').then(r => setTypes(r.data)).catch(() => {});
-    }, []);
+    useEffect(() => { fetchMaterialTypes().then(setTypes).catch(() => {}); }, []);
+    useEffect(() => { fetchPlanOptions().then(setPlanOptions).catch(() => {}); }, []);
     useEffect(() => { fetchList(); }, [fetchList]);
 
-    const toggle = (m: Material) => {
+    useEffect(() => {
+        if (editingSetId == null) { setEditingSet(null); return; }
+        fetchSetDetail(editingSetId).then(setEditingSet).catch(() => setEditingSet(null));
+    }, [editingSetId]);
+
+    const onSearch = () => { setPage(1); fetchList(); };
+    const switchView = (v: ViewMode) => { setView(v); setPage(1); setSelected(new Map()); };
+
+    const toggleFile = (fileId: number, entry: SelectedEntry) => {
         setSelected(prev => {
             const next = new Map(prev);
-            if (next.has(m.id)) next.delete(m.id);
-            else next.set(m.id, { original_filename: m.original_filename, title: m.title });
+            if (next.has(fileId)) next.delete(fileId); else next.set(fileId, entry);
             return next;
         });
     };
 
-    const allOnPageSelected = items.length > 0 && items.every(m => selected.has(m.id));
-    const toggleSelectAllOnPage = () => {
+    /** 套組檢視下勾選整列：需先取得該套組使用中檔案清單（一次性抓詳情）。 */
+    const toggleSet = async (s: MaterialSet) => {
+        const detail = s.files ? s : await fetchSetDetail(s.id);
+        const fileIds = (detail.files ?? []).map(f => f.id);
+        const allSelected = fileIds.length > 0 && fileIds.every(id => selected.has(id));
         setSelected(prev => {
             const next = new Map(prev);
-            if (allOnPageSelected) {
-                items.forEach(m => next.delete(m.id));
-            } else {
-                items.forEach(m => next.set(m.id, { original_filename: m.original_filename, title: m.title }));
-            }
+            (detail.files ?? []).forEach(f => {
+                if (allSelected) next.delete(f.id);
+                else next.set(f.id, { original_filename: f.original_filename, set_title: detail.title });
+            });
             return next;
         });
     };
 
-    const requireNas = (purpose: string, action: (token: string) => void) => {
-        pendingActionRef.current = action;
-        setNasPurpose(purpose);
-        setNasOpen(true);
-    };
-    const onNasSuccess = (token: string) => {
-        setNasOpen(false);
-        const a = pendingActionRef.current;
-        pendingActionRef.current = null;
-        a?.(token);
-    };
-
-    const closeTransfer = () => setTransfer(idleTransfer);
-    const cancelTransfer = () => { abortRef.current?.abort(); setTransfer(idleTransfer); };
-    const onProgress = (e: AxiosProgressEvent) =>
-        setTransfer(s => (s.open ? { ...s, progress: e.total ? Math.min(IN_FLIGHT_PROGRESS_CAP, Math.round((e.loaded / e.total) * 100)) : s.progress } : s));
-    const isCancel = (err: unknown) => axios.isCancel(err) || (err as { code?: string })?.code === 'ERR_CANCELED';
-
-    const doSingleDownload = async (token: string, m: Material) => {
-        const ctrl = new AbortController();
-        abortRef.current = ctrl;
-        setTransfer({ open: true, title: `下載 ${m.original_filename}`, progress: 0, status: 'transferring', error: null });
-        try {
-            const res = await api.get(`/admin/teaching-materials/${m.id}/download`, {
-                params: { nas_session_token: token }, responseType: 'blob', signal: ctrl.signal, onDownloadProgress: onProgress,
-            });
-            saveBlob(res.data as Blob, m.original_filename);
-            setTransfer(s => ({ ...s, progress: 100, status: 'success' }));
-        } catch (err) {
-            if (isCancel(err)) return;
-            const e2 = err as AxiosError;
-            setTransfer(s => ({ ...s, status: 'error', error: e2.response?.status === 503 ? 'NAS 無法連線' : '下載失敗' }));
-        } finally { abortRef.current = null; }
-    };
-
-    const doBatchDownload = async (token: string) => {
-        const ids = Array.from(selected.keys());
-        const ctrl = new AbortController();
-        abortRef.current = ctrl;
-        setTransfer({ open: true, title: `批次下載 ${ids.length} 份`, progress: 0, status: 'transferring', error: null });
-        try {
-            const res = await api.post('/admin/teaching-materials/batch-download',
-                { ids, nas_session_token: token },
-                { responseType: 'blob', signal: ctrl.signal, onDownloadProgress: onProgress },
-            );
-            const ts = new Date().toISOString().slice(0, 19).replace(/[:T-]/g, '');
-            saveBlob(res.data as Blob, `teaching_materials_${ts}.zip`);
-            setTransfer(s => ({ ...s, progress: 100, status: 'success' }));
-            setSelected(new Map());
-        } catch (err) {
-            if (isCancel(err)) return;
-            const e2 = err as AxiosError;
-            setTransfer(s => ({ ...s, status: 'error', error: e2.response?.status === 503 ? 'NAS 無法連線' : '批次下載失敗' }));
-        } finally { abortRef.current = null; }
-    };
-
-    const doUpload = async (token: string, onConflict?: ConflictPolicy) => {
-        const fd = new FormData();
-        fd.append('material_type_id', uploadTypeId);
-        // 標題為單筆欄位，多檔批次上傳時套用同一標題沒有意義，僅單檔時套用
-        if (uploadTitle && uploadFiles.length === 1) fd.append('title', uploadTitle);
-        if (uploadDesc) fd.append('description', uploadDesc);
-        if (uploadTags) fd.append('tags', uploadTags);
-        if (onConflict) fd.append('on_conflict', onConflict);
-        fd.append('nas_session_token', token);
-        uploadFiles.forEach(f => fd.append('files', f));
-
-        const ctrl = new AbortController();
-        abortRef.current = ctrl;
-        setTransfer({ open: true, title: '上傳教材', progress: 0, status: 'transferring', error: null });
-        try {
-            const res = await api.post<UploadResult>('/admin/teaching-materials/upload', fd, {
-                signal: ctrl.signal, onUploadProgress: onProgress,
-            });
-            setTransfer(s => ({ ...s, progress: 100, status: 'success' }));
-            const r = res.data;
-            const failMsg = r.failed.length
-                ? `，失敗 ${r.failed.length} 筆：${r.failed.map(f => `${f.original_filename}（${f.reason}）`).join('、')}`
-                : '';
-            setUploadResultMsg(`成功上傳 ${r.succeeded.length} 筆${failMsg}`);
-            setUploadFiles([]);
-            setUploadFileKey(k => k + 1);
-            setUploadTypeId('');
-            setUploadTitle('');
-            setUploadDesc('');
-            setUploadTags('');
-            setPage(1);
-            fetchList();
-        } catch (err) {
-            if (isCancel(err)) return;
-            const e2 = err as AxiosError<{ detail: string }>;
-            setTransfer(s => ({ ...s, status: 'error', error: e2.response?.data?.detail || (e2.response?.status === 503 ? 'NAS 無法連線' : '上傳失敗') }));
-        } finally { abortRef.current = null; }
-    };
-
-    const handleUploadClick = async () => {
-        setUploadError(null);
-        setUploadResultMsg(null);
-        if (!uploadTypeId) { setUploadError('請選擇教材類型'); return; }
-        if (uploadFiles.length === 0) { setUploadError('請選擇檔案'); return; }
-        setUploadBusy(true);
-        try {
-            const found: ConflictItem[] = [];
-            for (const f of uploadFiles) {
-                const res = await api.get<{ has_conflict: boolean; existing: ConflictItem['existing'] }>(
-                    '/admin/teaching-materials/conflict-check',
-                    { params: { original_filename: f.name } },
-                );
-                if (res.data.has_conflict) found.push({ filename: f.name, existing: res.data.existing });
+    const doSingleDownload = (fileId: number, filename: string) => {
+        nas.requireNas('下載教材', async token => {
+            const signal = nas.beginTransfer(`下載 ${filename}`);
+            try {
+                const res = await downloadFile(fileId, token, { signal, onDownloadProgress: nas.onProgress });
+                saveBlob(res.data as Blob, filename);
+                nas.endTransferSuccess();
+            } catch (err) {
+                if (nas.isCancel(err)) return;
+                const e2 = err as AxiosError;
+                nas.endTransferError(e2.response?.status === 503 ? 'NAS 無法連線' : '下載失敗');
             }
-            if (found.length > 0) {
-                setUploadConflicts(found);
-                setUploadConflictOpen(true);
-                return;
+        });
+    };
+
+    const doBatchDownload = () => {
+        const fileIds = Array.from(selected.keys());
+        nas.requireNas('批次下載', async token => {
+            const signal = nas.beginTransfer(`批次下載 ${fileIds.length} 份`);
+            try {
+                const res = await batchDownloadFiles(fileIds, token, { signal, onDownloadProgress: nas.onProgress });
+                const ts = new Date().toISOString().slice(0, 19).replace(/[:T-]/g, '');
+                saveBlob(res.data as Blob, `teaching_materials_${ts}.zip`);
+                nas.endTransferSuccess();
+                setSelected(new Map());
+            } catch (err) {
+                if (nas.isCancel(err)) return;
+                const e2 = err as AxiosError;
+                nas.endTransferError(e2.response?.status === 503 ? 'NAS 無法連線' : '批次下載失敗');
             }
-            requireNas('上傳教材', token => doUpload(token));
-        } catch (err) {
-            const e2 = err as AxiosError<{ detail: string }>;
-            setUploadError(e2.response?.data?.detail || '衝突檢查失敗');
-        } finally { setUploadBusy(false); }
+        });
     };
 
-    const resolveUploadConflict = (policy: ConflictPolicy) => {
-        setUploadConflictOpen(false);
-        requireNas('上傳教材', token => doUpload(token, policy));
-    };
-
-    const handleDelete = async (m: Material) => {
-        if (!confirm(`確定停用教材「${m.original_filename}」？（軟刪除）`)) return;
+    const handleDeleteSet = async (s: MaterialSet) => {
+        if (!confirm(`確定停用套組「${s.title}」？（軟刪除，實體檔保留）`)) return;
         try {
-            await api.delete(`/admin/teaching-materials/${m.id}`);
-            setSelected(prev => { const n = new Map(prev); n.delete(m.id); return n; });
+            await deleteSet(s.id);
             fetchList();
         } catch (err) {
             const e2 = err as AxiosError<{ detail: string }>;
@@ -305,141 +161,94 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
         }
     };
 
-    const startEdit = (m: Material) => {
-        setEditingMaterial(m);
-        setUploadOpen(false);
-        setEditTypeId(String(m.material_type_id));
-        setEditTitle(m.title);
-        setEditDesc(m.description ?? '');
-        setEditTags(parseTags(m.tags).join(', '));
-        setEditFile(null);
-        setEditFileKey(k => k + 1);
-        setEditError(null);
-    };
-    const cancelEdit = () => { setEditingMaterial(null); setEditError(null); };
-
-    const handleSaveEdit = async () => {
-        if (!editingMaterial) return;
-        if (!editTypeId) { setEditError('請選擇教材類型'); return; }
-        setEditError(null);
-
-        if (editFile) {
-            requireNas('替換教材', async (token) => {
-                setEditBusy(true);
-                const fd = new FormData();
-                fd.append('material_type_id', editTypeId);
-                if (editTitle) fd.append('title', editTitle);
-                if (editDesc) fd.append('description', editDesc);
-                if (editTags) fd.append('tags', editTags);
-                fd.append('nas_session_token', token);
-                fd.append('files', editFile);
-                const ctrl = new AbortController();
-                abortRef.current = ctrl;
-                setTransfer({ open: true, title: '替換教材檔案', progress: 0, status: 'transferring', error: null });
-                try {
-                    await api.post(
-                        `/admin/teaching-materials/${editingMaterial.id}/replace-file`,
-                        fd,
-                        { signal: ctrl.signal, onUploadProgress: onProgress },
-                    );
-                    setTransfer(s => ({ ...s, progress: 100, status: 'success' }));
-                    cancelEdit();
-                    fetchList();
-                } catch (err) {
-                    if (isCancel(err)) return;
-                    const e2 = err as AxiosError<{ detail: string }>;
-                    setTransfer(s => ({ ...s, status: 'error', error: e2.response?.data?.detail || '替換失敗' }));
-                } finally {
-                    setEditBusy(false);
-                    abortRef.current = null;
-                }
-            });
-        } else {
-            setEditBusy(true);
-            try {
-                const tagsArray = editTags.split(',').map(t => t.trim()).filter(Boolean);
-                await api.put(`/admin/teaching-materials/${editingMaterial.id}`, {
-                    material_type_id: Number(editTypeId),
-                    title: editTitle || undefined,
-                    description: editDesc || null,
-                    tags: tagsArray.length ? tagsArray : null,
-                });
-                cancelEdit();
-                fetchList();
-            } catch (err) {
-                const e2 = err as AxiosError<{ detail: string }>;
-                setEditError(e2.response?.data?.detail || '儲存失敗');
-            } finally {
-                setEditBusy(false);
-            }
-        }
+    const refreshAfterEdit = () => {
+        fetchList();
+        if (editingSetId != null) fetchSetDetail(editingSetId).then(setEditingSet).catch(() => {});
     };
 
-    const onSearch = () => { setPage(1); fetchList(); };
-
-    const columns: DataTableColumn<Material>[] = [
+    const setColumns: DataTableColumn<MaterialSet>[] = [
         {
-            key: 'select',
-            header: (
-                <button type="button" onClick={toggleSelectAllOnPage} className="text-indigo-600 cursor-pointer" title="全選／取消全選（本頁）">
-                    {allOnPageSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}
-                </button>
-            ),
-            width: 40,
-            render: m => (
-                <button type="button" onClick={() => toggle(m)} className="text-indigo-600 cursor-pointer">
-                    {selected.has(m.id) ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}
+            key: 'select', header: '', width: 40,
+            render: s => (
+                <button type="button" onClick={() => toggleSet(s)} className="text-indigo-600 cursor-pointer">
+                    {(s.files ?? []).length > 0 && (s.files ?? []).every(f => selected.has(f.id))
+                        ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}
                 </button>
             ),
         },
         {
-            key: 'title',
-            header: '標題 / 原檔名',
-            render: m => (
+            key: 'title', header: '標題',
+            render: s => (
                 <>
-                    <div className="text-sm font-bold text-gray-800 truncate max-w-[280px]">{m.title}</div>
-                    <div className="text-xs text-gray-400 truncate max-w-[280px]">{m.original_filename}</div>
-                    {parseTags(m.tags).length > 0 && (
+                    <div className="text-sm font-bold text-gray-800 truncate max-w-[280px]">{s.title}</div>
+                    {s.description && <div className="text-xs text-gray-400 truncate max-w-[280px]">{s.description}</div>}
+                    {parseTags(s.tags).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-0.5">
-                            {parseTags(m.tags).map(tag => (
-                                <span key={tag} className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${tagColorClass(tag)}`}>
-                                    {tag}
-                                </span>
+                            {parseTags(s.tags).map(tag => (
+                                <span key={tag} className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${tagColorClass(tag)}`}>{tag}</span>
                             ))}
                         </div>
                     )}
                 </>
             ),
         },
+        { key: 'type', header: '類型', render: s => <span className="text-sm text-gray-600">{types.find(t => t.id === s.material_type_id)?.name || '-'}</span> },
         {
-            key: 'type',
-            header: '類型',
-            render: m => <span className="text-sm text-gray-600">{types.find(t => t.id === m.material_type_id)?.name || '-'}</span>,
+            key: 'plans', header: '計畫',
+            render: s => s.plan_titles.length > 0
+                ? <span className="text-sm text-gray-600">{s.plan_titles.join('、')}</span>
+                : <span className="text-sm text-gray-400">通用</span>,
         },
+        { key: 'file_count', header: '檔案數', render: s => <span className="text-sm text-gray-600">{s.file_count}</span> },
         {
-            key: 'plan',
-            header: '計畫',
-            render: m => <span className="text-sm text-gray-600">{m.plan_id != null ? `#${m.plan_id}` : <span className="text-gray-400">通用</span>}</span>,
-        },
-        {
-            key: 'size',
-            header: '大小',
-            render: m => <span className="text-sm text-gray-600">{fmtSize(m.file_size_bytes)}</span>,
-        },
-        {
-            key: 'actions',
-            header: '操作',
-            render: m => (
+            key: 'actions', header: '操作',
+            render: s => (
                 <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => startEdit(m)}
-                        className="p-1.5 text-gray-500 hover:bg-gray-100 rounded cursor-pointer" title="編輯">
+                    <button type="button" onClick={() => setEditingSetId(s.id)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded cursor-pointer" title="編輯">
                         <Pencil className="w-4 h-4" />
                     </button>
-                    <button type="button" onClick={() => requireNas('下載教材', token => doSingleDownload(token, m))} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer" title="下載">
-                        <Download className="w-4 h-4" />
-                    </button>
-                    <button type="button" onClick={() => handleDelete(m)} className="p-1.5 text-red-500 hover:bg-red-50 rounded cursor-pointer" title="停用">
+                    <button type="button" onClick={() => handleDeleteSet(s)} className="p-1.5 text-red-500 hover:bg-red-50 rounded cursor-pointer" title="停用">
                         <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
+            ),
+        },
+    ];
+
+    const fileColumns: DataTableColumn<MaterialFileListItem>[] = [
+        {
+            key: 'select', header: '', width: 40,
+            render: f => (
+                <button type="button" onClick={() => toggleFile(f.id, { original_filename: f.original_filename, set_title: f.set_title })} className="text-indigo-600 cursor-pointer">
+                    {selected.has(f.id) ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}
+                </button>
+            ),
+        },
+        {
+            key: 'filename', header: '檔名 / 所屬套組',
+            render: f => (
+                <>
+                    <div className="text-sm font-bold text-gray-800 truncate max-w-[280px]">{f.original_filename}</div>
+                    <div className="text-xs text-gray-400 truncate max-w-[280px]">{f.set_title}</div>
+                </>
+            ),
+        },
+        {
+            key: 'plans', header: '計畫',
+            render: f => f.plan_titles.length > 0
+                ? <span className="text-sm text-gray-600">{f.plan_titles.join('、')}</span>
+                : <span className="text-sm text-gray-400">通用</span>,
+        },
+        { key: 'size', header: '大小', render: f => <span className="text-sm text-gray-600">{fmtSize(f.file_size_bytes)}</span> },
+        {
+            key: 'actions', header: '操作',
+            render: f => (
+                <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => setEditingSetId(f.set_id)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded cursor-pointer" title="編輯所屬套組">
+                        <Pencil className="w-4 h-4" />
+                    </button>
+                    <button type="button" onClick={() => doSingleDownload(f.id, f.original_filename)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer" title="下載">
+                        <Download className="w-4 h-4" />
                     </button>
                 </div>
             ),
@@ -460,199 +269,50 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                 </div>
                 <div className="flex items-center gap-2">
                     {onBack && (
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-sm font-bold hover:bg-indigo-50 cursor-pointer"
-                        >
+                        <button type="button" onClick={onBack} className="flex items-center gap-1.5 px-4 py-2 bg-white text-indigo-600 border border-indigo-200 rounded-lg text-sm font-bold hover:bg-indigo-50 cursor-pointer">
                             <PenTool className="w-4 h-4" /> 返回考卷工坊
                         </button>
                     )}
-                    <button
-                        type="button"
-                        onClick={() => setUploadOpen(o => !o)}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 cursor-pointer"
-                    >
-                        <Upload className="w-4 h-4" /> 上傳教材
+                    <button type="button" onClick={() => setUploadOpen(o => !o)} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 cursor-pointer">
+                        <Upload className="w-4 h-4" /> 新增教材套組
                     </button>
                 </div>
             </header>
 
-            {/* 通用上傳（不綁定訓練計畫） */}
             {uploadOpen && (
-                <div className="bg-white p-4 rounded-2xl shadow-sm border-2 border-indigo-100 space-y-3">
-                    <label className="text-xs font-bold text-gray-500 uppercase">上傳教材（通用，不綁定任何訓練計畫；上傳前須 NAS 登入）</label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <select
-                            value={uploadTypeId}
-                            onChange={e => setUploadTypeId(e.target.value)}
-                            className="px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500"
-                        >
-                            <option value="">選擇教材類型…</option>
-                            {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                        <div className="flex items-start gap-2">
-                            <label className="flex items-center gap-2 px-3 py-2 border-2 border-dashed border-indigo-300 bg-white rounded-lg text-sm font-bold text-indigo-600 hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer transition-colors shrink-0">
-                                <FileText className="w-4 h-4 shrink-0" />
-                                <span className="truncate">{uploadFiles.length > 0 ? `已選 ${uploadFiles.length} 個檔案` : '選擇檔案…'}</span>
-                                <input
-                                    key={uploadFileKey}
-                                    type="file"
-                                    multiple
-                                    accept={materialAccept}
-                                    onChange={e => {
-                                        const picked = e.target.files ? Array.from(e.target.files) : [];
-                                        const { merged, rejected, overflow } = mergeSelectedFiles(uploadFiles, picked, allowedExts);
-                                        setUploadFiles(merged);
-                                        setUploadFileKey(k => k + 1);
-                                        if (rejected.length) setUploadError(`不允許的格式：${rejected.join('、')}`);
-                                        else if (overflow) setUploadError(`單次最多 5 檔，已忽略超出的 ${overflow} 個檔案`);
-                                        else setUploadError(null);
-                                    }}
-                                    className="hidden"
-                                />
-                            </label>
-                            {uploadFiles.length > 0 && (
-                                <ul className="flex-1 min-w-0 text-xs text-gray-600 space-y-0.5 py-1">
-                                    {uploadFiles.map((f, i) => (
-                                        <li key={i} className="flex items-center justify-between gap-1 truncate">
-                                            <span className="truncate">{i + 1}. {f.name}</span>
-                                            <button
-                                                type="button"
-                                                onClick={() => setUploadFiles(prev => prev.filter((_, idx) => idx !== i))}
-                                                className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer shrink-0"
-                                                title="移除"
-                                            >
-                                                <X className="w-3.5 h-3.5" />
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                        <input
-                            type="text"
-                            placeholder={uploadFiles.length > 1 ? '標題（多檔上傳時不套用，一律使用檔名）' : '標題（選填，預設使用檔名）'}
-                            value={uploadTitle}
-                            onChange={e => setUploadTitle(e.target.value)}
-                            disabled={uploadFiles.length > 1}
-                            className="px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
-                        />
-                        <input
-                            type="text"
-                            placeholder="簡述（選填）"
-                            value={uploadDesc}
-                            onChange={e => setUploadDesc(e.target.value)}
-                            className="px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
-                        />
-                        <input
-                            type="text"
-                            placeholder="標籤（逗號分隔，選填）"
-                            value={uploadTags}
-                            onChange={e => setUploadTags(e.target.value)}
-                            className="px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
-                        />
-                        <div className="md:col-span-2 flex items-center justify-between">
-                            <span className="text-xs text-gray-500">可多選；單次≤5檔/100MB</span>
-                            <button
-                                type="button"
-                                onClick={handleUploadClick}
-                                disabled={uploadBusy}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 cursor-pointer"
-                            >
-                                {uploadBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} 上傳
-                            </button>
-                        </div>
-                    </div>
-                    {uploadError && (
-                        <p className="text-xs text-red-600 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" />{uploadError}</p>
-                    )}
-                    {uploadResultMsg && <p className="text-xs text-green-600 font-bold">{uploadResultMsg}</p>}
-                </div>
+                <MaterialSetUploadPanel
+                    types={types} allowedExts={allowedExts} materialAccept={materialAccept} planOptions={planOptions}
+                    onCreated={() => { setUploadOpen(false); setPage(1); fetchList(); }}
+                    requireNas={nas.requireNas} beginTransfer={nas.beginTransfer} onUploadProgress={nas.onProgress}
+                    endTransferSuccess={nas.endTransferSuccess} endTransferError={nas.endTransferError} isCancel={nas.isCancel}
+                />
             )}
 
-            {/* 編輯教材 */}
-            {editingMaterial && (
-                <div className="bg-white p-4 rounded-2xl shadow-sm border-2 border-amber-200 space-y-3">
-                    <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-gray-500 uppercase">
-                            編輯教材 — {editingMaterial.original_filename}
-                            {editingMaterial.plan_id != null ? ` （計畫 #${editingMaterial.plan_id}）` : ' （通用）'}
-                        </label>
-                        <button type="button" onClick={cancelEdit}
-                            className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer">
-                            <X className="w-4 h-4" />
-                        </button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <select value={editTypeId} onChange={e => setEditTypeId(e.target.value)}
-                            className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm font-bold focus:outline-none focus:border-amber-500">
-                            <option value="">選擇教材類型…</option>
-                            {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                        <input type="text" placeholder="標題" value={editTitle}
-                            onChange={e => setEditTitle(e.target.value)}
-                            className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500" />
-                        <input type="text" placeholder="簡述（選填）" value={editDesc}
-                            onChange={e => setEditDesc(e.target.value)}
-                            className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500" />
-                        <input type="text" placeholder="標籤（逗號分隔，選填）" value={editTags}
-                            onChange={e => setEditTags(e.target.value)}
-                            className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500" />
-                        <div className="md:col-span-2">
-                            <p className="text-xs text-gray-500 mb-1">替換檔案（選填，單檔，需 NAS 登入）</p>
-                            <label className="inline-flex items-center gap-2 px-3 py-2 border-2 border-dashed border-amber-300 bg-white rounded-lg text-sm font-bold text-amber-600 hover:border-amber-500 hover:bg-amber-50 cursor-pointer transition-colors">
-                                <FileText className="w-4 h-4 shrink-0" />
-                                <span>{editFile ? editFile.name : '選擇新檔案…'}</span>
-                                <input key={editFileKey} type="file" accept={materialAccept} className="hidden"
-                                    onChange={e => {
-                                        const f = e.target.files?.[0] ?? null;
-                                        if (f) {
-                                            const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
-                                            if (!allowedExts.includes(ext)) {
-                                                setEditError(`不允許的格式：${ext}`);
-                                                setEditFileKey(k => k + 1);
-                                            } else {
-                                                setEditFile(f);
-                                                setEditError(null);
-                                            }
-                                        }
-                                    }} />
-                            </label>
-                            {editFile && (
-                                <button type="button" onClick={() => { setEditFile(null); setEditFileKey(k => k + 1); }}
-                                    className="ml-2 text-xs text-gray-400 hover:text-red-500 cursor-pointer">清除</button>
-                            )}
-                        </div>
-                        <div className="md:col-span-2 flex items-center justify-end gap-2">
-                            <button type="button" onClick={cancelEdit}
-                                className="px-4 py-2 text-sm font-bold text-gray-600 hover:text-gray-800 cursor-pointer">取消</button>
-                            <button type="button" onClick={handleSaveEdit} disabled={editBusy}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg hover:bg-amber-600 disabled:bg-amber-300 cursor-pointer">
-                                {editBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null} 儲存
-                            </button>
-                        </div>
-                    </div>
-                    {editError && (
-                        <p className="text-xs text-red-600 font-bold flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" />{editError}
-                        </p>
-                    )}
-                </div>
+            {editingSet && (
+                <MaterialSetEditPanel
+                    set={editingSet} types={types} allowedExts={allowedExts} materialAccept={materialAccept} planOptions={planOptions}
+                    onUpdated={refreshAfterEdit} onClose={() => setEditingSetId(null)}
+                    requireNas={nas.requireNas} beginTransfer={nas.beginTransfer} onUploadProgress={nas.onProgress}
+                    endTransferSuccess={nas.endTransferSuccess} endTransferError={nas.endTransferError} isCancel={nas.isCancel}
+                />
             )}
 
-            {/* 篩選列 */}
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                    <button type="button" onClick={() => switchView('set')}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-bold cursor-pointer ${view === 'set' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500'}`}>
+                        <LayoutGrid className="w-3.5 h-3.5" /> 套組檢視
+                    </button>
+                    <button type="button" onClick={() => switchView('file')}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-bold cursor-pointer ${view === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500'}`}>
+                        <FileStack className="w-3.5 h-3.5" /> 檔案檢視
+                    </button>
+                </div>
                 <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="搜尋標題 / 原檔名 / 標籤…"
+                    <input type="text" placeholder="搜尋標題 / 檔名 / 標籤 / 訓練計畫名稱…"
                         className="w-full pl-9 pr-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500"
-                        value={keyword}
-                        onChange={e => setKeyword(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && onSearch()}
-                    />
+                        value={keyword} onChange={e => setKeyword(e.target.value)} onKeyDown={e => e.key === 'Enter' && onSearch()} />
                 </div>
                 <select value={materialTypeId} onChange={e => { setMaterialTypeId(e.target.value); setPage(1); }} className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500">
                     <option value="">全部類型</option>
@@ -665,86 +325,53 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                 <button type="button" onClick={onSearch} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 cursor-pointer">搜尋</button>
             </div>
 
-            {/* 工具列 */}
             <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">共 {total} 筆{selected.size > 0 ? `；已選 ${selected.size} 項` : ''}</span>
-                <button
-                    type="button"
-                    disabled={selected.size === 0}
-                    onClick={() => setBatchConfirmOpen(true)}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer"
-                >
+                <span className="text-sm text-gray-500">共 {total} 筆{selected.size > 0 ? `；已選 ${selected.size} 個檔案` : ''}</span>
+                <button type="button" disabled={selected.size === 0} onClick={() => setBatchConfirmOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer">
                     <PackageOpen className="w-4 h-4" /> 批次下載
                 </button>
             </div>
 
-            {/* 列表（共用 @shared-ui/data-table） */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-4">
-                <PaginatedDataTable<Material>
-                    adapter="tailwind"
-                    columns={columns}
-                    data={items}
-                    loading={loading}
-                    loadingText={<Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />}
-                    emptyState={<div className="text-gray-400">查無教材</div>}
-                    getRowKey={m => m.id}
-                    paginationMode="server"
-                    totalItems={total}
-                    page={page}
-                    pageSize={size}
-                    pageSizeOptions={[10, 20, 50, 100]}
-                    onPaginationChange={state => { setPage(state.page); setSize(state.pageSize); }}
-                />
+                {view === 'set' ? (
+                    <PaginatedDataTable<MaterialSet>
+                        adapter="tailwind" columns={setColumns} data={setItems} loading={loading}
+                        loadingText={<Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />}
+                        emptyState={<div className="text-gray-400">查無教材套組</div>}
+                        getRowKey={s => s.id} paginationMode="server" totalItems={total} page={page} pageSize={size}
+                        pageSizeOptions={[10, 20, 50, 100]} onPaginationChange={st => { setPage(st.page); setSize(st.pageSize); }}
+                    />
+                ) : (
+                    <PaginatedDataTable<MaterialFileListItem>
+                        adapter="tailwind" columns={fileColumns} data={fileItems} loading={loading}
+                        loadingText={<Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />}
+                        emptyState={<div className="text-gray-400">查無教材檔案</div>}
+                        getRowKey={f => f.id} paginationMode="server" totalItems={total} page={page} pageSize={size}
+                        pageSizeOptions={[10, 20, 50, 100]} onPaginationChange={st => { setPage(st.page); setSize(st.pageSize); }}
+                    />
+                )}
             </div>
 
-            {/* 批次下載確認 */}
             {batchConfirmOpen && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
                         <div className="px-5 py-4 border-b border-gray-100"><h3 className="font-black text-gray-900">批次下載確認（{selected.size} 份）</h3></div>
                         <div className="px-5 py-4 overflow-y-auto">
                             <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
-                                {Array.from(selected.values()).map((v, i) => <li key={i} className="truncate">{v.original_filename}</li>)}
+                                {Array.from(selected.values()).map((v, i) => <li key={i} className="truncate">{v.original_filename}（{v.set_title}）</li>)}
                             </ul>
                         </div>
                         <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
                             <button type="button" onClick={() => setBatchConfirmOpen(false)} className="px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer">取消</button>
-                            <button type="button" onClick={() => { setBatchConfirmOpen(false); requireNas('批次下載', token => doBatchDownload(token)); }} className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 cursor-pointer">下載 ZIP</button>
+                            <button type="button" onClick={() => { setBatchConfirmOpen(false); doBatchDownload(); }} className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 cursor-pointer">下載 ZIP</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* 通用上傳同名衝突對話框 */}
-            {uploadConflictOpen && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                        <div className="px-5 py-4 border-b border-amber-100 bg-amber-50">
-                            <h3 className="font-black text-gray-900">同名教材衝突</h3>
-                        </div>
-                        <div className="px-5 py-4 text-sm text-gray-700 space-y-2">
-                            <p>下列檔案在通用教材中已有使用中的同名教材，請選擇處理方式：</p>
-                            <ul className="list-disc pl-5 text-xs text-gray-600">
-                                {uploadConflicts.map(c => <li key={c.filename}>{c.filename}</li>)}
-                            </ul>
-                        </div>
-                        <div className="px-5 py-4 border-t border-gray-100 flex flex-col gap-2">
-                            <button type="button" onClick={() => resolveUploadConflict('deactivate_and_new')} className="px-3 py-2 text-sm rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 cursor-pointer">
-                                停用舊版 ＋ 上傳新版
-                            </button>
-                            <button type="button" onClick={() => resolveUploadConflict('replace_in_place')} className="px-3 py-2 text-sm rounded-lg bg-amber-500 text-white font-bold hover:bg-amber-600 cursor-pointer">
-                                以新檔取代舊檔
-                            </button>
-                            <button type="button" onClick={() => setUploadConflictOpen(false)} className="px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer">
-                                取消
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <NasLoginModal open={nasOpen} purpose={nasPurpose} onClose={() => setNasOpen(false)} onSuccess={onNasSuccess} />
-            <FileTransferModal transfer={transfer} onCancel={cancelTransfer} onClose={closeTransfer} />
+            <NasLoginModal open={nas.nasOpen} purpose={nas.nasPurpose} onClose={nas.closeNasModal} onSuccess={nas.onNasSuccess} />
+            <FileTransferModal transfer={nas.transfer} onCancel={nas.cancelTransfer} onClose={nas.closeTransfer} />
         </div>
     );
 };
