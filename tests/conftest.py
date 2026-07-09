@@ -13,15 +13,26 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.models import Base, Department, Role
 
 
 @pytest.fixture
 def in_memory_db():
-    """每個測試使用獨立的 in-memory SQLite DB。"""
+    """每個測試使用獨立的 in-memory SQLite DB。
+
+    `poolclass=StaticPool`：TestClient 透過 anyio 執行請求時，同步依賴（`get_db`）
+    與非同步路由本體實際執行在與本 fixture 不同的 OS thread。SQLite `:memory:`
+    預設走 `SingletonThreadPool`，會依 thread 各自建立獨立、不含資料表的連線；一旦
+    有第二個 Session（例如 `record_file_transfer` 的稽核 log session）在同一 thread
+    競爭連線池的 per-thread 快取，主 session 後續查詢即可能落到「no such table」的
+    空白連線。StaticPool 讓整個 engine 全程共用同一條實體連線，不受 thread 影響。
+    """
     engine = create_engine(
-        "sqlite:///:memory:", connect_args={"check_same_thread": False}
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
@@ -46,13 +57,20 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def client(in_memory_db):
+def client(in_memory_db, monkeypatch):
     """FastAPI TestClient：覆寫 get_db 使用 in_memory_db，覆寫 get_current_user 為固定管理員，
-    略過真實 JWT／AD 驗證。不觸發 startup event（不用 `with` context manager），故不會連線真實 DB。"""
+    略過真實 JWT／AD 驗證。不觸發 startup event（不用 `with` context manager），故不會連線真實 DB。
+
+    另外將 `app.services.audit_log.SessionLocal` monkeypatch 為綁定同一 in-memory engine 的
+    sessionmaker：`record_file_transfer()` 內部直接呼叫 `SessionLocal()`（獨立交易，不經
+    `get_db` 依賴注入），若不攔截會繞過上方 in_memory_db 覆寫，直接寫入正式的
+    data/education_training.db，違反本檔頂部「嚴禁連線 data/education_training.db」的規則。
+    """
     from app.main import app
     from app.database import get_db
     from app.routers.auth import get_current_user
     from app.models import Role, User
+    import app.services.audit_log as audit_log_module
 
     admin_role = in_memory_db.query(Role).filter(Role.name == "Admin").first()
     admin_user = User(
@@ -68,6 +86,10 @@ def client(in_memory_db):
 
     def _get_current_user():
         return admin_user
+
+    engine = in_memory_db.get_bind()
+    TestSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    monkeypatch.setattr(audit_log_module, "SessionLocal", TestSessionLocal)
 
     app.dependency_overrides[get_db] = _get_db
     app.dependency_overrides[get_current_user] = _get_current_user
