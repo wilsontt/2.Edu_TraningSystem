@@ -1102,8 +1102,8 @@ const TrainingPlanManager = () => {
       {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          {/* 調整 Form 的寬度：max-w-lg：320px 窄、max-w-xl：480px 較窄、max-w-2xl：672px 常用、 3xl：768px 較寬、4xl：896px 很寬、5xl：1024px 最寬 */}
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+          {/* 編輯模式含左右雙欄（教材區）時放寬視窗，避免內容過度擁擠 */}
+          <div className={`bg-white rounded-2xl shadow-2xl w-full ${isEditing && editId ? 'max-w-6xl' : 'max-w-2xl'} mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]`}>
             <div className={`p-6 border-b flex items-center justify-between ${isEditing ? 'border-indigo-100 bg-linear-to-r from-indigo-50 to-purple-50' : 'border-green-100 bg-linear-to-r from-green-50 to-emerald-50'}`}>
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 {isEditing ? <PenTool className="w-5 h-5 text-indigo-600" /> : <Plus className="w-5 h-5 text-green-600" />}
@@ -1115,7 +1115,8 @@ const TrainingPlanManager = () => {
             </div>
             {/* 訓練計劃 設定卡片 */}
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
-              
+              <div className={isEditing && editId ? 'grid grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-4 items-start' : 'space-y-4'}>
+              <div className="space-y-4">
               {/* 計劃與時程卡片 */}
               <div className="grid grid-cols-2 gap-4">              
                 {/* Title */}
@@ -1470,10 +1471,16 @@ const TrainingPlanManager = () => {
                 </div>
               </div>
 
+              </div>
               {/* 教材區（編輯既有計畫時顯示）— Wave 3 */}
               {isEditing && editId && (
-                <PlanMaterialsSection planId={editId} archived={activeTab === 'archived'} />
+                <div className="xl:sticky xl:top-2">
+                  <div className="bg-indigo-50/40 border-2 border-indigo-100 rounded-2xl p-4">
+                    <PlanMaterialsSection planId={editId} archived={activeTab === 'archived'} />
+                  </div>
+                </div>
               )}
+              </div>
 
               {/* ... (footer buttons) ... */}
               {/* 按鈕卡片 */}

@@ -84,7 +84,11 @@ docker compose exec training-backend python migrations/add_job_titles_and_user_j
 docker compose exec training-backend python migrations/add_training_plan_enhancements.py
 docker compose exec training-backend python migrations/add_attendance_absence_reasons.py
 docker compose exec training-backend python migrations/add_material_file_formats.py
+docker compose exec training-backend python migrations/add_exam_retake_authorization.py
+docker compose exec training-backend python migrations/backfill_attendance_from_exam.py
 ```
+
+> **常見誤用（Docker 主機）**：在 `backend/` 執行 `.venv/bin/python3 migrations/...` 會報 `No such file or directory`；在 `backend/` 執行 `uv venv` 會報 `Command 'uv' not found`。**正式環境不建 venv、不裝 uv**；一律從 `deploy/` 目錄用 `docker compose exec training-backend python migrations/...`。備份路徑為 `${DATA_ROOT}/training/education_training.db`，**不是** `backend/data/`。
 
 #### SMTP 密碼密件化（2026-07-04）
 
@@ -213,6 +217,68 @@ ds1 Docker：
 ```bash
 cp -a "${DATA_ROOT}/training/education_training.db" "${DATA_ROOT}/training/education_training.db.bak.$(date +%Y%m%d_%H%M%S)"
 docker compose exec training-backend python migrations/backfill_attendance_from_exam.py
+```
+
+##### 症狀：成績詳情顯示已考過，點「開始考試」仍跳出「尚未完成報到」
+
+| 項目 | 說明 |
+|------|------|
+| **現象** | 成績中心有交卷紀錄（含多次挑戰），考試中心點「開始考試」卻要求報到 |
+| **根因** | `exam_records`（考試）與 `attendance_records`（報到）為**不同資料表**；有考試紀錄不代表有報到紀錄。常見於強制報到檢查上線前的舊資料，或正式環境未執行本 backfill |
+| **個人立即解法** | 點彈窗「立即報到」；同一訓練計畫報到過後重考不會再問 |
+| **維運批次解法** | 執行本節 `backfill_attendance_from_exam.py`（見上方 ds1 Docker 指令） |
+
+#### 已通過授權重考（2026-07-08）
+
+新增 `exam_retake_authorizations` 表、`exam_records.retake_authorized` 欄位、`btn:exam:authorize-retake` 功能碼。  
+對應 PLAN：[`20260708_已通過授權重考與考試中心及格分修正_PLAN.md`](../../02-棕地專案/plans/20260708_已通過授權重考與考試中心及格分修正_PLAN.md)。
+
+**本機開發**：
+
+```bash
+# 1. 備份
+cp data/education_training.db data/education_training.db.bak-$(date +%Y%m%d)
+
+# 2. 執行（可重複跑）
+cd backend
+.venv/bin/python3 migrations/add_exam_retake_authorization.py
+```
+
+成功應看到：`exam_records.retake_authorized 欄位已新增。`、`Migration 完成。`
+
+**ds1 Docker**：
+
+```bash
+cd /opt/apps/enterprise-portal/deploy
+
+cp -a "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/education_training.db" \
+      "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/education_training.db.bak.$(date +%Y%m%d_%H%M%S)"
+
+docker compose exec training-backend python migrations/add_exam_retake_authorization.py
+```
+
+若報 `No such file or directory`（腳本不存在），先重建映像：
+
+```bash
+docker compose build training-backend
+docker compose up -d --force-recreate training-backend
+```
+
+##### 症狀：考試中心／成績中心完全空白（任何員工皆無資料）
+
+| 項目 | 說明 |
+|------|------|
+| **現象** | 登入後考試中心、成績中心無列表；瀏覽器 Network 中 `GET /api/exam/my_exams`、`GET /api/exam/personal/history` 回 **500** |
+| **後端日誌** | `sqlite3.OperationalError: no such column: exam_records.retake_authorized` |
+| **根因** | 程式已使用 `retake_authorized` 欄位，但資料庫未執行本遷移。`init_db` 只 `create_all`，**不會**對既有表 `ALTER TABLE` |
+| **修復** | 執行本節 `add_exam_retake_authorization.py`（見上方本機／Docker 指令） |
+| **驗證** | API 由 500 變 200；`PRAGMA table_info(exam_records)` 含 `retake_authorized` |
+
+驗證 SQL：
+
+```sql
+PRAGMA table_info(exam_records);  -- 應含 retake_authorized
+SELECT name FROM sqlite_master WHERE type='table' AND name='exam_retake_authorizations';
 ```
 
 #### ds1 Docker：遷移後設定 AD 環境變數（必做，否則「AD 管理」顯示未啟用）
@@ -441,6 +507,25 @@ sqlite3 data/education_training.db \
 ---
 
 ## 常見問題
+
+### Q: 正式環境執行遷移時 `.venv/bin/python3: No such file or directory`
+
+A: Docker 主機的 `backend/` **沒有** `.venv`；Python 在 `training-backend` 容器內。請：
+
+```bash
+cd /opt/apps/enterprise-portal/deploy
+docker compose exec training-backend python migrations/<腳本名>.py
+```
+
+**勿**在主機 `backend/` 建 `.venv` 或安裝 `uv`（那是本機開發流程）。備份請用 `${DATA_ROOT}/training/education_training.db`。
+
+### Q: 考試中心／成績中心空白，後端報 `no such column: exam_records.retake_authorized`
+
+A: 執行 [`add_exam_retake_authorization.py`](../../../backend/migrations/add_exam_retake_authorization.py)（見上文「已通過授權重考」小節）。本機用 `.venv/bin/python3`；Docker 用 `docker compose exec training-backend python ...`。
+
+### Q: 已考過試，為什麼還要報到？
+
+A: 報到（`attendance_records`）與考試（`exam_records`）分開儲存。舊資料可能只有考試、無報到列。個人可點「立即報到」；維運請執行 `backfill_attendance_from_exam.py` 批次補齊（見上文「報到紀錄歷史補齊」）。
 
 ### Q: AD 管理登入顯示「AD 整合未啟用」
 A: 資料庫遷移與 AD 設定無關。請在 `deploy/.env` 設定 `TRAINING_AD_ENABLED=true` 及 `TRAINING_AD_SERVER_URI`、`TRAINING_AD_BASE_DN`、`TRAINING_AD_DOMAIN`，並執行 `docker compose up -d --force-recreate training-backend`。若暫時無法啟用 AD，請改用登入頁「**緊急登入**」分頁（break-glass，需先完成 `add_ad_auth_user_fields.py` 遷移）。
