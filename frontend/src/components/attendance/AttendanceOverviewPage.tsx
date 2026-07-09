@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
 import { BarChart3, Loader2, X } from 'lucide-react';
 import api from '../../api';
 import BulkAbsenceReasonModal from './BulkAbsenceReasonModal';
+import Pagination from '../common/Pagination';
 import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
 
@@ -93,6 +94,8 @@ const AttendanceOverviewPage = () => {
   } | null>(null);
   const [savingAbsenceReason, setSavingAbsenceReason] = useState(false);
   const [selectedAttendanceFilter, setSelectedAttendanceFilter] = useState<'expected' | 'actual' | 'absent' | 'leave'>('expected');
+  const [listPage, setListPage] = useState(1);
+  const [listPageSize, setListPageSize] = useState(10);
 
   const handlePrintCurrentList = async () => {
     if (!modalStats) return;
@@ -205,12 +208,54 @@ const AttendanceOverviewPage = () => {
     setModalPlanId(null);
     setModalStats(null);
     setSelectedAttendanceFilter('expected');
+    setListPage(1);
   };
 
   const modalPlan = modalPlanId ? plans.find((p) => p.id === modalPlanId) : null;
   /** 封存計畫僅能檢視統計，不可填寫／編輯未到原因 */
   const absenceReasonReadOnly =
     Boolean(modalPlan?.is_archived) || activeTab === 'archived';
+
+  type AttendanceListRow =
+    | (AttendanceStats['checked_in_users'][number] & { kind: 'actual' })
+    | (AttendanceStats['not_checked_in_users'][number] & { kind: 'absent' });
+
+  const currentAttendanceList = useMemo((): AttendanceListRow[] => {
+    if (!modalStats) return [];
+    const expectedList: AttendanceListRow[] = [
+      ...modalStats.checked_in_users.map((u) => ({ ...u, kind: 'actual' as const })),
+      ...modalStats.not_checked_in_users.map((u) => ({ ...u, kind: 'absent' as const })),
+    ];
+    if (selectedAttendanceFilter === 'expected') return expectedList;
+    if (selectedAttendanceFilter === 'actual') {
+      return modalStats.checked_in_users.map((u) => ({ ...u, kind: 'actual' as const }));
+    }
+    if (selectedAttendanceFilter === 'absent') {
+      return modalStats.not_checked_in_users
+        .filter((u) => !u.absence_reason_code)
+        .map((u) => ({ ...u, kind: 'absent' as const }));
+    }
+    return modalStats.not_checked_in_users
+      .filter((u) => !!u.absence_reason_code)
+      .map((u) => ({ ...u, kind: 'absent' as const }));
+  }, [modalStats, selectedAttendanceFilter]);
+
+  const listTotalPages = Math.max(1, Math.ceil(currentAttendanceList.length / listPageSize));
+  const listStartIndex = (listPage - 1) * listPageSize;
+  const paginatedAttendanceList = useMemo(
+    () => currentAttendanceList.slice(listStartIndex, listStartIndex + listPageSize),
+    [currentAttendanceList, listStartIndex, listPageSize],
+  );
+
+  useEffect(() => {
+    setListPage(1);
+  }, [selectedAttendanceFilter, modalPlanId, listPageSize]);
+
+  useEffect(() => {
+    if (listPage > listTotalPages) {
+      setListPage(listTotalPages);
+    }
+  }, [listPage, listTotalPages]);
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -327,7 +372,7 @@ const AttendanceOverviewPage = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                     <button
                       type="button"
-                      onClick={() => setSelectedAttendanceFilter('expected')}
+                      onClick={() => { setSelectedAttendanceFilter('expected'); setListPage(1); }}
                       className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'expected', 'indigo')}`}
                     >
                       <div className="text-sm font-bold text-indigo-600 mb-1">應到人數</div>
@@ -335,7 +380,7 @@ const AttendanceOverviewPage = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedAttendanceFilter('actual')}
+                      onClick={() => { setSelectedAttendanceFilter('actual'); setListPage(1); }}
                       className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'actual', 'green')}`}
                     >
                       <div className="text-sm font-bold text-green-600 mb-1">實到人數</div>
@@ -343,7 +388,7 @@ const AttendanceOverviewPage = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedAttendanceFilter('absent')}
+                      onClick={() => { setSelectedAttendanceFilter('absent'); setListPage(1); }}
                       className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'absent', 'orange')}`}
                     >
                       <div className="text-sm font-bold text-orange-600 mb-1">未到人數</div>
@@ -351,7 +396,7 @@ const AttendanceOverviewPage = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedAttendanceFilter('leave')}
+                      onClick={() => { setSelectedAttendanceFilter('leave'); setListPage(1); }}
                       className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'leave', 'purple')}`}
                     >
                       <div className="text-sm font-bold text-purple-600 mb-1">請假人數</div>
@@ -398,64 +443,61 @@ const AttendanceOverviewPage = () => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {(() => {
-                              const expectedList = [
-                                ...modalStats.checked_in_users.map((u) => ({ ...u, kind: 'actual' as const })),
-                                ...modalStats.not_checked_in_users.map((u) => ({ ...u, kind: 'absent' as const })),
-                              ];
-                              const currentList =
-                                selectedAttendanceFilter === 'expected'
-                                  ? expectedList
-                                  : selectedAttendanceFilter === 'actual'
-                                    ? modalStats.checked_in_users.map((u) => ({ ...u, kind: 'actual' as const }))
-                                    : selectedAttendanceFilter === 'absent'
-                                      ? modalStats.not_checked_in_users.filter((u) => !u.absence_reason_code).map((u) => ({ ...u, kind: 'absent' as const }))
-                                      : modalStats.not_checked_in_users.filter((u) => !!u.absence_reason_code).map((u) => ({ ...u, kind: 'absent' as const }));
-
-                              if (currentList.length === 0) {
+                            {currentAttendanceList.length === 0 ? (
+                              <tr>
+                                <td colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 6 : 5} className="px-4 py-4 text-center text-gray-400 text-xs">
+                                  查無資料
+                                </td>
+                              </tr>
+                            ) : (
+                              paginatedAttendanceList.map((user, idx) => {
+                                const displayIndex = listStartIndex + idx + 1;
                                 return (
-                                  <tr>
-                                    <td colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 6 : 5} className="px-4 py-4 text-center text-gray-400 text-xs">
-                                      查無資料
+                                  <tr key={`${user.emp_id}-${displayIndex}`} className="even:bg-gray-100">
+                                    <td className="px-4 py-2 font-mono text-xs">{displayIndex}</td>
+                                    <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
+                                    <td className="px-4 py-2 font-bold">{user.name}</td>
+                                    <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
+                                    <td className="px-4 py-2 text-gray-500 text-xs">
+                                      {user.kind === 'actual' && 'checkin_time' in user && user.checkin_time
+                                        ? parseBackendDateTime(user.checkin_time)?.toLocaleString('zh-TW', { hour12: false })
+                                        : ('absence_reason_code' in user && user.absence_reason_code
+                                            ? `${ABSENCE_REASON_OPTIONS.find(o => o.code === user.absence_reason_code)?.label || user.absence_reason_code}${user.absence_reason_code === 'other' && user.absence_reason_text ? `：${user.absence_reason_text}` : ''}`
+                                            : '-')}
                                     </td>
+                                    {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && user.kind !== 'actual' && (
+                                      <td className="px-4 py-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => setAbsenceReasonEdit({
+                                            empId: user.emp_id,
+                                            name: user.name,
+                                            reasonCode: 'absence_reason_code' in user ? (user.absence_reason_code || '') : '',
+                                            reasonText: 'absence_reason_text' in user ? (user.absence_reason_text || '') : '',
+                                          })}
+                                          className="px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
+                                        >
+                                          {'absence_reason_code' in user && user.absence_reason_code ? '編輯原因' : '填寫原因'}
+                                        </button>
+                                      </td>
+                                    )}
                                   </tr>
                                 );
-                              }
-                              return currentList.map((user, idx) => (
-                                <tr key={`${user.emp_id}-${idx}`} className="even:bg-gray-100">
-                                  <td className="px-4 py-2 font-mono text-xs">{idx + 1}</td>
-                                  <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
-                                  <td className="px-4 py-2 font-bold">{user.name}</td>
-                                  <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
-                                  <td className="px-4 py-2 text-gray-500 text-xs">
-                                    {user.kind === 'actual' && 'checkin_time' in user && user.checkin_time
-                                      ? parseBackendDateTime(user.checkin_time)?.toLocaleString('zh-TW', { hour12: false })
-                                      : ('absence_reason_code' in user && user.absence_reason_code
-                                          ? `${ABSENCE_REASON_OPTIONS.find(o => o.code === user.absence_reason_code)?.label || user.absence_reason_code}${user.absence_reason_code === 'other' && user.absence_reason_text ? `：${user.absence_reason_text}` : ''}`
-                                          : '-')}
-                                  </td>
-                                  {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && user.kind !== 'actual' && (
-                                    <td className="px-4 py-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => setAbsenceReasonEdit({
-                                          empId: user.emp_id,
-                                          name: user.name,
-                                          reasonCode: 'absence_reason_code' in user ? (user.absence_reason_code || '') : '',
-                                          reasonText: 'absence_reason_text' in user ? (user.absence_reason_text || '') : '',
-                                        })}
-                                        className="px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
-                                      >
-                                        {'absence_reason_code' in user && user.absence_reason_code ? '編輯原因' : '填寫原因'}
-                                      </button>
-                                    </td>
-                                  )}
-                                </tr>
-                              ));
-                            })()}
+                              })
+                            )}
                           </tbody>
                         </table>
                       </div>
+                      {currentAttendanceList.length > 0 && (
+                        <Pagination
+                          currentPage={listPage}
+                          totalPages={listTotalPages}
+                          pageSize={listPageSize}
+                          totalItems={currentAttendanceList.length}
+                          onPageChange={setListPage}
+                          onPageSizeChange={(size) => { setListPageSize(size); setListPage(1); }}
+                        />
+                      )}
                     </div>
                   </div>
                 </>
