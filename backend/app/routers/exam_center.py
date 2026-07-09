@@ -641,8 +641,9 @@ def authorize_retake(
     if not _can_view_emp_id(db, current_user, req.emp_id):
         raise HTTPException(status_code=403, detail="無權限操作此員工的考試紀錄")
 
-    # 防止自我授權（須由他人授權）
-    if req.emp_id == current_user.emp_id:
+    # 防止自我授權（須由他人授權）；Admin／系統管理者為最高權限，允許自我授權
+    role_name = (current_user.role and current_user.role.name) or ""
+    if req.emp_id == current_user.emp_id and not is_admin_or_system_role(role_name):
         raise HTTPException(status_code=400, detail="不可授權自己重考，須由其他主管或稽核人員執行")
 
     # 業務驗證
