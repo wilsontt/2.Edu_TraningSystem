@@ -231,7 +231,7 @@ docker compose exec training-backend python migrations/backfill_attendance_from_
 #### 已通過授權重考（2026-07-08）
 
 新增 `exam_retake_authorizations` 表、`exam_records.retake_authorized` 欄位、`btn:exam:authorize-retake` 功能碼。  
-對應 PLAN：[`20260708_已通過授權重考與考試中心及格分修正_PLAN.md`](../../02-棕地專案/plans/20260708_已通過授權重考與考試中心及格分修正_PLAN.md)。
+對應 PLAN：[`20260709_已通過授權重考與考試中心及格分修正及Modal雙欄_PLAN.md`](../../02-棕地專案/plans/20260709_已通過授權重考與考試中心及格分修正及Modal雙欄_PLAN.md)。
 
 **本機開發**：
 
