@@ -369,6 +369,6 @@ curl -s -X POST "http://localhost:8000/api/admin/qrcode/login/generate" \
 
 - [棕地功能總覽](../棕地功能總覽.md) — 模組與程式落點
 - [角色與權限管理架構說明](../../00-專案總覽/角色與權限管理架構說明.md)
-- [AD 整合技術設計](../plans/20260612_AD整合_系統管理者登入_技術設計.md)
+- [AD 整合技術設計](../plans/已完成/20260612_AD整合_系統管理者登入_技術設計.md)
 - [NAS與路徑跨平台慣例](../../00-專案總覽/NAS與路徑跨平台慣例.md)
 - 自動化測試：`tests/test_new_apis.py`、`tests/test_email_otp.py`

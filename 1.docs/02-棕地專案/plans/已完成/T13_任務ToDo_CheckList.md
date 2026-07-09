@@ -48,7 +48,7 @@
 - [x] `README.md` 已補充 T13 近期更新
 - [x] `1.docs/README.md` 已補充 T13 計劃索引與更新
 - [x] `1.docs/00-專案總覽/專案說明.md`（原 `0.standards/README.md`）已補充 T13 計劃連結
-- [x] `1.docs/plans/T13_可行執行計劃.md` 已建立
+- [x] `1.docs/02-棕地專案/plans/已完成/T13_可行執行計劃.md` 已建立
 - [x] 本檔案（T13 任務核對清單）已建立
 
 ## F. 目前已知問題 / 待確認
