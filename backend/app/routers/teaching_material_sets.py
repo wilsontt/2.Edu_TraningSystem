@@ -276,3 +276,71 @@ def get_set_detail(
     if not s:
         raise HTTPException(status_code=404, detail="教材套組不存在")
     return _set_to_out(db, s, include_files=True)
+
+
+# ----------------------------------------------------------------
+# 更新中繼資料 / 計畫綁定 / 軟刪除
+# ----------------------------------------------------------------
+
+@router.put("/sets/{set_id}", response_model=schemas.TeachingMaterialSetOut)
+def update_set(
+    set_id: int,
+    payload: schemas.TeachingMaterialSetUpdate,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    s = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.id == set_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="教材套組不存在")
+    data = payload.model_dump(exclude_unset=True)
+    if "tags" in data:
+        tags_val = data.pop("tags")
+        s.tags = json.dumps([str(t) for t in tags_val], ensure_ascii=False) if tags_val else None
+    if "material_type_id" in data and data["material_type_id"] is not None:
+        mt = db.query(models.MaterialType).filter(models.MaterialType.id == data["material_type_id"]).first()
+        if not mt:
+            raise HTTPException(status_code=400, detail="教材類型不存在")
+    for k, v in data.items():
+        setattr(s, k, v)
+    db.commit()
+    db.refresh(s)
+    return _set_to_out(db, s, include_files=True)
+
+
+@router.put("/sets/{set_id}/plans", response_model=schemas.TeachingMaterialSetOut)
+def update_set_plans(
+    set_id: int,
+    payload: schemas.TeachingMaterialSetPlansUpdate,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    """完整取代套組的綁定計畫列表；空陣列＝解除全部綁定，恢復「通用」（教材 PLAN §5.12.2）。"""
+    s = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.id == set_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="教材套組不存在")
+    plans = []
+    for pid in payload.plan_ids:
+        plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == pid).first()
+        if not plan:
+            raise HTTPException(status_code=404, detail=f"訓練計畫不存在：{pid}")
+        plans.append(plan)
+    db.query(models.TeachingMaterialSetPlan).filter(models.TeachingMaterialSetPlan.set_id == set_id).delete()
+    for plan in plans:
+        db.add(models.TeachingMaterialSetPlan(set_id=set_id, plan_id=plan.id))
+    db.commit()
+    db.refresh(s)
+    return _set_to_out(db, s, include_files=True)
+
+
+@router.delete("/sets/{set_id}")
+def delete_set(
+    set_id: int,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    s = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.id == set_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="教材套組不存在")
+    s.is_active = False
+    db.commit()
+    return {"message": "已停用（軟刪除）"}
