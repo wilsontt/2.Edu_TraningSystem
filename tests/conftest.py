@@ -40,3 +40,36 @@ def in_memory_db():
 
     session.close()
     engine.dispose()
+
+
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture
+def client(in_memory_db):
+    """FastAPI TestClient：覆寫 get_db 使用 in_memory_db，覆寫 get_current_user 為固定管理員，
+    略過真實 JWT／AD 驗證。不觸發 startup event（不用 `with` context manager），故不會連線真實 DB。"""
+    from app.main import app
+    from app.database import get_db
+    from app.routers.auth import get_current_user
+    from app.models import Role, User
+
+    admin_role = in_memory_db.query(Role).filter(Role.name == "Admin").first()
+    admin_user = User(
+        emp_id="test-admin", name="Test Admin", role_id=admin_role.id,
+        status="active", is_trainee=False,
+    )
+    in_memory_db.add(admin_user)
+    in_memory_db.commit()
+    in_memory_db.refresh(admin_user)
+
+    def _get_db():
+        yield in_memory_db
+
+    def _get_current_user():
+        return admin_user
+
+    app.dependency_overrides[get_db] = _get_db
+    app.dependency_overrides[get_current_user] = _get_current_user
+    yield TestClient(app)
+    app.dependency_overrides.clear()

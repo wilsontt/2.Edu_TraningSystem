@@ -99,6 +99,8 @@ app.include_router(question_bank.router, prefix="/api")   # 全域題庫管理
 app.include_router(qrcode.router, prefix="/api")          # QRcode 生成相關
 from .routers import teaching_materials
 app.include_router(teaching_materials.router, prefix="/api")  # 教材庫 (上傳/搜尋/下載)
+from .routers import teaching_material_sets
+app.include_router(teaching_material_sets.router, prefix="/api")  # 教材套組（Wave 2）
 from .routers import backup
 app.include_router(backup.router, prefix="/api")          # 排程備份設定與紀錄
 

@@ -541,6 +541,91 @@ class BatchDownloadRequest(BaseModel):
 
 
 # ----------------------------------------------------------------
+# 教材套組相關模型（Wave 2；見教材 PLAN §5.12、§7）
+# ----------------------------------------------------------------
+
+class TeachingMaterialSetFileOut(BaseModel):
+    id: int
+    original_filename: str
+    file_format: str
+    file_size_bytes: int
+    uploaded_by: str
+    uploaded_at: datetime
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class TeachingMaterialSetOut(BaseModel):
+    id: int
+    title: str
+    material_type_id: int
+    description: Optional[str] = None
+    tags: Optional[str] = None
+    year: str
+    uploaded_by: str
+    uploaded_at: datetime
+    is_active: bool
+    file_count: int
+    plan_ids: List[int] = []
+    plan_titles: List[str] = []
+    files: Optional[List[TeachingMaterialSetFileOut]] = None
+
+
+class TeachingMaterialSetListOut(BaseModel):
+    items: List[TeachingMaterialSetOut]
+    total: int
+    page: int
+    size: int
+    total_pages: int
+
+
+class TeachingMaterialSetUpdate(BaseModel):
+    title: Optional[str] = None
+    material_type_id: Optional[int] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+class TeachingMaterialSetPlansUpdate(BaseModel):
+    plan_ids: List[int] = []
+
+
+class SetFileUploadResult(BaseModel):
+    succeeded: List[dict]  # { id, original_filename, overwritten }
+    failed: List[dict]     # { original_filename, reason }
+
+
+class TeachingMaterialFileListItemOut(BaseModel):
+    id: int
+    set_id: int
+    set_title: str
+    original_filename: str
+    file_format: str
+    file_size_bytes: int
+    uploaded_by: str
+    uploaded_at: datetime
+    is_active: bool
+    plan_titles: List[str] = []
+
+
+class TeachingMaterialFileListOut(BaseModel):
+    items: List[TeachingMaterialFileListItemOut]
+    total: int
+    page: int
+    size: int
+    total_pages: int
+
+
+class SetBatchDownloadRequest(BaseModel):
+    file_ids: List[int]
+    nas_username: Optional[str] = None
+    nas_password: Optional[str] = None
+    nas_session_token: Optional[str] = None
+
+
+# ----------------------------------------------------------------
 # 排程備份相關模型 (Backup Schedule Schemas) — Wave 4
 # ----------------------------------------------------------------
 

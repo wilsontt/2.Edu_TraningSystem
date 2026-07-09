@@ -19,3 +19,4 @@ smbprotocol
 apscheduler
 ldap3
 pytest
+httpx
