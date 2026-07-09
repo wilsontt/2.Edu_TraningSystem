@@ -13,26 +13,29 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.models import Base, Department, Role
 
 
 @pytest.fixture
-def in_memory_db():
-    """每個測試使用獨立的 in-memory SQLite DB。
+def in_memory_db(tmp_path):
+    """每個測試使用獨立的、暫存檔案型 SQLite DB（非 `:memory:`）。
 
-    `poolclass=StaticPool`：TestClient 透過 anyio 執行請求時，同步依賴（`get_db`）
-    與非同步路由本體實際執行在與本 fixture 不同的 OS thread。SQLite `:memory:`
-    預設走 `SingletonThreadPool`，會依 thread 各自建立獨立、不含資料表的連線；一旦
-    有第二個 Session（例如 `record_file_transfer` 的稽核 log session）在同一 thread
-    競爭連線池的 per-thread 快取，主 session 後續查詢即可能落到「no such table」的
-    空白連線。StaticPool 讓整個 engine 全程共用同一條實體連線，不受 thread 影響。
+    改用 `tmp_path` 暫存檔而非 `:memory:` + `StaticPool`：TestClient 透過 anyio
+    執行請求時，同步依賴（`get_db`）與非同步路由本體、以及 `record_file_transfer`
+    的獨立稽核 log session，皆各自建立連線。若沿用 `:memory:` + `StaticPool`，
+    所有 Session 會共用同一條實體連線；`record_file_transfer` 的 session 一旦
+    commit，會連帶提交路由自身 session 尚未 commit 的變更，導致 `db.rollback()`
+    對已被連帶提交的資料完全失效，破壞 create_set 這類多檔案上傳的 atomic
+    rollback 保證。改用暫存檔資料庫後，各 Session 各自持有獨立連線、僅共享「已
+    提交」的資料，行為貼近正式環境（每個 Session 對應一條真實資料庫連線）；
+    `tmp_path` 由 pytest 自動於測試結束後清除，不會於 `data/` 或 repo 內殘留
+    `.sqlite3`/`-wal`/`-shm` 檔案。
     """
+    db_path = tmp_path / "test.sqlite3"
     engine = create_engine(
-        "sqlite:///:memory:",
+        f"sqlite:///{db_path}",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)

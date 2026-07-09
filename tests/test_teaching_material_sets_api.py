@@ -2,6 +2,7 @@
 import io
 from contextlib import contextmanager
 
+from app import models
 from app.models import MaterialType, MaterialFileFormat, FileTransferAuditLog
 
 
@@ -97,3 +98,63 @@ def test_create_set_success_records_audit_log_in_memory(client, in_memory_db, mo
     assert log.resource_type == "teaching_material"
     assert log.status == "success"
     assert log.filename == "c.pdf"
+
+
+def test_create_set_second_file_failure_rolls_back_atomically(client, in_memory_db, monkeypatch):
+    """兩檔案上傳，第一檔成功、第二檔在 NAS 寫入階段失敗，須完全回滾（atomic
+    all-or-nothing），不得殘留任何 `TeachingMaterialSet` 資料列。
+
+    此測試重現：`record_file_transfer()`（第一檔成功後觸發）使用獨立 session
+    commit，若該 session 與路由自身 session 共用同一實體連線（舊版
+    `:memory:` + `StaticPool`），會連帶把路由自身尚未 commit 的
+    `TeachingMaterialSet` 一併物理提交；此時第二檔失敗觸發的 `db.rollback()`
+    對已被連帶提交的資料形同無效，導致殘留 1 筆 `TeachingMaterialSet`。
+    改用暫存檔 SQLite（各 session 各自連線）後，`record_file_transfer` 的
+    commit 不會波及路由自身尚未提交的交易，rollback 應能完全清空。
+    """
+    from app.routers import teaching_material_sets
+    from app.services import storage
+
+    mt = _seed_material_type(in_memory_db)
+
+    fake_creds = storage.SmbCredentials(
+        server="nas.local", share="materials", username="tester",
+        password="pw", root="materials",
+    )
+    monkeypatch.setattr(
+        teaching_material_sets, "_resolve_credentials",
+        lambda *args, **kwargs: fake_creds,
+    )
+
+    class _FakeSmbStorage:
+        def __init__(self):
+            self.save_calls = 0
+
+        def save(self, rel_path, data):
+            self.save_calls += 1
+            if self.save_calls == 2:
+                raise storage.StorageError("模擬第二檔寫入失敗")
+            return len(data)
+
+    @contextmanager
+    def _fake_connection(creds):
+        yield _FakeSmbStorage()
+
+    monkeypatch.setattr(storage, "connection", _fake_connection)
+
+    resp = client.post(
+        "/api/admin/teaching-materials/sets",
+        data={
+            "title": "安全教育教材（部分失敗）",
+            "material_type_id": str(mt.id),
+            "nas_session_token": "fake-token",
+        },
+        files=[
+            ("files", ("d.pdf", io.BytesIO(b"DDD"), "application/pdf")),
+            ("files", ("e.pdf", io.BytesIO(b"EEE"), "application/pdf")),
+        ],
+    )
+    assert resp.status_code == 422, resp.text
+
+    # 第二檔失敗須讓整筆交易回滾，不得殘留 TeachingMaterialSet（atomic all-or-nothing）。
+    assert in_memory_db.query(models.TeachingMaterialSet).count() == 0

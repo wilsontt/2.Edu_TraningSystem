@@ -168,6 +168,15 @@ async def create_set(
     for plan in plans:
         db.add(models.TeachingMaterialSetPlan(set_id=material_set.id, plan_id=plan.id))
 
+    # 稽核紀錄延後至本交易 db.commit() 成功後才寫入（見下方迴圈後）：
+    # record_file_transfer() 使用獨立 session／連線，若在本路由自身交易仍
+    # 開啟（已 flush 但未 commit）時呼叫，於 SQLite 下會與本路由持有的寫入鎖
+    # 互相等待（同一 call stack、同一執行緒），直到逾時才失敗，且稽核 session
+    # 失敗會被靜默吞掉——不但拖慢請求，稽核紀錄也會遺失。待本交易確定 commit
+    # 成功、鎖已釋放後才寫稽核紀錄，可避免鎖等待，語意上也更正確：僅在整批
+    # 上傳真正成功時才記錄「成功」稽核。
+    pending_audit_records: list[tuple[str, int, int]] = []
+
     try:
         with storage.connection(creds) as st:
             for fname, raw, ext in validated:
@@ -185,12 +194,7 @@ async def create_set(
                 st.save(storage_path, raw)
                 mf.stored_filename = stored_filename
                 mf.storage_path = storage_path
-                record_file_transfer(
-                    emp_id=emp_id, client_ip=client_ip, action="upload",
-                    resource_type="teaching_material", status="success", filename=fname,
-                    plan_id=(plans[0].id if plans else None), resource_id=mf.id,
-                    nas_username=creds.username, bytes_=len(raw),
-                )
+                pending_audit_records.append((fname, mf.id, len(raw)))
         db.commit()
     except storage.StorageUnavailable as e:
         db.rollback()
@@ -198,6 +202,14 @@ async def create_set(
     except storage.StorageError as e:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(e))
+
+    for fname, mf_id, size in pending_audit_records:
+        record_file_transfer(
+            emp_id=emp_id, client_ip=client_ip, action="upload",
+            resource_type="teaching_material", status="success", filename=fname,
+            plan_id=(plans[0].id if plans else None), resource_id=mf_id,
+            nas_username=creds.username, bytes_=size,
+        )
 
     db.refresh(material_set)
     return _set_to_out(db, material_set, include_files=True)
