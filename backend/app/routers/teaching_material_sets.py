@@ -344,3 +344,140 @@ def delete_set(
     s.is_active = False
     db.commit()
     return {"message": "已停用（軟刪除）"}
+
+
+# ----------------------------------------------------------------
+# 套組內新增檔案（同名覆蓋 Yes/No）／移除單檔
+# ----------------------------------------------------------------
+
+@router.post("/sets/{set_id}/files", response_model=schemas.SetFileUploadResult)
+async def add_set_files(
+    set_id: int,
+    request: Request,
+    files: List[UploadFile] = File(...),
+    overwrite_on_duplicate: Optional[bool] = Form(None),
+    nas_username: Optional[str] = Form(None),
+    nas_password: Optional[str] = Form(None),
+    nas_session_token: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    """套組內新增檔案；套組內同名檔需以 overwrite_on_duplicate 明確指定
+    True=覆蓋該檔 NAS+中繼資料、False=跳過該檔（教材 PLAN §5.12.3）。"""
+    settings = get_settings()
+    emp_id = getattr(current_user, "emp_id", None)
+    client_ip = _client_ip(request)
+
+    s = db.query(models.TeachingMaterialSet).filter(
+        models.TeachingMaterialSet.id == set_id,
+        models.TeachingMaterialSet.is_active == True,  # noqa: E712
+    ).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="教材套組不存在")
+    mt = db.query(models.MaterialType).filter(models.MaterialType.id == s.material_type_id).first()
+
+    if not files:
+        raise HTTPException(status_code=400, detail="請至少選擇一個檔案")
+    if len(files) > settings.teaching_material_max_batch_upload_count:
+        raise HTTPException(status_code=400, detail=f"單次最多上傳 {settings.teaching_material_max_batch_upload_count} 份")
+
+    payloads = []
+    total = 0
+    for f in files:
+        raw = await f.read()
+        total += len(raw)
+        payloads.append((os.path.basename(f.filename or ""), raw))
+    if total > settings.teaching_material_max_batch_upload_bytes:
+        raise HTTPException(status_code=400, detail="單次上傳總量超過上限")
+
+    plan_row = db.query(models.TeachingMaterialSetPlan).filter(
+        models.TeachingMaterialSetPlan.set_id == set_id
+    ).first()
+    creds = _resolve_credentials(nas_session_token, nas_username, nas_password)
+
+    succeeded: List[dict] = []
+    failed: List[dict] = []
+    # 稽核延後至 db.commit() 後寫入，避免 SQLite 寫入鎖互相等待（同 create_set）
+    pending_audit: list[tuple[str, str, Optional[int], Optional[int], Optional[str]]] = []
+
+    try:
+        with storage.connection(creds) as st:
+            for fname, raw in payloads:
+                try:
+                    ext, fmt = _validate_filename(fname, db)
+                    max_bytes = _effective_max_bytes(mt, fmt)
+                    if len(raw) > max_bytes:
+                        raise ValueError(f"超過單檔上限（{max_bytes} bytes）")
+
+                    conflict = _find_active_file_conflict(db, set_id, fname)
+                    overwritten = False
+                    if conflict:
+                        if overwrite_on_duplicate is None:
+                            raise ValueError("同名衝突，需指定是否覆蓋")
+                        if not overwrite_on_duplicate:
+                            failed.append({"original_filename": fname, "reason": "已跳過（同名，未覆蓋）"})
+                            continue
+                        st.save(conflict.storage_path, raw)
+                        conflict.file_format = ext
+                        conflict.file_size_bytes = len(raw)
+                        conflict.uploaded_by = emp_id
+                        conflict.uploaded_at = datetime.utcnow()
+                        db.flush()
+                        rec_id = conflict.id
+                        overwritten = True
+                    else:
+                        mf = models.TeachingMaterialFile(
+                            set_id=set_id, original_filename=fname, stored_filename="",
+                            storage_path="", file_format=ext, file_size_bytes=len(raw),
+                            uploaded_by=emp_id, uploaded_at=datetime.utcnow(), is_active=True,
+                        )
+                        db.add(mf)
+                        db.flush()
+                        stored_filename = f"{mf.id}.{ext}"
+                        storage_path = storage.normalize_smb_rel_path(
+                            str(s.year), "sets", str(s.id), "teaching", mt.slug, stored_filename,
+                        )
+                        st.save(storage_path, raw)
+                        mf.stored_filename = stored_filename
+                        mf.storage_path = storage_path
+                        db.flush()
+                        rec_id = mf.id
+
+                    pending_audit.append(("success", fname, rec_id, len(raw), None))
+                    succeeded.append({"id": rec_id, "original_filename": fname, "overwritten": overwritten})
+                except (ValueError, storage.StorageError) as e:
+                    # 單檔失敗不 rollback 整批，以支援部分成功
+                    pending_audit.append(("failed", fname, None, None, str(e)))
+                    failed.append({"original_filename": fname, "reason": str(e)})
+            db.commit()
+    except storage.StorageUnavailable as e:
+        db.rollback()
+        raise HTTPException(status_code=503, detail=f"NAS 無法連線或登入失敗：{e}")
+
+    for status, fname, rec_id, size, err in pending_audit:
+        record_file_transfer(
+            emp_id=emp_id, client_ip=client_ip, action="upload",
+            resource_type="teaching_material", status=status, filename=fname,
+            plan_id=(plan_row.plan_id if plan_row else None), resource_id=rec_id,
+            nas_username=creds.username, bytes_=size, error_message=err,
+        )
+
+    return {"succeeded": succeeded, "failed": failed}
+
+
+@router.delete("/sets/{set_id}/files/{file_id}")
+def remove_set_file(
+    set_id: int,
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    mf = db.query(models.TeachingMaterialFile).filter(
+        models.TeachingMaterialFile.id == file_id,
+        models.TeachingMaterialFile.set_id == set_id,
+    ).first()
+    if not mf:
+        raise HTTPException(status_code=404, detail="檔案不存在")
+    mf.is_active = False
+    db.commit()
+    return {"message": "已移除（軟刪除）"}
