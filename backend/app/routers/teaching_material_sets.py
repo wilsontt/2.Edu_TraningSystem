@@ -213,3 +213,66 @@ async def create_set(
 
     db.refresh(material_set)
     return _set_to_out(db, material_set, include_files=True)
+
+
+# ----------------------------------------------------------------
+# 列表（套組檢視）／詳情
+# ----------------------------------------------------------------
+
+@router.get("/sets", response_model=schemas.TeachingMaterialSetListOut)
+def list_sets(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    keyword: Optional[str] = None,
+    material_type_id: Optional[int] = None,
+    file_format: Optional[str] = None,
+    plan_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    """教材庫套組檢視：一列一套組，keyword 涵蓋標題/簡述/標籤/綁定計畫名稱（教材 PLAN §5.12.4）。"""
+    q = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.is_active == True)  # noqa: E712
+    if keyword:
+        like = f"%{keyword}%"
+        plan_match_ids = db.query(models.TeachingMaterialSetPlan.set_id).join(
+            models.TrainingPlan, models.TrainingPlan.id == models.TeachingMaterialSetPlan.plan_id
+        ).filter(models.TrainingPlan.title.ilike(like))
+        q = q.filter(
+            models.TeachingMaterialSet.title.ilike(like)
+            | models.TeachingMaterialSet.description.ilike(like)
+            | models.TeachingMaterialSet.tags.ilike(like)
+            | models.TeachingMaterialSet.id.in_(plan_match_ids)
+        )
+    if material_type_id:
+        q = q.filter(models.TeachingMaterialSet.material_type_id == material_type_id)
+    if file_format:
+        fmt_set_ids = db.query(models.TeachingMaterialFile.set_id).filter(
+            models.TeachingMaterialFile.file_format == file_format,
+            models.TeachingMaterialFile.is_active == True,  # noqa: E712
+        )
+        q = q.filter(models.TeachingMaterialSet.id.in_(fmt_set_ids))
+    if plan_id:
+        bound_ids = db.query(models.TeachingMaterialSetPlan.set_id).filter(
+            models.TeachingMaterialSetPlan.plan_id == plan_id
+        )
+        q = q.filter(models.TeachingMaterialSet.id.in_(bound_ids))
+
+    total = q.count()
+    rows = q.order_by(desc(models.TeachingMaterialSet.uploaded_at)).offset((page - 1) * size).limit(size).all()
+    items = [_set_to_out(db, s) for s in rows]
+    return {"items": items, "total": total, "page": page, "size": size, "total_pages": (total + size - 1) // size}
+
+
+@router.get("/sets/{set_id}", response_model=schemas.TeachingMaterialSetOut)
+def get_set_detail(
+    set_id: int,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    s = db.query(models.TeachingMaterialSet).filter(
+        models.TeachingMaterialSet.id == set_id,
+        models.TeachingMaterialSet.is_active == True,  # noqa: E712
+    ).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="教材套組不存在")
+    return _set_to_out(db, s, include_files=True)

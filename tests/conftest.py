@@ -98,3 +98,49 @@ def client(in_memory_db, monkeypatch):
     app.dependency_overrides[get_current_user] = _get_current_user
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+import contextlib
+
+
+class _StubStorage:
+    """假 NAS 儲存：save/open 存於記憶體 dict，供測試斷言寫入內容。"""
+    def __init__(self):
+        self.saved: dict[str, bytes] = {}
+
+    def save(self, rel_path: str, data: bytes) -> int:
+        self.saved[rel_path] = data
+        return len(data)
+
+    def open(self, rel_path: str) -> bytes:
+        from app.services import storage
+        if rel_path not in self.saved:
+            raise storage.StorageError("找不到檔案")
+        return self.saved[rel_path]
+
+
+@pytest.fixture
+def mock_nas(monkeypatch):
+    """Monkeypatch NAS 憑證解析與連線，讓上傳/下載端點可在無真實 NAS 下完整測試。
+    回傳 _StubStorage 實例，可用 `mock_nas.saved` 檢查寫入的 rel_path/內容。"""
+    from app.services import storage
+    import app.routers.teaching_material_sets as tms_router
+    import app.routers.teaching_materials as tm_router
+
+    stub = _StubStorage()
+    fake_creds = storage.SmbCredentials(
+        server="test-nas", share="test-share", username="tester",
+        password="x", root="materials",
+    )
+
+    def _fake_resolve(nas_session_token=None, nas_username=None, nas_password=None):
+        return fake_creds
+
+    @contextlib.contextmanager
+    def _fake_connection(creds):
+        yield stub
+
+    monkeypatch.setattr(tms_router, "_resolve_credentials", _fake_resolve)
+    monkeypatch.setattr(tm_router, "_resolve_credentials", _fake_resolve)
+    monkeypatch.setattr(storage, "connection", _fake_connection)
+    return stub
