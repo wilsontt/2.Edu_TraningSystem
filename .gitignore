@@ -37,6 +37,7 @@ build/
 
 # Local data
 data/*.db
+data/*.db.*
 
 # Test files
 # 注意：tests/ 目錄和 1.docs/reviews/ 目錄應被版本控制
