@@ -6,16 +6,6 @@ import PlanHistoryModal from './PlanHistoryModal';
 import AuthorizeRetakeModal from '../exam/AuthorizeRetakeModal';
 import Pagination from '../common/Pagination';
 import { parseBackendDateTime } from '../../utils/date';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer
-} from 'recharts';
 
 interface HistoryRecord {
   record_id: number;
@@ -42,41 +32,16 @@ interface HistoryResponse {
   records: HistoryRecord[];
 }
 
-interface PlanTrendData {
-  plan_title: string;
-  plan_id: number;
-  record_id: number;
-  trend: Array<{
-    attempt: number;
-    score: number;
-    date: string;
-    history_id?: number;
-  }>;
-}
-
 interface PersonalScoreHistoryProps {
   empId?: string;
   titlePrefix?: string;
   canAuthorizeRetake?: boolean;
 }
 
-interface DetailHistoryItem {
-  id?: number;
-  total_score: number;
-  submit_time?: string | null;
-}
-
-type TrendChartPoint = {
-  attempt: number;
-  [key: string]: number | null;
-};
-
 type HistorySortKey = 'time' | 'score' | 'plan' | 'name' | 'dept' | 'attempts';
 
 export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeRetake = false }: PersonalScoreHistoryProps) {
   const [history, setHistory] = useState<HistoryResponse | null>(null);
-  const [plansData, setPlansData] = useState<Record<number, PlanTrendData>>({});
-  const [selectedPlanIds, setSelectedPlanIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<HistorySortKey>('time');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
@@ -88,63 +53,6 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [authorizeTarget, setAuthorizeTarget] = useState<{ empId: string; planId: number; empName: string; planTitle: string } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-
-
-  const fetchPlansHistory = async (records: HistoryRecord[]) => {
-    try {
-      const token = localStorage.getItem('token');
-      const baseURL = API_BASE_URL;
-
-      const detailPromises = records.map((record) =>
-        fetch(`${baseURL}/exam/record/${record.record_id}/detail`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }).then((res) => (res.ok ? res.json() : null))
-      );
-
-      const details = await Promise.all(detailPromises);
-
-      const newPlansData: Record<number, PlanTrendData> = {};
-      let latestPlanId: number | null = null;
-      let latestSubmitTime: string | null = null;
-
-      details.forEach((detail, index) => {
-        if (!detail || !detail.history) return;
-
-        const record = records[index];
-        const planId = record.plan_id;
-
-        const trend = (detail.history as DetailHistoryItem[]).map((h, idx: number) => ({
-          // 以實際歷程順序為準，避免用 attempts 推算造成錯位或缺筆誤導
-          attempt: idx + 1,
-          score: h.total_score,
-          date: h.submit_time ? parseBackendDateTime(h.submit_time)?.toLocaleDateString('zh-TW') || '' : '',
-          history_id: h.id,
-        }));
-
-        newPlansData[planId] = {
-          plan_title: record.plan_title,
-          plan_id: planId,
-          record_id: record.record_id,
-          trend,
-        };
-
-        if (record.submit_time) {
-          if (!latestSubmitTime || (parseBackendDateTime(record.submit_time)?.getTime() ?? 0) > (parseBackendDateTime(latestSubmitTime)?.getTime() ?? 0)) {
-            latestSubmitTime = record.submit_time;
-            latestPlanId = planId;
-          }
-        }
-      });
-
-      setPlansData(newPlansData);
-
-      if (latestPlanId !== null) {
-        setSelectedPlanIds(new Set([latestPlanId]));
-      }
-    } catch (error) {
-      console.error('Failed to fetch plans history', error);
-    }
-  };
 
   const fetchHistory = async () => {
     try {
@@ -170,12 +78,6 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
       if (response.ok) {
         const data = await response.json();
         setHistory(data);
-
-        if (data.records && data.records.length > 0) {
-          await fetchPlansHistory(data.records);
-        } else {
-          setPlansData({});
-        }
       }
     } catch (error) {
       console.error('Failed to fetch personal history', error);
@@ -218,53 +120,6 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
   if (!history) {
     return <div className="p-8 text-center text-gray-500">無法載入資料</div>;
   }
-
-  // 顏色陣列
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#06b6d4', '#f97316', '#84cc16'];
-  
-  // 準備圖表資料（多線圖格式）
-  const chartData: TrendChartPoint[] = [];
-  const maxAttempts = Math.max(
-    ...Array.from(selectedPlanIds)
-      .map(planId => plansData[planId]?.trend.length || 0)
-      .filter(len => len > 0),
-    0
-  );
-  
-  // 為每個 attempt 建立資料點
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const dataPoint: TrendChartPoint = { attempt };
-    
-    selectedPlanIds.forEach(planId => {
-      const plan = plansData[planId];
-      if (plan && plan.trend[attempt - 1]) {
-        dataPoint[`plan_${planId}`] = plan.trend[attempt - 1].score;
-      } else {
-        dataPoint[`plan_${planId}`] = null;
-      }
-    });
-    
-    chartData.push(dataPoint);
-  }
-  
-  // 處理計畫選擇
-  const handlePlanToggle = (planId: number) => {
-    const newSelected = new Set(selectedPlanIds);
-    if (newSelected.has(planId)) {
-      newSelected.delete(planId);
-    } else {
-      newSelected.add(planId);
-    }
-    setSelectedPlanIds(newSelected);
-  };
-
-  const selectAllPlans = () => {
-    setSelectedPlanIds(new Set(Object.keys(plansData).map((id) => Number(id))));
-  };
-
-  const clearAllPlans = () => {
-    setSelectedPlanIds(new Set());
-  };
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto print:hidden">
@@ -318,108 +173,6 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
           <div className="ml-auto text-sm text-gray-500">共 {history.total} 筆記錄</div>
         </div>
       </div>
-
-      {/* 計畫選擇器 */}
-      {Object.keys(plansData).length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <h3 className="text-lg font-bold text-gray-900">選擇計畫</h3>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={selectAllPlans}
-                className="text-sm font-bold px-3 py-1.5 border border-indigo-200 text-indigo-600 rounded-lg hover:bg-indigo-50"
-              >
-                全選
-              </button>
-              <button
-                type="button"
-                onClick={clearAllPlans}
-                className="text-sm font-bold px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
-              >
-                清除
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {Object.values(plansData).map((plan, index) => (
-              <label
-                key={plan.plan_id}
-                className="flex items-center space-x-2 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedPlanIds.has(plan.plan_id)}
-                  onChange={() => handlePlanToggle(plan.plan_id)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900 text-sm">{plan.plan_title}</div>
-                  <div className="text-xs text-gray-500">
-                    {plan.trend.length} 次考試
-                  </div>
-                </div>
-                <div
-                  className="w-4 h-4 rounded"
-                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 成績趨勢圖 */}
-      {chartData.length > 0 && selectedPlanIds.size > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">成績趨勢</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="attempt" 
-                label={{ value: '考試次數', position: 'insideBottom', offset: -5 }} 
-              />
-              <YAxis 
-                label={{ value: '分數', angle: -90, position: 'insideLeft' }} 
-                domain={[0, 100]} 
-              />
-              <Tooltip 
-                formatter={(value: number, name: string) => {
-                  if (value === null) return [null, ''];
-                  const planId = parseInt(name.replace('plan_', ''));
-                  const plan = plansData[planId];
-                  return [value, plan?.plan_title || ''];
-                }}
-                labelFormatter={(label) => `第 ${label} 次考試`}
-              />
-              <Legend 
-                formatter={(value: string) => {
-                  const planId = parseInt(value.replace('plan_', ''));
-                  const plan = plansData[planId];
-                  return plan?.plan_title || '';
-                }}
-              />
-              {Array.from(selectedPlanIds).map((planId, index) => {
-                const plan = plansData[planId];
-                if (!plan) return null;
-                return (
-                  <Line
-                    key={planId}
-                    type="monotone"
-                    dataKey={`plan_${planId}`}
-                    stroke={COLORS[index % COLORS.length]}
-                    name={`plan_${planId}`}
-                    strokeWidth={2}
-                    dot={{ r: 4 }}
-                    connectNulls={false}
-                  />
-                );
-              })}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
 
       {/* 成績列表 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

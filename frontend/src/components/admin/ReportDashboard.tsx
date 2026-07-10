@@ -1400,7 +1400,7 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
                                                 <div className="flex items-center justify-center flex-wrap gap-2">
                                                   {record.emp_id && (
                                                     <Link
-                                                      to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || (item as DepartmentStat).name || '')}`}
+                                                      to={`/reports/personal?emp_id=${record.emp_id}&tab=history&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || (item as DepartmentStat).name || '')}`}
                                                       onClick={(e) => e.stopPropagation()}
                                                       className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                     >
@@ -1530,7 +1530,7 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
                                               <td className="px-4 py-2 text-center">
                                                 {record.emp_id && (
                                                   <Link
-                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=overview&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || '')}`}
+                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=history&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || '')}`}
                                                     onClick={(e) => e.stopPropagation()}
                                                     className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                   >

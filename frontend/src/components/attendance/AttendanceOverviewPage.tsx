@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
-import { BarChart3, Loader2, X } from 'lucide-react';
+import { BarChart3, Loader2, Search, X } from 'lucide-react';
 import api from '../../api';
 import BulkAbsenceReasonModal from './BulkAbsenceReasonModal';
 import Pagination from '../common/Pagination';
@@ -48,7 +48,14 @@ const ABSENCE_REASON_OPTIONS: Array<{ code: string; label: string }> = [
   { code: 'cancel_leave', label: '取消請假' },
 ];
 
-type TabStatus = 'active' | 'expired' | 'archived';
+type PlanStatusFilter = 'active' | 'expired' | 'archived' | 'all';
+
+const EMPTY_PLAN_MESSAGES: Record<PlanStatusFilter, string> = {
+  active: '目前尚無正在進行中的訓練計畫。',
+  expired: '目前尚無已過期的訓練計畫。',
+  archived: '目前尚無已封存的訓練計畫。',
+  all: '目前尚無訓練計畫。',
+};
 
 const getCardClass = (isActive: boolean, palette: 'indigo' | 'green' | 'orange' | 'purple') => {
   if (palette === 'indigo') {
@@ -72,10 +79,11 @@ const getCardClass = (isActive: boolean, palette: 'indigo' | 'green' | 'orange' 
 };
 
 /**
- * 報到總覽：與訓練計畫管理相同分頁（正在進行中／已過期／已封存），表格含操作欄可查看報到統計。
+ * 報到總覽：狀態篩選（正在進行中／已過期／已封存／全部）＋搜尋，表格含操作欄可查看報到統計。
  */
 const AttendanceOverviewPage = () => {
-  const [activeTab] = useState<TabStatus>('active');
+  const [planStatusFilter, setPlanStatusFilter] = useState<PlanStatusFilter>('active');
+  const [searchTerm, setSearchTerm] = useState('');
   const [plans, setPlans] = useState<PlanSummary[]>([]);
   const [statsMap, setStatsMap] = useState<Record<number, AttendanceStats>>({});
   const [loading, setLoading] = useState(true);
@@ -139,25 +147,37 @@ const AttendanceOverviewPage = () => {
     }
   };
 
+  const fetchPlans = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/training/plans', {
+        params: { status: planStatusFilter },
+      });
+      setPlans(res.data || []);
+      setStatsMap({});
+      setModalPlanId(null);
+    } catch (err) {
+      console.error('載入計畫失敗', err);
+      setPlans([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [planStatusFilter]);
+
   useEffect(() => {
-    const fetchPlans = async () => {
-      try {
-        setLoading(true);
-        const res = await api.get('/training/plans', {
-          params: { status: 'active' },
-        });
-        setPlans(res.data || []);
-        setStatsMap({});
-        setModalPlanId(null);
-      } catch (err) {
-        console.error('載入計畫失敗', err);
-        setPlans([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchPlans();
-  }, [activeTab]);
+    void fetchPlans();
+  }, [fetchPlans]);
+
+  const filteredPlans = useMemo(() => {
+    const k = searchTerm.trim().toLowerCase();
+    if (!k) return plans;
+    return plans.filter(
+      (p) =>
+        p.title.toLowerCase().includes(k) ||
+        p.training_date.includes(k) ||
+        (p.year ?? '').toLowerCase().includes(k),
+    );
+  }, [plans, searchTerm]);
 
   useEffect(() => {
     if (plans.length === 0) {
@@ -185,7 +205,7 @@ const AttendanceOverviewPage = () => {
       setStatsMap(next);
       setLoadingStats(false);
     };
-    fetchAllStats();
+    void fetchAllStats();
   }, [plans]);
 
   const openAttendanceModal = async (planId: number) => {
@@ -214,7 +234,7 @@ const AttendanceOverviewPage = () => {
   const modalPlan = modalPlanId ? plans.find((p) => p.id === modalPlanId) : null;
   /** 封存計畫僅能檢視統計，不可填寫／編輯未到原因 */
   const absenceReasonReadOnly =
-    Boolean(modalPlan?.is_archived) || activeTab === 'archived';
+    Boolean(modalPlan?.is_archived) || planStatusFilter === 'archived';
 
   type AttendanceListRow =
     | (AttendanceStats['checked_in_users'][number] & { kind: 'actual' })
@@ -269,17 +289,46 @@ const AttendanceOverviewPage = () => {
         </div>
       </header>
 
-      <div className="inline-flex gap-2 p-2 bg-green-50 border border-green-100 rounded-xl text-sm font-bold text-green-700">
-        目前僅顯示：正在進行中
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+        <select
+          value={planStatusFilter}
+          onChange={(e) => setPlanStatusFilter(e.target.value as PlanStatusFilter)}
+          className="px-3 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200 cursor-pointer"
+        >
+          <option value="active">正在進行中</option>
+          <option value="expired">已過期</option>
+          <option value="archived">已封存</option>
+          <option value="all">全部</option>
+        </select>
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <input
+            type="search"
+            placeholder="搜尋訓練計畫..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => void fetchPlans()}
+          className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors duration-200 shadow-sm shadow-indigo-200 cursor-pointer shrink-0"
+          title="重新載入"
+        >
+          更新
+        </button>
       </div>
 
       {loading ? (
         <div className="py-20 flex justify-center text-gray-400">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
         </div>
-      ) : plans.length === 0 ? (
+      ) : filteredPlans.length === 0 ? (
         <div className="bg-indigo-50/50 rounded-2xl border border-indigo-100 p-8 text-center text-gray-600">
-          目前尚無正在進行中的訓練計畫。
+          {plans.length === 0
+            ? EMPTY_PLAN_MESSAGES[planStatusFilter]
+            : '沒有符合搜尋條件的訓練計畫。'}
         </div>
       ) : (
         <>
@@ -303,7 +352,7 @@ const AttendanceOverviewPage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {plans.map((plan) => {
+                {filteredPlans.map((plan) => {
                   const stats = statsMap[plan.id];
                   const absent = stats
                     ? Math.max(0, stats.expected_count - stats.actual_count)
