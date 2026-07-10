@@ -159,7 +159,7 @@ docker compose exec \
 #### 教材允許格式主檔（2026-07-04）
 
 新增 `material_file_formats` 表，並冪等植入預設副檔名（含 `mp4`／`webm`）與教材類型「影音教材」。  
-對應 PLAN：[`20260704_教材主檔與允許格式維護_PLAN.md`](../../02-棕地專案/plans/20260704_教材主檔與允許格式維護_PLAN.md)。
+對應 PLAN：[`20260704_教材主檔與允許格式維護_PLAN.md`](../../02-棕地專案/plans/已完成/20260704_教材主檔與允許格式維護_PLAN.md)。
 
 ```bash
 # 1. 備份（本機）
@@ -232,7 +232,7 @@ docker compose exec training-backend python migrations/backfill_attendance_from_
 #### 已通過授權重考（2026-07-08）
 
 新增 `exam_retake_authorizations` 表、`exam_records.retake_authorized` 欄位、`btn:exam:authorize-retake` 功能碼。  
-對應 PLAN：[`20260709_已通過授權重考與考試中心及格分修正及Modal雙欄_PLAN.md`](../../02-棕地專案/plans/20260709_已通過授權重考與考試中心及格分修正及Modal雙欄_PLAN.md)。
+對應 PLAN：[`20260709_已通過授權重考與考試中心及格分修正及Modal雙欄_PLAN.md`](../../02-棕地專案/plans/已完成/20260709_已通過授權重考與考試中心及格分修正及Modal雙欄_PLAN.md)。
 
 **本機開發**：
 
@@ -285,7 +285,7 @@ SELECT name FROM sqlite_master WHERE type='table' AND name='exam_retake_authoriz
 #### 授權重考歷程對應（2026-07-10）
 
 新增 `exam_retake_authorizations.consumed_history_id`（FK → `exam_history.id`），交卷消耗授權時綁定第 N＋1 次歷程。  
-對應 PLAN：[`20260710_授權重考歷程對應與顯示_PLAN.md`](../../02-棕地專案/plans/20260710_授權重考歷程對應與顯示_PLAN.md)。
+對應 PLAN：[`20260710_授權重考歷程對應與顯示_PLAN.md`](../../02-棕地專案/plans/已完成/20260710_授權重考歷程對應與顯示_PLAN.md)。
 
 **本機開發**：
 

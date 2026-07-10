@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 將教材庫從「一檔一筆」升級為「教材套組」（一標題可含多檔、可綁 0~N 個訓練計畫），依 `1.docs/02-棕地專案/plans/20260617_教材上傳列管與教材庫_PLAN.md` §5.12（2026-07-09 業主核可）實作新表、遷移、API 與前端雙檢視教材庫。
+**Goal:** 將教材庫從「一檔一筆」升級為「教材套組」（一標題可含多檔、可綁 0~N 個訓練計畫），依 `1.docs/02-棕地專案/plans/已完成/20260617_教材上傳列管與教材庫_PLAN.md` §5.12（2026-07-09 業主核可）實作新表、遷移、API 與前端雙檢視教材庫。
 
 **Architecture:**
 - 後端新增 3 張表（`teaching_material_sets`／`teaching_material_files`／`teaching_material_set_plans`），舊表 `teaching_materials` 停止寫入、僅唯讀封存（遷移來源）。
@@ -3767,6 +3767,6 @@ git commit -m "refactor(materials): 移除 Wave1 舊端點(cutover)，類型/格
 ## 完成後續事項（不在本 PLAN 任務範圍，執行完 Task 1~15 後請與使用者確認）
 
 1. **正式環境遷移**：部署前於正式庫執行 `backend/migrations/add_teaching_material_sets.py`（備份 DB 後）；確認 Wave1 資料筆數與遷移後 `teaching_material_sets`/`files`/`set_plans` 筆數對得上（教材 PLAN §8 風險項）。
-2. **`1.docs/02-棕地專案/plans/20260617_教材上傳列管與教材庫_PLAN.md` 狀態更新**：Wave 2 實作完成後，將文件頂部「📋 Wave 2：待實作」改為「✅ Wave 2：已實作」，並視需要移動到 `已完成/` 目錄（依專案既有命名慣例，見 CLAUDE.md 文件同步規範）。
+2. **`1.docs/02-棕地專案/plans/已完成/20260617_教材上傳列管與教材庫_PLAN.md` 狀態更新**：Wave 2 實作完成後，將文件頂部「📋 Wave 2：待實作」改為「✅ Wave 2：已實作」，並視需要移動到 `已完成/` 目錄（依專案既有命名慣例，見 CLAUDE.md 文件同步規範）。
 3. **`1.docs/00-專案總覽/資料庫結構分析/education_training_db_結構分析.md`**：補上 `teaching_material_sets`／`teaching_material_files`／`teaching_material_set_plans` 三張表的結構說明（CLAUDE.md「資料庫操作」章節要求）。
 

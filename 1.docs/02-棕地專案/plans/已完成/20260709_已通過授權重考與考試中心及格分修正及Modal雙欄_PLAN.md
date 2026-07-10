@@ -2,11 +2,12 @@
 
 **文件類型**：棕地實作計劃  
 **建立日期**：2026-07-09  
-**狀態**：實作中（Phase 4 已完成；Phase 1～3 已併入本分支）  
+**狀態**：✅ 已實作（2026-07-09；後續歷程對應見 [`20260710_授權重考歷程對應與顯示_PLAN.md`](./20260710_授權重考歷程對應與顯示_PLAN.md)）  
 **關聯議題**：已通過但成績不理想之重考需求、ExamDashboard 及格判斷錯誤、訓練計畫編輯 Modal 過長
 
 > 本文件僅依已確認結論撰寫，不新增額外需求。  
-> **2026-07-09 更新**：Phase 4（Modal 雙欄）已完成，無需再做。重考機制（Phase 1～3）自 `feature/authorized-retake-exam-fix-plan-modal` cherry-pick 至本分支。
+> **2026-07-09 更新**：Phase 4（Modal 雙欄）已完成。重考機制（Phase 1～3）自 `feature/authorized-retake-exam-fix-plan-modal` cherry-pick 至本分支。  
+> **2026-07-10 結案**：Phase 1～4 程式已落地；`exam_retake_authorizations` 遷移、`AuthorizeRetakeModal`、`ExamDashboard` 及格分、`TrainingPlanManager` 雙欄均已上線。
 
 ---
 
@@ -337,4 +338,13 @@
 
 ---
 
-**請審核者確認**：本 PLAN 僅包含既定結論，確認後再進入實作。
+## 9. 實作檢查清單
+
+- [x] Phase 1：`exam_retake_authorizations` 模型與 migration（`add_exam_retake_authorization.py`）
+- [x] Phase 2：授權 API（`authorize_retake`／`revoke_retake`）、開考／交卷整合（`exam_center.py`）
+- [x] Phase 3：`ExamDashboard` 移除硬編碼 60；`my_exams` 回傳 `passing_score`／`is_passed`／`retake_authorized`／`can_start_exam`
+- [x] Phase 4：`TrainingPlanManager` 編輯 Modal 左右雙欄（左表單、右教材）
+- [x] 成績中心「開放重考」入口（`AuthorizeRetakeModal`、`PersonalScoreHistory`）
+- [x] `npm run build` 通過
+
+**實作摘要（2026-07-09）**：migration `exam_retake_authorizations`；後端 `exam_center.py` 授權／消耗邏輯；前端 `AuthorizeRetakeModal`、`ExamDashboard` 及格分、`TrainingPlanManager` 雙欄。後續歷程對應與權限對齊見 2026-07-10 PLAN。

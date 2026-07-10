@@ -177,8 +177,8 @@ backend/.venv/bin/python3 tests/test_config_paths.py
 - `backend/.env.example`（本機開發）
 - `deploy/.env.example`（Docker 生產；`TRAINING_*` 前綴）
 - `deploy/docker-compose.yml`（環境變數映射）
-- [系統備援 NAS 儲存與排程備份 PLAN](../02-棕地專案/plans/20260612_系統備援_NAS儲存與排程備份_PLAN.md) §5.3、§5.7
-- [教材上傳列管與教材庫 PLAN](../02-棕地專案/plans/20260617_教材上傳列管與教材庫_PLAN.md)
+- [系統備援 NAS 儲存與排程備份 PLAN](../02-棕地專案/plans/已完成/20260612_系統備援_NAS儲存與排程備份_PLAN.md) §5.3、§5.7
+- [教材上傳列管與教材庫 PLAN](../02-棕地專案/plans/已完成/20260617_教材上傳列管與教材庫_PLAN.md)
 - [資料庫遷移/MIGRATION_GUIDE.md](資料庫遷移/MIGRATION_GUIDE.md)（Docker SMTP 加密、AD 設定）
 - [README.md](../../README.md)「NAS／SMB 與跨平台路徑」
 
