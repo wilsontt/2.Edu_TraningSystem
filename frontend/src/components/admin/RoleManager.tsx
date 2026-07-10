@@ -51,7 +51,7 @@ const RoleManager = () => {
   const [jobTitles, setJobTitles] = useState<Array<{id: number; name: string}>>([]);
   const [targetRoleId, setTargetRoleId] = useState<number | null>(null);
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);
-  const [roleUsers, setRoleUsers] = useState<Array<{emp_id: string; name: string; role_id: number}>>([]);
+  const [roleUsers, setRoleUsers] = useState<Array<{emp_id: string; name: string; role_id: number; department?: string | null}>>([]);
   const [memberPage, setMemberPage] = useState(1);
   const [memberPageSize, setMemberPageSize] = useState(10);
   
@@ -184,7 +184,7 @@ const RoleManager = () => {
               role_id: number;
               role_name: string;
               user_count: number;
-              users: Array<{emp_id: string; name: string; role_id: number}>;
+              users: Array<{emp_id: string; name: string; role_id: number; department?: string | null}>;
             }>(`/admin/roles/${role.id}/users`);
             const users = res.data.users || [];
             items = users.map((u) => `${u.name} (${u.emp_id})`);
@@ -491,7 +491,7 @@ const RoleManager = () => {
                             <p className="text-gray-500 font-bold">目前無成員</p>
                           </div>
                         ) : (
-                          paginatedRoleUsers.map((user: {emp_id: string; name: string; role_id: number}, uIdx: number) => {
+                          paginatedRoleUsers.map((user: {emp_id: string; name: string; role_id: number; department?: string | null}, uIdx: number) => {
                             const displayIndex = memberStartIndex + uIdx + 1;
                             return (
                             <div
@@ -508,6 +508,9 @@ const RoleManager = () => {
                                 <div>
                                   <p className="font-bold text-gray-900">{user.name}</p>
                                   <p className="text-xs text-gray-500 font-medium">員工編號：{user.emp_id}</p>
+                                  <p className="text-xs text-gray-500 font-medium">
+                                    部門：{user.department ?? '—'}
+                                  </p>
                                 </div>
                               </div>
                               {user.emp_id.toLowerCase() !== 'admin' && (

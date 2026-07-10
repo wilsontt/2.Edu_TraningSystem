@@ -1,4 +1,4 @@
-import { useState, useEffect, startTransition } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { User, Search, Award } from 'lucide-react';
@@ -87,17 +87,15 @@ export default function PersonalScorePage() {
     const deptNameFromUrl = searchParams.get('dept_name');
     if (!empIdFromUrl) return;
 
-    startTransition(() => {
-      setSelectedEmpId(empIdFromUrl);
-      if (empNameFromUrl) setSelectedEmpName(empNameFromUrl);
-      if (deptNameFromUrl) setSelectedDeptName(deptNameFromUrl);
-      const user = users.find((u) => u.emp_id === empIdFromUrl);
-      if (user) {
-        setSelectedEmpName(user.name || '');
-        setSelectedDeptName(user.dept_name || '');
-        setUserSearchTerm(`${user.name} (${user.emp_id})`);
-      }
-    });
+    setSelectedEmpId(empIdFromUrl);
+    if (empNameFromUrl) setSelectedEmpName(empNameFromUrl);
+    if (deptNameFromUrl) setSelectedDeptName(deptNameFromUrl);
+    const user = users.find((u) => u.emp_id === empIdFromUrl);
+    if (user) {
+      setSelectedEmpName(user.name || '');
+      setSelectedDeptName(user.dept_name || '');
+      setUserSearchTerm(`${user.name} (${user.emp_id})`);
+    }
   }, [searchParams, users]);
 
   useEffect(() => {
@@ -157,10 +155,30 @@ export default function PersonalScorePage() {
     (u.dept_name && u.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase()))
   );
 
+  // 同步自 URL，避免子元件在 useEffect 更新前用到過期的 emp_id
+  const empIdFromUrl = searchParams.get('emp_id');
+  const empNameFromUrl = searchParams.get('emp_name');
+  const deptNameFromUrl = searchParams.get('dept_name');
+  const viewEmpId = (empIdFromUrl ?? selectedEmpId ?? selfEmpId) || undefined;
+  const isViewingOther = Boolean(viewEmpId && selfEmpId && viewEmpId !== selfEmpId);
+  const apiEmpId = isViewingOther ? viewEmpId : undefined;
+
   const titlePrefix = (() => {
-    if (!selectedEmpId || (selfEmpId && selectedEmpId === selfEmpId)) return '';
-    const name = selectedEmpName || users.find((u) => u.emp_id === selectedEmpId)?.name || selectedEmpId;
-    const dept = selectedDeptName || users.find((u) => u.emp_id === selectedEmpId)?.dept_name || '';
+    const targetId = empIdFromUrl ?? selectedEmpId;
+    const isSelf = !targetId || (selfEmpId && targetId === selfEmpId);
+    if (isSelf) {
+      return selfName && selfEmpId ? `${selfName} (${selfEmpId})` : '';
+    }
+    const name =
+      empNameFromUrl ||
+      selectedEmpName ||
+      users.find((u) => u.emp_id === targetId)?.name ||
+      targetId;
+    const dept =
+      deptNameFromUrl ||
+      selectedDeptName ||
+      users.find((u) => u.emp_id === targetId)?.dept_name ||
+      '';
     return `${dept ? `${dept} ` : ''}${name}`.trim();
   })();
 
@@ -343,13 +361,27 @@ export default function PersonalScorePage() {
       <div>
         {activeTab === 'overview' && (
           <PersonalScoreOverview
-            empId={selectedEmpId || undefined}
+            key={viewEmpId ?? 'self'}
+            empId={apiEmpId}
             titlePrefix={titlePrefix}
             onNavigateHistory={() => navigateTab('history')}
           />
         )}
-        {activeTab === 'history' && <PersonalScoreHistory empId={selectedEmpId || undefined} titlePrefix={titlePrefix} canAuthorizeRetake={canAuthorizeRetake} />}
-        {activeTab === 'analysis' && <PersonalLearningAnalysis empId={selectedEmpId || undefined} titlePrefix={titlePrefix} />}
+        {activeTab === 'history' && (
+          <PersonalScoreHistory
+            key={viewEmpId ?? 'self'}
+            empId={apiEmpId}
+            titlePrefix={titlePrefix}
+            canAuthorizeRetake={canAuthorizeRetake}
+          />
+        )}
+        {activeTab === 'analysis' && (
+          <PersonalLearningAnalysis
+            key={viewEmpId ?? 'self'}
+            empId={apiEmpId}
+            titlePrefix={titlePrefix}
+          />
+        )}
         {activeTab === 'team' && hasReportPermission && <ReportDashboard canAuthorizeRetake={canAuthorizeRetake} />}
         {activeTab === 'batch-print' && hasReportPermission && <BatchPrintPage />}
       </div>

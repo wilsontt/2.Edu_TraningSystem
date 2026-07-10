@@ -54,41 +54,50 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
   const [authorizeTarget, setAuthorizeTarget] = useState<{ empId: string; planId: number; empName: string; planTitle: string } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchHistory = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      const params = new URLSearchParams({
-        sort_by: sortBy,
-        order: order,
-        page: page.toString(),
-        page_size: pageSize.toString(),
-      });
-      if (keyword.trim()) {
-        params.append('keyword', keyword.trim());
-      }
-      if (empId) {
-        params.append('emp_id', empId);
-      }
-      const baseURL = API_BASE_URL;
-      const response = await fetch(`${baseURL}/exam/personal/history?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setHistory(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch personal history', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const controller = new AbortController();
+    setHistory(null);
+    setLoading(true);
+
+    const fetchHistory = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const params = new URLSearchParams({
+          sort_by: sortBy,
+          order: order,
+          page: page.toString(),
+          page_size: pageSize.toString(),
+        });
+        if (keyword.trim()) {
+          params.append('keyword', keyword.trim());
+        }
+        if (empId) {
+          params.append('emp_id', empId);
+        }
+        const baseURL = API_BASE_URL;
+        const response = await fetch(`${baseURL}/exam/personal/history?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+
+        if (response.ok) {
+          const data = (await response.json()) as HistoryResponse;
+          setHistory(data);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
+        console.error('Failed to fetch personal history', error);
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
+
     void fetchHistory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => controller.abort();
   }, [sortBy, order, page, pageSize, keyword, empId, refreshKey]);
 
   useEffect(() => {
@@ -125,7 +134,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
     <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto print:hidden">
       <div>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">
-          {titlePrefix ? `${titlePrefix} 個人成績歷史` : '個人成績歷史'}
+          {titlePrefix ? `${titlePrefix}的個人成績歷史` : '個人成績歷史'}
         </h2>
         <p className="text-gray-500 mt-1">
           {titlePrefix ? `查看 ${titlePrefix} 的所有考試記錄` : '查看您的所有考試記錄'}
