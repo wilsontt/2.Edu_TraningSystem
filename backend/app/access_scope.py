@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 
 from . import models
 
+from .constants.auth import is_super_admin_role
+
 DataScope = Literal["all", "department", "self"]
 
 # 角色優先：全域可見
@@ -72,6 +74,22 @@ def resolve_data_scope(current_user: models.User, db: Optional[Session] = None) 
     if job_title_name in DEPARTMENT_SCOPE_JOB_TITLES:
         return "department"
 
+    return "self"
+
+
+def get_role_scope_type(db: Session, current_user: models.User) -> DataScope:
+    """
+    與 GET /auth/me 的 role_scope_type 一致：
+    超級管理角色 → all；否則讀 RoleDepartmentScope；預設 self。
+    """
+    if current_user.role and is_super_admin_role(current_user.role.name):
+        return "all"
+    if current_user.role_id:
+        scope_row = db.query(models.RoleDepartmentScope).filter(
+            models.RoleDepartmentScope.role_id == current_user.role_id
+        ).first()
+        if scope_row and scope_row.scope_type in ("all", "department", "self"):
+            return scope_row.scope_type
     return "self"
 
 

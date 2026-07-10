@@ -120,10 +120,7 @@ export default function PersonalScorePage() {
           (hasMenuReport &&
             (user.role_scope_type === 'department' || user.role_scope_type === 'all'));
         setHasReportPermission(canViewTeamReport);
-
-        const userFunctions: string[] = Array.isArray(user.functions) ? user.functions : [];
-        const canAuthorize = user.role === 'Admin' || userFunctions.includes('btn:exam:authorize-retake');
-        setCanAuthorizeRetake(canAuthorize);
+        setCanAuthorizeRetake(canViewTeamReport);
         
         // 如果是 Admin，載入使用者列表
         if (user.role === 'Admin') {

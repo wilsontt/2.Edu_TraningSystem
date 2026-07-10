@@ -239,6 +239,40 @@ export default function ScoreDetailModal({
                   </div>
                 </div>
 
+                {detail.retake_authorization && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 sm:p-6 mb-6">
+                    <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                      <Award className="h-5 w-5 mr-2 text-amber-600" />
+                      授權重考資訊
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-sm text-gray-500 mb-1">授權者</div>
+                        <div className="font-medium text-gray-900">
+                          {detail.retake_authorization.authorized_by_name}
+                          {detail.retake_authorization.authorized_by
+                            ? ` (${detail.retake_authorization.authorized_by})`
+                            : ''}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500 mb-1">時間</div>
+                        <div className="font-medium text-gray-900">
+                          {detail.retake_authorization.authorized_at
+                            ? parseBackendDateTime(detail.retake_authorization.authorized_at)?.toLocaleString('zh-TW', { hour12: false })
+                            : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500 mb-1">原因</div>
+                        <div className="font-medium text-gray-900 whitespace-pre-wrap">
+                          {detail.retake_authorization.reason || '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* 答題詳情 */}
                 <div>
                   <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">

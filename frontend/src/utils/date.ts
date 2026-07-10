@@ -1,5 +1,5 @@
 /**
- * 後端 datetime 欄位（如 created_at、submit_time、checkin_time）一律以 naive UTC
+ * 後端 datetime 欄位（如 created_at、submit_time、checkin_time、authorized_at）一律以 naive UTC
  * （無時區標記，例如 "2026-06-23T07:54:00.123456"）序列化。JavaScript 的 `Date`
  * 建構子遇到無時區標記的 ISO 字串會當作「本機時區」解析，導致顯示時間整體偏移
  * 時區差（台灣 UTC+8 會少 8 小時，跨日時間點甚至會顯示錯誤的日期）。

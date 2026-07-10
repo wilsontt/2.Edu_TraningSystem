@@ -14,15 +14,11 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, case
 from typing import List, Optional
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
 from .. import models, schemas
 from ..database import get_db
 from .auth import get_current_user
-from ..access_scope import get_scope_emp_ids, is_active_user_status
-
-_TZ_TAIPEI = ZoneInfo("Asia/Taipei")
-
+from ..access_scope import get_scope_emp_ids, get_role_scope_type, is_active_user_status
 
 def _training_plan_status_filter_expr_exam(status: str):
     """與 GET /training/plans、報表 overview 之 plan_status 語意一致。"""
@@ -43,9 +39,12 @@ def _training_plan_status_filter_expr_exam(status: str):
     return models.TrainingPlan.is_archived == True
 
 
-def _now_taipei_naive() -> datetime:
-    """業務時區 Asia/Taipei 的牆上時間（naive datetime），報到與交卷需一致。"""
-    return datetime.now(_TZ_TAIPEI).replace(tzinfo=None)
+def _now_utc_naive() -> datetime:
+    """
+    以 UTC 儲存 naive datetime。
+    前端 parseBackendDateTime() 會將無時區 datetime 視為 UTC（補 Z）後再轉本地時區顯示。
+    """
+    return datetime.utcnow()
 
 
 _ATTENDANCE_REQUIRED_MSG = "請先完成報到後再開始考試"
@@ -118,14 +117,17 @@ def _has_menu_report_permission(current_user: models.User) -> bool:
     return any(f.code == "menu:report" for f in current_user.role.functions)
 
 
-def _has_authorize_retake_permission(current_user: models.User) -> bool:
-    """判斷使用者是否具備授權重考功能碼（btn:exam:authorize-retake）或為管理員。"""
+def _has_authorize_retake_permission(db: Session, current_user: models.User) -> bool:
+    """
+    授權重考資格：與成績中心「部門成績」tab 一致（20260710 PLAN §5.2.5）。
+    Admin，或 menu:report + role_scope_type 為 all／department。
+    """
     role_name = (current_user.role and current_user.role.name) or ""
-    if is_admin_or_system_role(role_name):
+    if role_name == "Admin":
         return True
-    if not current_user.role or not current_user.role.functions:
+    if not _has_menu_report_permission(current_user):
         return False
-    return any(f.code == "btn:exam:authorize-retake" for f in current_user.role.functions)
+    return get_role_scope_type(db, current_user) in ("all", "department")
 
 
 def _can_view_emp_id(db: Session, current_user: models.User, target_emp_id: str) -> bool:
@@ -142,6 +144,64 @@ def _can_view_emp_id(db: Session, current_user: models.User, target_emp_id: str)
         return False
     allowed_emp_ids = get_scope_emp_ids(db, current_user, active_only=True)
     return allowed_emp_ids is None or target_emp_id in allowed_emp_ids
+
+
+def _serialize_retake_authorization(
+    auth: Optional[models.ExamRetakeAuthorization],
+    authorizer_name: Optional[str] = None,
+) -> Optional[dict]:
+    """組裝歷程／詳情用的授權資訊（不含是否已消耗）。"""
+    if not auth:
+        return None
+    return {
+        "authorized_by": auth.authorized_by,
+        "authorized_by_name": authorizer_name or auth.authorized_by,
+        "authorized_at": auth.authorized_at.isoformat() if auth.authorized_at else None,
+        "reason": auth.reason,
+    }
+
+
+def _retake_auth_map_by_history_id(
+    db: Session,
+    record_id: int,
+) -> dict[int, dict]:
+    """以 consumed_history_id 對應授權資訊（含授權者姓名）。"""
+    auths = (
+        db.query(models.ExamRetakeAuthorization)
+        .filter(
+            models.ExamRetakeAuthorization.record_id == record_id,
+            models.ExamRetakeAuthorization.consumed_history_id.isnot(None),
+        )
+        .all()
+    )
+    if not auths:
+        return {}
+    authorizer_ids = {a.authorized_by for a in auths if a.authorized_by}
+    name_by_emp: dict[str, str] = {}
+    if authorizer_ids:
+        users = db.query(models.User).filter(models.User.emp_id.in_(authorizer_ids)).all()
+        name_by_emp = {u.emp_id: u.name for u in users}
+    result: dict[int, dict] = {}
+    for auth in auths:
+        if auth.consumed_history_id is None:
+            continue
+        result[int(auth.consumed_history_id)] = _serialize_retake_authorization(
+            auth,
+            name_by_emp.get(auth.authorized_by),
+        )
+    return result
+
+
+def _attach_retake_auth_to_history_list(
+    history_list: List[dict],
+    auth_by_history_id: dict[int, dict],
+) -> None:
+    for row in history_list:
+        hid = row.get("id")
+        if isinstance(hid, int) and hid in auth_by_history_id:
+            row["retake_authorization"] = auth_by_history_id[hid]
+        else:
+            row["retake_authorization"] = None
 
 # --- 考試中心資料結構 ---
 class ExamListItem(BaseModel):
@@ -384,7 +444,7 @@ def start_exam(
 
     # 建立或更新 ExamRecord 的 start_time（記錄開始作答時間）
     # 這樣在 submit_exam 時可以正確計算作答時間
-    now = datetime.now()
+    now = _now_utc_naive()
     if record:
         # 如果是重考，更新 start_time 為本次開始時間
         # 只有在已經提交過（有 submit_time）或沒有 start_time 時才更新
@@ -527,7 +587,7 @@ def submit_exam(
         models.ExamRecord.emp_id == current_user.emp_id
     ).first()
     
-    now = _now_taipei_naive()
+    now = _now_utc_naive()
 
     if existing_record:
         # Update existing record (Re-take)
@@ -596,8 +656,9 @@ def submit_exam(
         details=details_json
     )
     db.add(history_record)
+    db.flush()  # 取得 history_record.id，供授權消耗綁定
 
-    # 若本次為授權重考，消耗授權旗標
+    # 若本次為授權重考，消耗授權旗標並綁定第 N+1 次 history
     if existing_record and getattr(existing_record, 'retake_authorized', False):
         existing_record.retake_authorized = False
         pending_auth = (
@@ -612,6 +673,7 @@ def submit_exam(
         )
         if pending_auth:
             pending_auth.consumed_at = now
+            pending_auth.consumed_history_id = history_record.id
 
     db.commit()
     
@@ -633,17 +695,16 @@ def authorize_retake(
     current_user: models.User = Depends(get_current_user),
 ):
     """授權已通過考試的學員重考。一次授權 = 一次機會。"""
-    # 層 1：功能權限
-    if not _has_authorize_retake_permission(current_user):
+    # 層 1：授權資格（與部門成績 tab 一致）
+    if not _has_authorize_retake_permission(db, current_user):
         raise HTTPException(status_code=403, detail="您沒有授權重考的權限")
 
     # 層 2：資料範圍
     if not _can_view_emp_id(db, current_user, req.emp_id):
         raise HTTPException(status_code=403, detail="無權限操作此員工的考試紀錄")
 
-    # 防止自我授權（須由他人授權）；Admin／系統管理者為最高權限，允許自我授權
-    role_name = (current_user.role and current_user.role.name) or ""
-    if req.emp_id == current_user.emp_id and not is_admin_or_system_role(role_name):
+    # 禁止自我授權（管理帳號不應受訓；一般主管亦不可授權自己）
+    if req.emp_id == current_user.emp_id:
         raise HTTPException(status_code=400, detail="不可授權自己重考，須由其他主管或稽核人員執行")
 
     # 業務驗證
@@ -667,7 +728,7 @@ def authorize_retake(
         raise HTTPException(status_code=400, detail="授權原因不可為空")
 
     # 寫入授權
-    now = _now_taipei_naive()
+    now = _now_utc_naive()
     record.retake_authorized = True
     auth_log = models.ExamRetakeAuthorization(
         record_id=record.id,
@@ -696,7 +757,7 @@ def revoke_retake(
     current_user: models.User = Depends(get_current_user),
 ):
     """撤銷尚未使用的重考授權。"""
-    if not _has_authorize_retake_permission(current_user):
+    if not _has_authorize_retake_permission(db, current_user):
         raise HTTPException(status_code=403, detail="您沒有撤銷重考授權的權限")
     if not _can_view_emp_id(db, current_user, req.emp_id):
         raise HTTPException(status_code=403, detail="無權限操作此員工的考試紀錄")
@@ -710,7 +771,7 @@ def revoke_retake(
     if not record.retake_authorized:
         raise HTTPException(status_code=400, detail="目前沒有待使用的重考授權可撤銷")
 
-    now = _now_taipei_naive()
+    now = _now_utc_naive()
     record.retake_authorized = False
 
     # 標記最新的未消耗授權為已撤銷
@@ -1186,7 +1247,7 @@ def get_personal_analysis(
     weak_areas = [c for c in category_analysis if c["avg_score"] < 60]
     
     # 成績趨勢資料（依 trend_period 參數決定時間範圍，按月統計）
-    now = datetime.now()
+    now = datetime.utcnow()
     trend_data = []
     # 計算要往前推幾個月（含當月）
     months_to_go_back = trend_period - 1  # 例如 6 個月：0, 1, 2, 3, 4, 5（共 6 個月）
@@ -1343,6 +1404,9 @@ def get_exam_record_detail(
             })
             history_list.sort(key=lambda x: x.get("submit_time") or "")
 
+    auth_by_history_id = _retake_auth_map_by_history_id(db, record.id)
+    _attach_retake_auth_to_history_list(history_list, auth_by_history_id)
+
     return {
         "record_id": record.id,
         "basic_info": {
@@ -1452,6 +1516,10 @@ def get_exam_history_detail(
             })
             history_list.sort(key=lambda x: x.get("submit_time") or "")
 
+    auth_by_history_id = _retake_auth_map_by_history_id(db, record.id)
+    _attach_retake_auth_to_history_list(history_list, auth_by_history_id)
+    this_retake_auth = auth_by_history_id.get(history.id)
+
     # 9. 回傳資料
     return {
         "record_id": record.id, # 為了相容前端介面，這裡仍回傳 record_id
@@ -1473,7 +1541,8 @@ def get_exam_history_detail(
             "attempts": record.attempts # 這是總次數，非當次次數，但可接受
         },
         "question_details": question_details,
-        "history": history_list
+        "history": history_list,
+        "retake_authorization": this_retake_auth,
     }
 
 # --- 報到功能 API ---
@@ -1557,7 +1626,7 @@ def check_in_attendance(
     attendance = models.AttendanceRecord(
         emp_id=current_user.emp_id,
         plan_id=plan_id,
-        checkin_time=_now_taipei_naive(),
+        checkin_time=_now_utc_naive(),
         ip_address=client_ip
     )
     

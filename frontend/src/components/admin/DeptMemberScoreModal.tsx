@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../../api';
 import Pagination from '../common/Pagination';
 import { format } from 'date-fns';
 import clsx from 'clsx';
+import { parseBackendDateTime } from '../../utils/date';
 import { buildBatchPrintHtml, printHtmlInIframe, type MemberPrintItem } from '../personal/scoreCardPrintHtml';
 
 interface DeptMember {
@@ -18,10 +19,9 @@ interface DeptMember {
   absence_recorded_at: string | null;
 }
 
-function formatIsoTime(iso: string | null): string | null {
+function formatBackendDateTime(iso: string | null): string | null {
   if (!iso) return null;
-  // "2026-04-28T09:30:00" → "2026/04/28 09:30"
-  return iso.slice(0, 16).replace('T', ' ').replace(/-/g, '/');
+  return parseBackendDateTime(iso)?.toLocaleString('zh-TW', { hour12: false }) ?? null;
 }
 
 interface PlanOption {
@@ -449,14 +449,14 @@ export default function DeptMemberScoreModal({
                                 </td>
                                 <td className="px-3 py-2 text-gray-500 text-xs tabular-nums">
                                   {m.last_submit_time
-                                    ? m.last_submit_time.slice(0, 16).replace('T', ' ')
+                                    ? formatBackendDateTime(m.last_submit_time)
                                     : '—'}
                                 </td>
                                 <td className="px-3 py-2 text-xs text-gray-500">
                                   <div>{m.attendance_status}</div>
                                   {(m.check_in_time || m.absence_recorded_at) && (
                                     <div className="text-gray-400 tabular-nums mt-0.5">
-                                      {formatIsoTime(m.check_in_time ?? m.absence_recorded_at)}
+                                      {formatBackendDateTime(m.check_in_time ?? m.absence_recorded_at)}
                                     </div>
                                   )}
                                 </td>

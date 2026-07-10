@@ -98,6 +98,7 @@ erDiagram
     questions ||--o{ exam_details : "question_id"
     exam_records ||--o{ exam_history : "record_id"
     exam_records ||--o{ exam_retake_authorizations : "record_id"
+    exam_history ||--o| exam_retake_authorizations : "consumed_history_id"
 
     users ||--o{ attendance_records : "emp_id"
     training_plans ||--o{ attendance_records : "plan_id"
@@ -221,10 +222,13 @@ erDiagram
 | authorized_at | 授權時間 | DATETIME | — | 是 | — | — | 臺北時間（naive） |
 | reason | 授權原因 | TEXT | — | 是 | — | — | 最多 500 字 |
 | consumed_at | 重考提交時間（授權被使用） | DATETIME | — | 否 | — | NULL | 學員提交後填入 |
+| consumed_history_id | 對應交卷歷程 ID | INTEGER | — | 否 | — | NULL | → `exam_history.id`（第 N＋1 次） |
 | revoked_at | 撤銷時間 | DATETIME | — | 否 | — | NULL | 管理員撤銷授權時填入 |
 | revoked_by | 撤銷者員工編號 | VARCHAR | 未宣告 | 否 | — | NULL | — |
 
-**業務邏輯**：每次授權新增一筆；`consumed_at` 有值表示授權已被使用；`revoked_at` 有值表示被撤銷。同時 `consumed_at` 和 `revoked_at` 均為 NULL 表示「待使用」授權。
+**業務邏輯**：每次授權新增一筆；`consumed_at` 有值表示授權已被使用；`consumed_history_id` 綁定該次交卷的 `exam_history.id`；`revoked_at` 有值表示被撤銷。同時 `consumed_at` 和 `revoked_at` 均為 NULL 表示「待使用」授權。
+
+**索引**：`idx_retake_auth_record_id`（`record_id`）、`idx_retake_auth_consumed_history`（`consumed_history_id`）。
 
 ---
 

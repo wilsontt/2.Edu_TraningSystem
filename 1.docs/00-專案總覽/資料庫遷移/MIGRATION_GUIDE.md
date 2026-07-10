@@ -85,6 +85,7 @@ docker compose exec training-backend python migrations/add_training_plan_enhance
 docker compose exec training-backend python migrations/add_attendance_absence_reasons.py
 docker compose exec training-backend python migrations/add_material_file_formats.py
 docker compose exec training-backend python migrations/add_exam_retake_authorization.py
+docker compose exec training-backend python migrations/add_retake_auth_consumed_history_id.py
 docker compose exec training-backend python migrations/backfill_attendance_from_exam.py
 ```
 
@@ -280,6 +281,40 @@ docker compose up -d --force-recreate training-backend
 PRAGMA table_info(exam_records);  -- 應含 retake_authorized
 SELECT name FROM sqlite_master WHERE type='table' AND name='exam_retake_authorizations';
 ```
+
+#### 授權重考歷程對應（2026-07-10）
+
+新增 `exam_retake_authorizations.consumed_history_id`（FK → `exam_history.id`），交卷消耗授權時綁定第 N＋1 次歷程。  
+對應 PLAN：[`20260710_授權重考歷程對應與顯示_PLAN.md`](../../02-棕地專案/plans/20260710_授權重考歷程對應與顯示_PLAN.md)。
+
+**本機開發**：
+
+```bash
+cp data/education_training.db data/education_training.db.bak-$(date +%Y%m%d)
+cd backend
+.venv/bin/python3 migrations/add_retake_auth_consumed_history_id.py
+```
+
+**ds1 Docker**：
+
+```bash
+cd /opt/apps/enterprise-portal/deploy
+docker compose exec training-backend python migrations/add_retake_auth_consumed_history_id.py
+```
+
+驗證：
+
+```sql
+PRAGMA table_info(exam_retake_authorizations);  -- 應含 consumed_history_id
+```
+
+#### 考試中心時間語意（2026-07-10，無 DB 結構變更）
+
+**SSOT**：`exam_records`／`exam_history` 的 `submit_time`、`start_time`，`attendance_records.checkin_time`，`exam_retake_authorizations.authorized_at`／`consumed_at` 等業務時間，後端一律以 **UTC naive** 寫入；前端以 `parseBackendDateTime()`（無時區 ISO 補 `Z`）轉台灣顯示。
+
+**程式**：`exam_center._now_utc_naive()`；`start_exam`／`submit_exam`／報到／授權重考皆使用此 helper。回歸測試：`tests/test_exam_time_semantics.py`。
+
+**既有資料**：2026-07-03～修正日前若以 `_now_taipei_naive()` 寫入的列，DB 內為「台北牆上時間卻無時區標記」，畫面可能仍偏移約 8 小時；修正後**新產生**的紀錄會正確。若需校正歷史列，請另開資料修復（將該時段誤標時間換算為 UTC 後更新），**非**本節 migration 範圍。
 
 #### ds1 Docker：遷移後設定 AD 環境變數（必做，否則「AD 管理」顯示未啟用）
 

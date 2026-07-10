@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ChevronRight, Printer } from 'lucide-react';
 import clsx from 'clsx';
 import Pagination from '../common/Pagination';
+import { parseBackendDateTime } from '../../utils/date';
 import {
   useBatchPrint,
   BATCH_PRINT_INDIVIDUAL_WARN_THRESHOLD,
@@ -601,7 +602,9 @@ export default function BatchPrintPage() {
                               </span>
                             </td>
                             <td className="px-3 py-2.5 text-gray-500 text-sm tabular-nums">
-                              {item.submit_time ? item.submit_time.slice(0, 16).replace('T', ' ') : '—'}
+                              {item.submit_time
+                                ? parseBackendDateTime(item.submit_time)?.toLocaleString('zh-TW', { hour12: false })
+                                : '—'}
                             </td>
                           </tr>
                         ))}

@@ -188,6 +188,9 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         狀態
                       </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        授權者
+                      </th>
                       <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         操作
                       </th>
@@ -223,6 +226,11 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                               </span>
                             )}
                           </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {h.retake_authorization
+                              ? `${h.retake_authorization.authorized_by_name}${h.retake_authorization.authorized_by ? ` (${h.retake_authorization.authorized_by})` : ''}`
+                              : '—'}
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <button
                               type="button"
@@ -245,7 +253,7 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                        <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
                           無歷史紀錄
                         </td>
                       </tr>

@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session, joinedload
 
 from .. import auth_utils, models, schemas
+from ..access_scope import get_role_scope_type
 from ..config import get_settings
 from ..constants.auth import SUPER_ADMIN_ROLE_NAMES, is_management_role, is_super_admin_role
 from ..database import get_db
@@ -593,24 +594,16 @@ async def get_me(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    scope_type = "self"
+    scope_type = get_role_scope_type(db, current_user)
     scope_dept_ids: List[int] = []
 
-    if current_user.role and is_super_admin_role(current_user.role.name):
-        scope_type = "all"
-    elif current_user.role_id:
-        scope_row = db.query(models.RoleDepartmentScope).filter(
-            models.RoleDepartmentScope.role_id == current_user.role_id
-        ).first()
-        if scope_row:
-            scope_type = scope_row.scope_type or "self"
-        if scope_type == "department":
-            scope_dept_ids = [
-                row[0]
-                for row in db.query(models.RoleDepartmentScopeDept.dept_id).filter(
-                    models.RoleDepartmentScopeDept.role_id == current_user.role_id
-                ).all()
-            ]
+    if scope_type == "department" and current_user.role_id:
+        scope_dept_ids = [
+            row[0]
+            for row in db.query(models.RoleDepartmentScopeDept.dept_id).filter(
+                models.RoleDepartmentScopeDept.role_id == current_user.role_id
+            ).all()
+        ]
 
     return {
         "emp_id": current_user.emp_id,

@@ -251,10 +251,12 @@ class ExamRetakeAuthorization(Base):
     authorized_at = Column(DateTime, nullable=False)
     reason = Column(Text, nullable=False)               # 授權原因（必填）
     consumed_at = Column(DateTime, nullable=True)       # 學員完成授權重考後填入
+    consumed_history_id = Column(Integer, ForeignKey("exam_history.id"), nullable=True)  # 對應第 N+1 次交卷
     revoked_at = Column(DateTime, nullable=True)        # 撤銷時間
     revoked_by = Column(String, nullable=True)          # 撤銷者 emp_id
 
     exam_record = relationship("ExamRecord", back_populates="retake_authorizations")
+    consumed_history = relationship("ExamHistory", foreign_keys=[consumed_history_id])
 
 
 class ExamDetail(Base):

@@ -118,17 +118,23 @@
 
 - `btn:exam:revoke-retake`
 
-#### 5.2.2 授權角色
+#### 5.2.2 授權資格（2026-07-10 修訂，見 [`20260710` §11](./20260710_授權重考歷程對應與顯示_PLAN.md)）
 
-以角色功能碼為主，不硬編碼角色名稱；Admin 保留 bypass。  
-可被指派此功能的角色範圍：稽核、主管、總稽核、管理者（依既有 RBAC 配置）。
+**與成績中心「部門成績」可見規則一致**，不另以 `btn:exam:authorize-retake` 作門檻：
+
+- `Admin`，或
+- `menu:report` **且** `role_scope_type ∈ { all, department }`
+
+典型角色：總稽核（跨部門）、主管／稽核（部門範圍）。
+
+`btn:exam:authorize-retake` 仍建立於 `system_functions`，供權限管理 UI；**不作**開放重考必備條件。
 
 #### 5.2.3 存取邊界
 
-除功能權限外，沿用現有資料範圍機制檢查（`_can_view_emp_id` / `access_scope`）：
+沿用 `_can_view_emp_id` / `access_scope`：
 
-- 全域可見者可授權全域
-- 部門可見者僅可授權所屬範圍
+- 全域／跨部門（`all`）可授權範圍內全部員工
+- 部門（`department`）僅可授權範圍內員工
 
 ---
 
@@ -141,8 +147,8 @@
 
 驗證：
 
-1. 呼叫者具 `btn:exam:authorize-retake`
-2. 目標員工在資料範圍內
+1. 呼叫者具授權資格（`Admin` 或 `menu:report` + `role_scope_type` 為 `all`／`department`）
+2. 目標員工在資料範圍內（`_can_view_emp_id`）
 3. 計畫存在且未封存
 4. `exam_record` 存在且 `is_passed = true`
 5. `retake_authorized = false`
@@ -225,7 +231,7 @@
 
 - `is_passed = true`
 - `retake_authorized = false`
-- 使用者具 `btn:exam:authorize-retake`
+- 使用者具授權資格（與「部門成績」tab 相同，見 §5.2.2）
 
 交互流程：
 
