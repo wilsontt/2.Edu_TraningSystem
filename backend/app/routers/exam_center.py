@@ -11,7 +11,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Body, Request as FastAPIRequest
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, and_, or_, case
+from sqlalchemy import func, and_, or_, case, true
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from pydantic import BaseModel, Field
@@ -21,7 +21,9 @@ from .auth import get_current_user
 from ..access_scope import get_scope_emp_ids, get_role_scope_type, is_active_user_status
 
 def _training_plan_status_filter_expr_exam(status: str):
-    """與 GET /training/plans、報表 overview 之 plan_status 語意一致。"""
+    """與 GET /training/plans、報表 overview 之 plan_status 語意一致（含 all）。"""
+    if status == "all":
+        return true()
     today = date.today()
     if status == "active":
         return and_(
@@ -37,6 +39,32 @@ def _training_plan_status_filter_expr_exam(status: str):
             models.TrainingPlan.end_date < today,
         )
     return models.TrainingPlan.is_archived == True
+
+
+def _parse_personal_plan_status(plan_status: Optional[str]) -> str:
+    ps = (plan_status or "active").strip().lower()
+    if ps not in ("active", "expired", "archived", "all"):
+        raise HTTPException(
+            status_code=400,
+            detail="plan_status 必須為 active、expired、archived 或 all",
+        )
+    return ps
+
+
+def _count_assigned_plans_for_user(
+    db: Session,
+    user: models.User,
+    plan_status: str,
+) -> int:
+    """該員應考計畫數：target_departments ∪ target_users，並依 plan_status 篩選。"""
+    conds = []
+    if user.dept_id is not None:
+        conds.append(models.TrainingPlan.target_departments.any(id=user.dept_id))
+    conds.append(models.TrainingPlan.target_users.any(emp_id=user.emp_id))
+    query = db.query(models.TrainingPlan.id).filter(or_(*conds))
+    if plan_status != "all":
+        query = query.filter(_training_plan_status_filter_expr_exam(plan_status))
+    return query.distinct().count()
 
 
 def _now_utc_naive() -> datetime:
@@ -802,7 +830,7 @@ def get_personal_overview(
     emp_id: Optional[str] = Query(None, description="員工編號（Admin 或具 menu:report 且範圍內可使用）"),
     plan_status: str = Query(
         "active",
-        description="訓練計畫狀態：active／expired／archived（與訓練計畫管理相同）",
+        description="訓練計畫狀態：active／expired／archived／all",
     ),
 ):
     """
@@ -820,9 +848,7 @@ def get_personal_overview(
     """
     target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
 
-    ps = (plan_status or "active").strip().lower()
-    if ps not in ("active", "expired", "archived"):
-        raise HTTPException(status_code=400, detail="plan_status 必須為 active、expired 或 archived")
+    ps = _parse_personal_plan_status(plan_status)
     plan_status_expr = _training_plan_status_filter_expr_exam(ps)
 
     # 取得該使用者的考試記錄（依訓練計畫狀態篩選）
@@ -914,6 +940,10 @@ def get_personal_history(
     page: int = Query(1, ge=1, description="頁碼"),
     page_size: int = Query(20, ge=1, le=100, description="每頁筆數"),
     keyword: Optional[str] = Query(None, description="關鍵字（計畫名稱、員工編號、姓名、部門）"),
+    plan_status: str = Query(
+        "active",
+        description="訓練計畫狀態：active／expired／archived／all",
+    ),
 ):
     """
     T3.2: 獲取個人成績歷史
@@ -922,6 +952,8 @@ def get_personal_history(
     - 支援分頁與排序
     """
     target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
+    ps = _parse_personal_plan_status(plan_status)
+    plan_status_expr = _training_plan_status_filter_expr_exam(ps)
     
     # 基礎查詢（含部門／姓名供關鍵字與列表顯示）
     history_counts_sq = db.query(
@@ -963,7 +995,8 @@ def get_personal_history(
         history_counts_sq, models.ExamRecord.id == history_counts_sq.c.record_id
     ).filter(
         models.ExamRecord.emp_id == target_emp_id,
-        models.ExamRecord.submit_time.isnot(None)
+        models.ExamRecord.submit_time.isnot(None),
+        plan_status_expr,
     )
 
     if keyword and keyword.strip():
@@ -1164,7 +1197,11 @@ def get_personal_analysis(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
     emp_id: Optional[str] = Query(None, description="員工編號（Admin 或具 menu:report 且範圍內可使用）"),
-    trend_period: int = Query(6, description="成績趨勢時間範圍（月數）：3、6、12")
+    trend_period: int = Query(6, description="成績趨勢時間範圍（月數）：3、6、12"),
+    plan_status: str = Query(
+        "active",
+        description="訓練計畫狀態：active／expired／archived／all",
+    ),
 ):
     """
     T3.3: 獲取個人學習分析
@@ -1181,8 +1218,10 @@ def get_personal_analysis(
         raise HTTPException(status_code=400, detail="trend_period 參數必須為 3、6 或 12")
     
     target_emp_id = _resolve_personal_target_emp_id(db, current_user, emp_id)
+    ps = _parse_personal_plan_status(plan_status)
+    plan_status_expr = _training_plan_status_filter_expr_exam(ps)
     
-    # 取得該使用者的所有考試記錄
+    # 取得該使用者的考試記錄（依 plan_status 篩選）
     records = db.query(
         models.ExamRecord,
         models.TrainingPlan,
@@ -1193,7 +1232,8 @@ def get_personal_analysis(
         models.SubCategory, models.TrainingPlan.sub_category_id == models.SubCategory.id
     ).filter(
         models.ExamRecord.emp_id == target_emp_id,
-        models.ExamRecord.submit_time.isnot(None)
+        models.ExamRecord.submit_time.isnot(None),
+        plan_status_expr,
     ).all()
     
     # 計算學習進度
@@ -1201,10 +1241,7 @@ def get_personal_analysis(
     if not user:
         raise HTTPException(status_code=404, detail="使用者不存在")
     
-    # 取得該使用者應考的所有計畫數（受課單位包含該使用者部門的計畫）
-    total_plans = db.query(models.TrainingPlan).filter(
-        models.TrainingPlan.target_departments.any(id=user.dept_id)
-    ).count()
+    total_plans = _count_assigned_plans_for_user(db, user, ps)
     
     completed_plans = len(set(r.ExamRecord.plan_id for r in records))
     progress_rate = (completed_plans / total_plans * 100) if total_plans > 0 else 0

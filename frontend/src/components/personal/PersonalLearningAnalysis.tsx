@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { TrendingUp, TrendingDown, Target } from 'lucide-react';
 import { API_BASE_URL } from '../../api';
 import {
@@ -9,7 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
 } from 'recharts';
 
 interface CategoryAnalysis {
@@ -38,61 +38,91 @@ interface PersonalAnalysis {
   }>;
 }
 
+type PlanStatusFilter = 'active' | 'expired' | 'archived' | 'all';
+
 interface PersonalLearningAnalysisProps {
   empId?: string;
   titlePrefix?: string;
+  planStatus?: PlanStatusFilter;
 }
 
-export default function PersonalLearningAnalysis({ empId, titlePrefix }: PersonalLearningAnalysisProps) {
+export default function PersonalLearningAnalysis({
+  empId,
+  titlePrefix,
+  planStatus = 'active',
+}: PersonalLearningAnalysisProps) {
   const [analysis, setAnalysis] = useState<PersonalAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
-  const [trendPeriod, setTrendPeriod] = useState<number>(6); // 預設 6 個月
+  const [error, setError] = useState<string | null>(null);
+  const [trendPeriod, setTrendPeriod] = useState<number>(6);
   const trendChartRef = useRef<HTMLDivElement>(null);
 
-  const fetchAnalysis = useCallback(async () => {
-    try {
-      // 保存當前滾動位置（相對於趨勢圖表的位置）
-      const scrollPosition = trendChartRef.current
-        ? trendChartRef.current.getBoundingClientRect().top + window.scrollY
-        : null;
+  useEffect(() => {
+    const controller = new AbortController();
+    const scrollPosition = trendChartRef.current
+      ? trendChartRef.current.getBoundingClientRect().top + window.scrollY
+      : null;
 
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      const baseURL = API_BASE_URL;
-      const url = empId
-        ? `${baseURL}/exam/personal/analysis?emp_id=${empId}&trend_period=${trendPeriod}`
-        : `${baseURL}/exam/personal/analysis?trend_period=${trendPeriod}`;
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    setAnalysis(null);
+    setError(null);
+    setLoading(true);
 
-      if (response.ok) {
-        const data = (await response.json()) as PersonalAnalysis;
-        setAnalysis(data);
+    const fetchAnalysis = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const baseURL = API_BASE_URL;
+        const params = new URLSearchParams({
+          trend_period: String(trendPeriod),
+          plan_status: planStatus,
+        });
+        if (empId) {
+          params.set('emp_id', empId);
+        }
+        const response = await fetch(`${baseURL}/exam/personal/analysis?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
 
-        // 恢復滾動位置
-        if (scrollPosition !== null) {
-          setTimeout(() => {
-            window.scrollTo({
-              top: scrollPosition - 100, // 稍微向上偏移，避免被頁籤遮住
-              behavior: 'instant', // 不使用 smooth，避免動畫
-            });
-          }, 0);
+        if (response.status === 403) {
+          setError('無權查看該員工成績');
+          return;
+        }
+        if (response.ok) {
+          const data = (await response.json()) as PersonalAnalysis;
+          setAnalysis(data);
+
+          if (scrollPosition !== null) {
+            setTimeout(() => {
+              window.scrollTo({
+                top: scrollPosition - 100,
+                behavior: 'instant',
+              });
+            }, 0);
+          }
+        } else {
+          setError('無法載入資料');
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        console.error('Failed to fetch personal analysis', err);
+        setError('無法載入資料');
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
         }
       }
-    } catch (error) {
-      console.error('Failed to fetch personal analysis', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [empId, trendPeriod]);
+    };
 
-  useEffect(() => {
     void fetchAnalysis();
-  }, [fetchAnalysis]);
+    return () => controller.abort();
+  }, [empId, planStatus, trendPeriod]);
 
   if (loading) {
     return <div className="p-8 flex justify-center text-gray-500">載入中...</div>;
+  }
+
+  if (error) {
+    return <div className="p-8 text-center text-red-600 font-medium">{error}</div>;
   }
 
   if (!analysis) {
@@ -103,10 +133,12 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
     <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto print:hidden">
       <div>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">
-          {titlePrefix ? `${titlePrefix} 個人學習分析` : '個人學習分析'}
+          {titlePrefix ? `${titlePrefix}的個人學習分析` : '個人學習分析'}
         </h2>
         <p className="text-gray-500 mt-1">
-          {titlePrefix ? `深入了解 ${titlePrefix} 的學習狀況與進步軌跡` : '深入了解您的學習狀況與進步軌跡'}
+          {titlePrefix
+            ? `深入了解 ${titlePrefix} 的學習狀況與進步軌跡`
+            : '深入了解您的學習狀況與進步軌跡'}
         </p>
       </div>
 
@@ -124,16 +156,16 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
         <div className="w-full bg-gray-200 rounded-full h-4">
           <div
             className="bg-blue-600 h-4 rounded-full transition-all duration-300"
-            style={{ width: `${analysis.progress.progress_rate}%` }}
+            style={{ width: `${Math.min(analysis.progress.progress_rate, 100)}%` }}
           />
         </div>
         <p className="text-sm text-gray-500 mt-2">
-          完成率：{analysis.progress.progress_rate.toFixed(1)}%
+          已完成計畫 / 應考計畫（與歷史記錄「場次」不同；同計畫重考只計 1 個計畫）
         </p>
+        <p className="text-sm text-gray-500">完成率：{analysis.progress.progress_rate.toFixed(1)}%</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* 擅長領域 */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
             <TrendingUp className="mr-2 h-5 w-5 text-green-500" />
@@ -144,7 +176,10 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
           ) : (
             <div className="space-y-3">
               {analysis.strong_areas.map((area) => (
-                <div key={area.category_id} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                <div
+                  key={area.category_id}
+                  className="flex items-center justify-between p-3 bg-green-50 rounded-lg"
+                >
                   <div>
                     <div className="font-medium text-gray-900">{area.category_name}</div>
                     <div className="text-xs text-gray-500">{area.count} 次考試</div>
@@ -159,18 +194,20 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
           )}
         </div>
 
-        {/* 需要加強的領域 */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
             <TrendingDown className="mr-2 h-5 w-5 text-red-500" />
             需要加強的領域
           </h3>
-            {analysis.weak_areas.length === 0 ? (
-              <p className="text-gray-500 text-sm">目前沒有需要特別加強的領域（平均分數 {'<'} 60）</p>
-            ) : (
+          {analysis.weak_areas.length === 0 ? (
+            <p className="text-gray-500 text-sm">目前沒有需要特別加強的領域（平均分數 {'<'} 60）</p>
+          ) : (
             <div className="space-y-3">
               {analysis.weak_areas.map((area) => (
-                <div key={area.category_id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                <div
+                  key={area.category_id}
+                  className="flex items-center justify-between p-3 bg-red-50 rounded-lg"
+                >
                   <div>
                     <div className="font-medium text-gray-900">{area.category_name}</div>
                     <div className="text-xs text-gray-500">{area.count} 次考試</div>
@@ -186,7 +223,6 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
         </div>
       </div>
 
-      {/* 分類成績分析圖表 */}
       {analysis.category_analysis.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4">各分類成績分析</h3>
@@ -203,12 +239,10 @@ export default function PersonalLearningAnalysis({ empId, titlePrefix }: Persona
         </div>
       )}
 
-      {/* 成績趨勢圖 */}
       {analysis.trend_data.length > 0 && (
         <div ref={trendChartRef} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <h3 className="text-lg font-bold text-gray-900">成績趨勢</h3>
-            {/* 頁籤切換 */}
             <div className="flex gap-2 bg-gray-100 rounded-lg p-1 w-fit">
               <button
                 onClick={() => setTrendPeriod(3)}

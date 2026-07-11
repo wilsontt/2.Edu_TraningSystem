@@ -10,12 +10,21 @@ import ReportDashboard from '../admin/ReportDashboard';
 import BatchPrintPage from '../admin/BatchPrintPage';
 
 type TabType = 'overview' | 'history' | 'analysis' | 'team' | 'batch-print';
+type PlanStatusFilter = 'active' | 'expired' | 'archived' | 'all';
 
 const URL_TAB_VALUES = ['overview', 'history', 'analysis', 'batch-print'] as const;
 type UrlTab = (typeof URL_TAB_VALUES)[number];
 
+const PLAN_STATUS_VALUES: PlanStatusFilter[] = ['active', 'expired', 'archived', 'all'];
+
 function parseUrlTab(raw: string | null): UrlTab | null {
   return raw && URL_TAB_VALUES.includes(raw as UrlTab) ? (raw as UrlTab) : null;
+}
+
+function parsePlanStatus(raw: string | null): PlanStatusFilter {
+  return raw && PLAN_STATUS_VALUES.includes(raw as PlanStatusFilter)
+    ? (raw as PlanStatusFilter)
+    : 'active';
 }
 
 interface UserOption {
@@ -45,16 +54,28 @@ interface AdminUserResponse {
 export default function PersonalScorePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = parseUrlTab(searchParams.get('tab'));
-  const [localTab, setLocalTab] = useState<TabType>('history'); //預設頁籤改為 history
+  const [localTab, setLocalTab] = useState<TabType>('history');
   const activeTab: TabType = urlTab ?? localTab;
+  const planStatus = parsePlanStatus(searchParams.get('plan_status'));
 
   const navigateTab = (t: TabType) => {
     setLocalTab(t);
+    if (t === 'team') {
+      // R10：進入部門成績時清除個人檢視
+      setSelectedEmpId(null);
+      setSelectedEmpName('');
+      setSelectedDeptName('');
+      setUserSearchTerm('');
+      setShowUserSelector(false);
+    }
     setSearchParams(
       (prev) => {
         const p = new URLSearchParams(prev);
         if (t === 'team') {
           p.delete('tab');
+          p.delete('emp_id');
+          p.delete('emp_name');
+          p.delete('dept_name');
         } else {
           p.set('tab', t);
         }
@@ -63,6 +84,22 @@ export default function PersonalScorePage() {
       { replace: true }
     );
   };
+
+  const setPlanStatusFilter = (status: PlanStatusFilter) => {
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (status === 'active') {
+          p.delete('plan_status');
+        } else {
+          p.set('plan_status', status);
+        }
+        return p;
+      },
+      { replace: true }
+    );
+  };
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [hasReportPermission, setHasReportPermission] = useState(false);
   const [canAuthorizeRetake, setCanAuthorizeRetake] = useState(false);
@@ -71,6 +108,7 @@ export default function PersonalScorePage() {
   const [selectedDeptName, setSelectedDeptName] = useState('');
   const [selfEmpId, setSelfEmpId] = useState('');
   const [selfName, setSelfName] = useState('');
+  const [selfDeptName, setSelfDeptName] = useState('');
   const [users, setUsers] = useState<UserOption[]>([]);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [showUserSelector, setShowUserSelector] = useState(false);
@@ -85,7 +123,12 @@ export default function PersonalScorePage() {
     const empIdFromUrl = searchParams.get('emp_id');
     const empNameFromUrl = searchParams.get('emp_name');
     const deptNameFromUrl = searchParams.get('dept_name');
-    if (!empIdFromUrl) return;
+    if (!empIdFromUrl) {
+      setSelectedEmpId(null);
+      setSelectedEmpName('');
+      setSelectedDeptName('');
+      return;
+    }
 
     setSelectedEmpId(empIdFromUrl);
     if (empNameFromUrl) setSelectedEmpName(empNameFromUrl);
@@ -99,46 +142,42 @@ export default function PersonalScorePage() {
   }, [searchParams, users]);
 
   useEffect(() => {
-    // 檢查是否為 Admin
     const checkAdmin = async () => {
       try {
         const token = localStorage.getItem('token');
         const response = await api.get('/auth/me', {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         const user = response.data as MeResponse;
         setSelfEmpId(user.emp_id || '');
         setSelfName(user.name || '');
+        setSelfDeptName(user.dept_name || '');
         setIsAdmin(user.role === 'Admin');
         const hasMenuReport = Array.isArray(user.functions) && user.functions.includes('menu:report');
-        // 顯示「部門成績」規則：
-        // Admin，或具 menu:report 且角色資料可視範圍為部門（department）或跨部門（all）。
         const canViewTeamReport =
           user.role === 'Admin' ||
           (hasMenuReport &&
             (user.role_scope_type === 'department' || user.role_scope_type === 'all'));
         setHasReportPermission(canViewTeamReport);
         setCanAuthorizeRetake(canViewTeamReport);
-        
-        // 如果是 Admin，載入使用者列表
+
         if (user.role === 'Admin') {
           const usersRes = await api.get('/admin/users');
           const usersList = (usersRes.data as AdminUserResponse[]).map((u) => ({
             emp_id: u.emp_id,
             name: u.name,
-            dept_name: u.department?.name
+            dept_name: u.department?.name,
           }));
           setUsers(usersList);
-          
-          // 如果 URL 有 emp_id，設定選中的使用者
+
           const empIdFromUrl = searchParams.get('emp_id');
           if (empIdFromUrl) {
-            const user = usersList.find((u: UserOption) => u.emp_id === empIdFromUrl);
-            if (user) {
+            const found = usersList.find((u: UserOption) => u.emp_id === empIdFromUrl);
+            if (found) {
               setSelectedEmpId(empIdFromUrl);
-              setSelectedEmpName(user.name || '');
-              setSelectedDeptName(user.dept_name || '');
-              setUserSearchTerm(`${user.name} (${user.emp_id})`);
+              setSelectedEmpName(found.name || '');
+              setSelectedDeptName(found.dept_name || '');
+              setUserSearchTerm(`${found.name} (${found.emp_id})`);
             }
           }
         }
@@ -146,16 +185,18 @@ export default function PersonalScorePage() {
         console.error('Failed to check admin status', error);
       }
     };
-    checkAdmin();
-  }, [searchParams]);
+    void checkAdmin();
+    // 僅首次／登入狀態；勿因 searchParams 反覆打 /auth/me
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const filteredUsers = users.filter(u =>
-    u.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-    u.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-    (u.dept_name && u.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase()))
+  const filteredUsers = users.filter(
+    (u) =>
+      u.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+      u.emp_id.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+      (u.dept_name && u.dept_name.toLowerCase().includes(userSearchTerm.toLowerCase()))
   );
 
-  // 同步自 URL，避免子元件在 useEffect 更新前用到過期的 emp_id
   const empIdFromUrl = searchParams.get('emp_id');
   const empNameFromUrl = searchParams.get('emp_name');
   const deptNameFromUrl = searchParams.get('dept_name');
@@ -163,39 +204,44 @@ export default function PersonalScorePage() {
   const isViewingOther = Boolean(viewEmpId && selfEmpId && viewEmpId !== selfEmpId);
   const apiEmpId = isViewingOther ? viewEmpId : undefined;
 
+  // R14：標題一律「部門 姓名 (員工編號)」
   const titlePrefix = (() => {
-    const targetId = empIdFromUrl ?? selectedEmpId;
-    const isSelf = !targetId || (selfEmpId && targetId === selfEmpId);
-    if (isSelf) {
-      return selfName && selfEmpId ? `${selfName} (${selfEmpId})` : '';
-    }
-    const name =
-      empNameFromUrl ||
-      selectedEmpName ||
-      users.find((u) => u.emp_id === targetId)?.name ||
-      targetId;
-    const dept =
-      deptNameFromUrl ||
-      selectedDeptName ||
-      users.find((u) => u.emp_id === targetId)?.dept_name ||
-      '';
-    return `${dept ? `${dept} ` : ''}${name}`.trim();
+    const targetId = empIdFromUrl ?? selectedEmpId ?? selfEmpId;
+    if (!targetId) return '';
+    const isSelf = selfEmpId && targetId === selfEmpId;
+    const name = isSelf
+      ? selfName
+      : empNameFromUrl ||
+        selectedEmpName ||
+        users.find((u) => u.emp_id === targetId)?.name ||
+        targetId;
+    const dept = isSelf
+      ? selfDeptName
+      : deptNameFromUrl ||
+        selectedDeptName ||
+        users.find((u) => u.emp_id === targetId)?.dept_name ||
+        '';
+    const idPart = `(${targetId})`;
+    return `${dept ? `${dept} ` : ''}${name} ${idPart}`.trim();
   })();
 
   const resetToSelfView = () => {
-    setLocalTab('history'); //預設頁籤改為 history
+    setLocalTab('history');
     setSelectedEmpId(null);
     setSelectedEmpName('');
     setSelectedDeptName('');
     setShowUserSelector(false);
     setUserSearchTerm('');
-    setSearchParams({});
+    // R13：清除個人檢視並重置 plan_status 為 active（不帶參數）
+    setSearchParams({ tab: 'history' }, { replace: true });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const showPlanStatusFilter =
+    activeTab === 'overview' || activeTab === 'history' || activeTab === 'analysis';
+
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
-      {/* 頁面標題 */}
       <header className="flex items-center gap-3 sm:gap-4">
         <button
           type="button"
@@ -211,7 +257,6 @@ export default function PersonalScorePage() {
         </div>
       </header>
 
-      {/* Admin 員工選擇器 */}
       {isAdmin && (
         <div className="bg-white rounded-xl shadow-sm border border-indigo-100/50 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -221,22 +266,14 @@ export default function PersonalScorePage() {
             </h3>
             {selectedEmpId && (
               <button
-                onClick={() => {
-                  setLocalTab('history'); //預設頁籤改為 history
-                  setSelectedEmpId(null);
-                  setSelectedEmpName('');
-                  setSelectedDeptName('');
-                  setShowUserSelector(false);
-                  setUserSearchTerm('');
-                  setSearchParams({});
-                }}
+                onClick={resetToSelfView}
                 className="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-200 cursor-pointer"
               >
                 查看自己的成績
               </button>
             )}
           </div>
-          
+
           <div className="relative">
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
@@ -254,7 +291,7 @@ export default function PersonalScorePage() {
                 />
               </div>
             </div>
-            
+
             {showUserSelector && filteredUsers.length > 0 && (
               <div className="absolute z-10 w-full mt-2 bg-white border border-indigo-100 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                 {filteredUsers.map((user, uIdx) => (
@@ -266,8 +303,18 @@ export default function PersonalScorePage() {
                       setSelectedDeptName(user.dept_name || '');
                       setShowUserSelector(false);
                       setUserSearchTerm(`${user.name} (${user.emp_id})`);
-                      // 更新 URL 參數
-                      setSearchParams({ emp_id: user.emp_id });
+                      // R12：merge，保留 plan_status / tab
+                      setSearchParams((prev) => {
+                        const p = new URLSearchParams(prev);
+                        p.set('emp_id', user.emp_id);
+                        p.set('emp_name', user.name || '');
+                        if (user.dept_name) p.set('dept_name', user.dept_name);
+                        else p.delete('dept_name');
+                        if (!p.get('tab') || p.get('tab') === 'batch-print') {
+                          p.set('tab', 'history');
+                        }
+                        return p;
+                      });
                     }}
                     className={`w-full px-4 py-3 text-left hover:bg-indigo-50/50 transition-all duration-200 border-b border-gray-100 last:border-b-0 cursor-pointer ${uIdx % 2 === 0 ? 'bg-white' : 'bg-gray-100'}`}
                   >
@@ -280,28 +327,29 @@ export default function PersonalScorePage() {
               </div>
             )}
           </div>
-          
+
           {selectedEmpId && (
             <div className="mt-4 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
               <div className="text-sm text-indigo-600 font-medium">目前查看：</div>
               <div className="font-bold text-gray-900 mt-1">
-                {(selectedEmpName || users.find(u => u.emp_id === selectedEmpId)?.name || selfName)} ({selectedEmpId || selfEmpId})
+                {(selectedDeptName ? `${selectedDeptName} ` : '') +
+                  (selectedEmpName || users.find((u) => u.emp_id === selectedEmpId)?.name || selfName)}{' '}
+                ({selectedEmpId})
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Tab 切換：手機螢幕較窄時 4 個頁籤可能超出版面寬度，改為可橫向滑動而非擠壓換行/溢出 */}
       <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
         <div className="flex space-x-1 bg-indigo-50/50 p-1.5 rounded-xl w-fit border border-indigo-100/50">
           <button
-            onClick={() => navigateTab('history')} //預設頁籤改為 history
+            onClick={() => navigateTab('history')}
             className={clsx(
-              "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+              'shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap',
               activeTab === 'history'
-                ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
-                : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+                ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100'
+                : 'text-gray-500 hover:text-indigo-600 hover:bg-white/50'
             )}
           >
             歷史記錄
@@ -309,10 +357,10 @@ export default function PersonalScorePage() {
           <button
             onClick={() => navigateTab('overview')}
             className={clsx(
-              "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+              'shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap',
               activeTab === 'overview'
-                ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
-                : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+                ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100'
+                : 'text-gray-500 hover:text-indigo-600 hover:bg-white/50'
             )}
           >
             總覽
@@ -320,10 +368,10 @@ export default function PersonalScorePage() {
           <button
             onClick={() => navigateTab('analysis')}
             className={clsx(
-              "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+              'shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap',
               activeTab === 'analysis'
-                ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
-                : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+                ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100'
+                : 'text-gray-500 hover:text-indigo-600 hover:bg-white/50'
             )}
           >
             學習分析
@@ -332,10 +380,10 @@ export default function PersonalScorePage() {
             <button
               onClick={() => navigateTab('team')}
               className={clsx(
-                "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+                'shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap',
                 activeTab === 'team'
-                  ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
-                  : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+                  ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100'
+                  : 'text-gray-500 hover:text-indigo-600 hover:bg-white/50'
               )}
             >
               部門成績
@@ -345,10 +393,10 @@ export default function PersonalScorePage() {
             <button
               onClick={() => navigateTab('batch-print')}
               className={clsx(
-                "shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap",
+                'shrink-0 px-3 sm:px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap',
                 activeTab === 'batch-print'
-                  ? "bg-white text-indigo-600 shadow-md shadow-indigo-100"
-                  : "text-gray-500 hover:text-indigo-600 hover:bg-white/50"
+                  ? 'bg-white text-indigo-600 shadow-md shadow-indigo-100'
+                  : 'text-gray-500 hover:text-indigo-600 hover:bg-white/50'
               )}
             >
               批次列印
@@ -357,32 +405,62 @@ export default function PersonalScorePage() {
         </div>
       </div>
 
-      {/* Tab 內容 */}
+      {showPlanStatusFilter && (
+        <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-1">
+          {(
+            [
+              { id: 'active' as const, label: '進行中' },
+              { id: 'expired' as const, label: '已過期' },
+              { id: 'archived' as const, label: '已封存' },
+              { id: 'all' as const, label: '全部' },
+            ]
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setPlanStatusFilter(tab.id)}
+              className={`px-4 py-2 text-sm font-bold rounded-t-lg border-b-2 -mb-px transition-colors cursor-pointer ${
+                planStatus === tab.id
+                  ? 'border-indigo-600 text-indigo-700 bg-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div>
         {activeTab === 'overview' && (
           <PersonalScoreOverview
-            key={viewEmpId ?? 'self'}
+            key={`${viewEmpId ?? 'self'}-${planStatus}`}
             empId={apiEmpId}
             titlePrefix={titlePrefix}
+            planStatus={planStatus}
             onNavigateHistory={() => navigateTab('history')}
           />
         )}
         {activeTab === 'history' && (
           <PersonalScoreHistory
-            key={viewEmpId ?? 'self'}
+            key={`${viewEmpId ?? 'self'}-${planStatus}`}
             empId={apiEmpId}
             titlePrefix={titlePrefix}
+            planStatus={planStatus}
             canAuthorizeRetake={canAuthorizeRetake}
           />
         )}
         {activeTab === 'analysis' && (
           <PersonalLearningAnalysis
-            key={viewEmpId ?? 'self'}
+            key={`${viewEmpId ?? 'self'}-${planStatus}`}
             empId={apiEmpId}
             titlePrefix={titlePrefix}
+            planStatus={planStatus}
           />
         )}
-        {activeTab === 'team' && hasReportPermission && <ReportDashboard canAuthorizeRetake={canAuthorizeRetake} />}
+        {activeTab === 'team' && hasReportPermission && (
+          <ReportDashboard canAuthorizeRetake={canAuthorizeRetake} />
+        )}
         {activeTab === 'batch-print' && hasReportPermission && <BatchPrintPage />}
       </div>
     </div>

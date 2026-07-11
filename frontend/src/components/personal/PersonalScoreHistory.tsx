@@ -35,14 +35,21 @@ interface HistoryResponse {
 interface PersonalScoreHistoryProps {
   empId?: string;
   titlePrefix?: string;
+  planStatus?: 'active' | 'expired' | 'archived' | 'all';
   canAuthorizeRetake?: boolean;
 }
 
 type HistorySortKey = 'time' | 'score' | 'plan' | 'name' | 'dept' | 'attempts';
 
-export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeRetake = false }: PersonalScoreHistoryProps) {
+export default function PersonalScoreHistory({
+  empId,
+  titlePrefix,
+  planStatus = 'active',
+  canAuthorizeRetake = false,
+}: PersonalScoreHistoryProps) {
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<HistorySortKey>('time');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
@@ -57,6 +64,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
   useEffect(() => {
     const controller = new AbortController();
     setHistory(null);
+    setError(null);
     setLoading(true);
 
     const fetchHistory = async () => {
@@ -67,6 +75,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
           order: order,
           page: page.toString(),
           page_size: pageSize.toString(),
+          plan_status: planStatus,
         });
         if (keyword.trim()) {
           params.append('keyword', keyword.trim());
@@ -80,15 +89,22 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
           signal: controller.signal,
         });
 
+        if (response.status === 403) {
+          setError('無權查看該員工成績');
+          return;
+        }
         if (response.ok) {
           const data = (await response.json()) as HistoryResponse;
           setHistory(data);
+        } else {
+          setError('無法載入資料');
         }
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
           return;
         }
-        console.error('Failed to fetch personal history', error);
+        console.error('Failed to fetch personal history', err);
+        setError('無法載入資料');
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -98,7 +114,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
 
     void fetchHistory();
     return () => controller.abort();
-  }, [sortBy, order, page, pageSize, keyword, empId, refreshKey]);
+  }, [sortBy, order, page, pageSize, keyword, empId, planStatus, refreshKey]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -109,7 +125,7 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
 
   useEffect(() => {
     setPage(1);
-  }, [keyword, sortBy, order, pageSize]);
+  }, [keyword, sortBy, order, pageSize, planStatus]);
 
   const formatDuration = (seconds: number | null): string => {
     if (!seconds) return '-';
@@ -124,6 +140,10 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
 
   if (loading && !history) {
     return <div className="p-8 flex justify-center text-gray-500">載入中...</div>;
+  }
+
+  if (error) {
+    return <div className="p-8 text-center text-red-600 font-medium">{error}</div>;
   }
 
   if (!history) {
@@ -153,6 +173,11 @@ export default function PersonalScoreHistory({ empId, titlePrefix, canAuthorizeR
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-md"
           />
         </div>
+        {keyword.trim() && (
+          <p className="text-xs text-amber-700">
+            搜尋中：筆數可能少於總覽「已完成考試」場次（總覽未套用關鍵字）。
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-4">
           <label className="text-sm font-medium text-gray-700">排序欄位：</label>
           <select

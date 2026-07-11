@@ -6,7 +6,7 @@
  * 3. 成績單批次列印與導出功能。
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { Download, Users, FileText, CheckCircle, TrendingUp, AlertCircle, RefreshCw, Calendar, Timer, Target, Repeat, X, ChevronDown, ChevronRight, Filter, TrendingDown, Eye, BarChart3, Search, PrinterIcon } from "lucide-react";
 import Pagination from '../common/Pagination';
 import ScorePrintFlow from '../common/ScorePrintFlow';
@@ -103,7 +103,7 @@ interface DepartmentStat {
 interface PlanStat {
   plan_id?: number;
   name: string;
-  date: string;
+  date: string | null;
   count: number;
   avg_score: number;
   pass_rate: number;
@@ -314,8 +314,13 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
         try {
           const token = localStorage.getItem('token');
           const baseURL = API_BASE_URL;
+          const qs = new URLSearchParams({
+            page: '1',
+            page_size: '10',
+            plan_status: planStatus,
+          });
           const res = await fetch(
-            `${baseURL}/admin/reports/department/${itemId}/details?page=1&page_size=10`,
+            `${baseURL}/admin/reports/department/${itemId}/details?${qs.toString()}`,
             { headers: { 'Authorization': `Bearer ${token}` } }
           );
           if (res.ok) {
@@ -1025,6 +1030,8 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
               type="button"
               onClick={() => {
                 setPlanStatus(tab.id);
+                setExpandedDept(null);
+                setDeptDetails({});
                 void fetchData(false, tab.id);
               }}
               className={clsx(
@@ -1042,7 +1049,10 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex space-x-1 bg-indigo-50/50 p-1.5 rounded-xl w-fit border border-indigo-100/50">
             <button
-              onClick={() => setActiveTab('department')}
+              onClick={() => {
+                setActiveTab('department');
+                setExpandedPlan(null);
+              }}
               className={clsx(
                 "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
                 activeTab === 'department' 
@@ -1053,7 +1063,10 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
               各部門統計
             </button>
             <button
-              onClick={() => setActiveTab('plan')}
+              onClick={() => {
+                setActiveTab('plan');
+                setExpandedDept(null);
+              }}
               className={clsx(
                 "px-5 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 cursor-pointer",
                 activeTab === 'plan' 
@@ -1229,11 +1242,13 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
                   const isExpanded = activeTab === 'department' 
                     ? expandedDept === itemId 
                     : expandedPlan === itemId;
+                  const rowKey = activeTab === 'department'
+                    ? `dept-${(item as DepartmentStat).dept_id ?? idx}`
+                    : `plan-${(item as PlanStat).plan_id ?? idx}`;
                   
                   return (
-                    <>
+                    <Fragment key={rowKey}>
                       <tr
-                        key={idx}
                         className="even:bg-gray-100 hover:bg-indigo-50/30 transition-colors duration-200 cursor-pointer"
                         onClick={() => {
                           if (!itemId) return;
@@ -1400,7 +1415,7 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
                                                 <div className="flex items-center justify-center flex-wrap gap-2">
                                                   {record.emp_id && (
                                                     <Link
-                                                      to={`/reports/personal?emp_id=${record.emp_id}&tab=history&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || (item as DepartmentStat).name || '')}`}
+                                                      to={`/reports/personal?emp_id=${record.emp_id}&tab=history&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || (item as DepartmentStat).name || '')}&plan_status=${planStatus}`}
                                                       onClick={(e) => e.stopPropagation()}
                                                       className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                     >
@@ -1530,7 +1545,7 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
                                               <td className="px-4 py-2 text-center">
                                                 {record.emp_id && (
                                                   <Link
-                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=history&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || '')}`}
+                                                    to={`/reports/personal?emp_id=${record.emp_id}&tab=history&emp_name=${encodeURIComponent(record.name || '')}&dept_name=${encodeURIComponent(record.dept_name || '')}&plan_status=${planStatus}`}
                                                     onClick={(e) => e.stopPropagation()}
                                                     className="inline-flex items-center px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all duration-200 font-bold cursor-pointer"
                                                   >
@@ -1551,7 +1566,7 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -1816,11 +1831,16 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
           onSuccess={async () => {
             const deptId = authorizeTarget.deptId;
             setAuthorizeTarget(null);
-            // 直接重新抓取該部門詳情
+            // 直接重新抓取該部門詳情（與當前 plan_status 一致）
             try {
               const token = localStorage.getItem('token');
+              const qs = new URLSearchParams({
+                page: '1',
+                page_size: '10',
+                plan_status: planStatus,
+              });
               const res = await fetch(
-                `${API_BASE_URL}/admin/reports/department/${deptId}/details?page=1&page_size=10`,
+                `${API_BASE_URL}/admin/reports/department/${deptId}/details?${qs.toString()}`,
                 { headers: { 'Authorization': `Bearer ${token}` } }
               );
               if (res.ok) {

@@ -955,6 +955,7 @@ def get_plan_statistics(
             raise HTTPException(status_code=400, detail="plan_status 必須為 active、expired 或 archived")
         plan_status_expr = _training_plan_status_filter_expr(ps)
         results = db.query(
+            models.TrainingPlan.id,
             models.TrainingPlan.title,
             models.TrainingPlan.training_date,
             func.count(models.ExamRecord.id).label("count"),
@@ -974,8 +975,9 @@ def get_plan_statistics(
             passed = r.passed_count or 0
             pass_rate = (passed / total * 100) if total > 0 else 0
             stats.append({
+                "plan_id": r.id,
                 "name": r.title,
-                "date": r.training_date,
+                "date": r.training_date.isoformat() if r.training_date else None,
                 "count": total,
                 "avg_score": round(r.avg_score or 0, 1),
                 "pass_rate": round(pass_rate, 1)
@@ -1133,11 +1135,15 @@ def get_department_details(
     sort_by: str = Query("score", description="排序欄位：score（分數）/time（時間）/name（姓名）"),
     order: str = Query("desc", description="排序方向：asc（升序）/desc（降序）"),
     page: int = Query(1, ge=1, description="頁碼"),
-    page_size: int = Query(20, ge=1, le=100, description="每頁筆數")
+    page_size: int = Query(20, ge=1, le=100, description="每頁筆數"),
+    plan_status: str = Query(
+        "active",
+        description="訓練計畫狀態：active（進行中）/expired（已過期）/archived（已封存）",
+    ),
 ):
     """
     獲取部門詳情（T2.3）:
-    - 該部門所有成員的詳細成績列表
+    - 該部門成員在指定 plan_status 下的詳細成績列表
     - 支援排序（分數/時間/姓名）
     - 支援分頁
     """
@@ -1147,8 +1153,13 @@ def get_department_details(
         dept = db.query(models.Department).filter(models.Department.id == dept_id).first()
         if not dept:
             raise HTTPException(status_code=404, detail="部門不存在")
+
+        ps = (plan_status or "active").strip().lower()
+        if ps not in ("active", "expired", "archived"):
+            raise HTTPException(status_code=400, detail="plan_status 必須為 active、expired 或 archived")
+        plan_status_expr = _training_plan_status_filter_expr(ps)
         
-        # 取得該部門所有成員的考試記錄
+        # 取得該部門成員、且訓練計畫符合 plan_status 的考試記錄
         base_query = db.query(
             models.User.emp_id,
             models.User.name,
@@ -1167,7 +1178,8 @@ def get_department_details(
         ).filter(
             models.User.dept_id == dept_id,
             models.User.status == "active",
-            models.ExamRecord.submit_time.isnot(None)
+            models.ExamRecord.submit_time.isnot(None),
+            plan_status_expr,
         )
         if emp_scope_ids is not None:
             if not emp_scope_ids:
