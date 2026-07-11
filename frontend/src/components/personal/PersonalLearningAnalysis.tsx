@@ -162,7 +162,9 @@ export default function PersonalLearningAnalysis({
         <p className="text-sm text-gray-500 mt-2">
           已完成計畫 / 應考計畫（與歷史記錄「場次」不同；同計畫重考只計 1 個計畫）
         </p>
-        <p className="text-sm text-gray-500">完成率：{analysis.progress.progress_rate.toFixed(1)}%</p>
+        <p className="text-sm text-gray-500">
+          完成率：{Math.min(analysis.progress.progress_rate, 100).toFixed(1)}%
+        </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

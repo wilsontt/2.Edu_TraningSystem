@@ -184,6 +184,7 @@ export default function PersonalScoreOverview({
         ))}
       </div>
 
+      {/* 成績分布提示 */}
       {overview.completed_count > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-start">

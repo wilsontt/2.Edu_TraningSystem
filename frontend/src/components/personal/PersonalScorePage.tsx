@@ -434,7 +434,7 @@ export default function PersonalScorePage() {
       <div>
         {activeTab === 'overview' && (
           <PersonalScoreOverview
-            key={`${viewEmpId ?? 'self'}-${planStatus}`}
+            key={viewEmpId ?? 'self'}
             empId={apiEmpId}
             titlePrefix={titlePrefix}
             planStatus={planStatus}
@@ -443,7 +443,7 @@ export default function PersonalScorePage() {
         )}
         {activeTab === 'history' && (
           <PersonalScoreHistory
-            key={`${viewEmpId ?? 'self'}-${planStatus}`}
+            key={viewEmpId ?? 'self'}
             empId={apiEmpId}
             titlePrefix={titlePrefix}
             planStatus={planStatus}
@@ -452,7 +452,7 @@ export default function PersonalScorePage() {
         )}
         {activeTab === 'analysis' && (
           <PersonalLearningAnalysis
-            key={`${viewEmpId ?? 'self'}-${planStatus}`}
+            key={viewEmpId ?? 'self'}
             empId={apiEmpId}
             titlePrefix={titlePrefix}
             planStatus={planStatus}

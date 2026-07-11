@@ -56,11 +56,17 @@ def _count_assigned_plans_for_user(
     user: models.User,
     plan_status: str,
 ) -> int:
-    """該員應考計畫數：target_departments ∪ target_users，並依 plan_status 篩選。"""
-    conds = []
+    """
+    該員應考計畫數：未設定受課對象（全公司）∪ target_departments ∪ target_users，
+    並依 plan_status 篩選。與 get_my_exams 的 no_targets 語意一致。
+    """
+    no_targets = and_(
+        ~models.TrainingPlan.target_departments.any(),
+        ~models.TrainingPlan.target_users.any(),
+    )
+    conds = [no_targets, models.TrainingPlan.target_users.any(emp_id=user.emp_id)]
     if user.dept_id is not None:
         conds.append(models.TrainingPlan.target_departments.any(id=user.dept_id))
-    conds.append(models.TrainingPlan.target_users.any(emp_id=user.emp_id))
     query = db.query(models.TrainingPlan.id).filter(or_(*conds))
     if plan_status != "all":
         query = query.filter(_training_plan_status_filter_expr_exam(plan_status))
