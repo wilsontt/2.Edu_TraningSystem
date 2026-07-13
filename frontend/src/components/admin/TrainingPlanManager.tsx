@@ -160,6 +160,9 @@ const TrainingPlanManager = () => {
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [selectedAttendanceFilter, setSelectedAttendanceFilter] = useState<AttendanceListFilter>('expected');
+  const [attendanceListSearchTerm, setAttendanceListSearchTerm] = useState('');
+  const [attendanceListPage, setAttendanceListPage] = useState(1);
+  const [attendanceListPageSize, setAttendanceListPageSize] = useState(10);
   
   // 刪除狀態
   const [deleteTarget, setDeleteTarget] = useState<TrainingPlan | null>(null);
@@ -681,6 +684,74 @@ const TrainingPlanManager = () => {
     setCurrentPage(1);
   }, [searchTerm, pageSize]);
 
+  // 報到統計 Modal：卡片清單 → 搜尋 → 分頁
+  const currentAttendanceList = useMemo((): AttendanceListItem[] => {
+    if (!selectedPlanId || !attendanceStats[selectedPlanId]) return [];
+    const stats = attendanceStats[selectedPlanId];
+    const expectedList: AttendanceListItem[] = [
+      ...stats.checked_in_users.map((u) => ({ ...u, kind: 'actual' as const })),
+      ...stats.not_checked_in_users.map((u) => ({ ...u, kind: 'absent' as const })),
+    ];
+    if (selectedAttendanceFilter === 'expected') return expectedList;
+    if (selectedAttendanceFilter === 'actual') {
+      return stats.checked_in_users.map((u) => ({ ...u, kind: 'actual' as const }));
+    }
+    if (selectedAttendanceFilter === 'absent') {
+      return stats.not_checked_in_users
+        .filter((u) => !u.absence_reason_code)
+        .map((u) => ({ ...u, kind: 'absent' as const }));
+    }
+    return stats.not_checked_in_users
+      .filter((u) => !!u.absence_reason_code)
+      .map((u) => ({ ...u, kind: 'absent' as const }));
+  }, [selectedPlanId, attendanceStats, selectedAttendanceFilter]);
+
+  const filteredAttendanceList = useMemo(() => {
+    const keyword = attendanceListSearchTerm.trim().toLowerCase();
+    if (!keyword) return currentAttendanceList;
+    return currentAttendanceList.filter((user) =>
+      user.emp_id.toLowerCase().includes(keyword) ||
+      user.name.toLowerCase().includes(keyword) ||
+      user.dept_name.toLowerCase().includes(keyword)
+    );
+  }, [currentAttendanceList, attendanceListSearchTerm]);
+
+  const attendanceListTotalPages = Math.max(1, Math.ceil(filteredAttendanceList.length / attendanceListPageSize));
+  const attendanceListStartIndex = (attendanceListPage - 1) * attendanceListPageSize;
+  const paginatedAttendanceList = useMemo(
+    () => filteredAttendanceList.slice(attendanceListStartIndex, attendanceListStartIndex + attendanceListPageSize),
+    [filteredAttendanceList, attendanceListStartIndex, attendanceListPageSize],
+  );
+
+  useEffect(() => {
+    setAttendanceListPage(1);
+  }, [selectedAttendanceFilter, selectedPlanId, attendanceListPageSize, attendanceListSearchTerm]);
+
+  useEffect(() => {
+    if (attendanceListPage > attendanceListTotalPages) {
+      setAttendanceListPage(attendanceListTotalPages);
+    }
+  }, [attendanceListPage, attendanceListTotalPages]);
+
+  /** 開啟報到統計 Modal 並重置清單狀態 */
+  const openAttendanceModal = (planId: number) => {
+    setSelectedPlanId(planId);
+    setSelectedAttendanceFilter('expected');
+    setAttendanceListSearchTerm('');
+    setAttendanceListPage(1);
+    setIsAttendanceModalOpen(true);
+  };
+
+  /** 關閉報到統計 Modal */
+  const closeAttendanceModal = () => {
+    setIsAttendanceModalOpen(false);
+    setSelectedPlanId(null);
+    setSelectedAttendanceFilter('expected');
+    setAttendanceListSearchTerm('');
+    setAttendanceListPage(1);
+    setAbsenceReasonEdit(null);
+  };
+
   const today = new Date();
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -969,12 +1040,7 @@ const TrainingPlanManager = () => {
                       {attendanceStats[plan.id] ? (
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => {
-                              setSelectedPlanId(plan.id);
-                              setSelectedAttendanceFilter('expected');
-                              setAbsenceReasonEdit(null);
-                              setIsAttendanceModalOpen(true);
-                            }}
+                            onClick={() => openAttendanceModal(plan.id)}
                             className="flex items-center gap-1 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-xs font-bold transition-all duration-200 cursor-pointer"
                           >
                             <Users className="w-3 h-3" />
@@ -997,12 +1063,7 @@ const TrainingPlanManager = () => {
                         </button>
                         {attendanceStats[plan.id] && (
                           <button
-                            onClick={() => {
-                              setSelectedPlanId(plan.id);
-                              setSelectedAttendanceFilter('expected');
-                              setAbsenceReasonEdit(null);
-                              setIsAttendanceModalOpen(true);
-                            }}
+                            onClick={() => openAttendanceModal(plan.id)}
                             className="p-2 min-h-11 min-w-11 flex items-center justify-center text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all duration-200 cursor-pointer"
                             title="查看報到統計"
                           >
@@ -1629,12 +1690,7 @@ const TrainingPlanManager = () => {
                   列印目前清單
                 </button>
                 <button 
-                  onClick={() => {
-                    setIsAttendanceModalOpen(false);
-                    setSelectedPlanId(null);
-                    setSelectedAttendanceFilter('expected');
-                    setAbsenceReasonEdit(null);
-                  }} 
+                  onClick={closeAttendanceModal} 
                   className="p-2 hover:bg-white/50 rounded-xl transition-all duration-200 cursor-pointer"
                 >
                   <X className="w-5 h-5 text-gray-400" />
@@ -1656,7 +1712,7 @@ const TrainingPlanManager = () => {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       <button
                         type="button"
-                        onClick={() => setSelectedAttendanceFilter('expected')}
+                        onClick={() => { setSelectedAttendanceFilter('expected'); setAttendanceListPage(1); }}
                         className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'expected', 'indigo')}`}
                       >
                         <div className="text-sm font-bold text-indigo-600 mb-1">應到人數</div>
@@ -1665,7 +1721,7 @@ const TrainingPlanManager = () => {
 
                       <button
                         type="button"
-                        onClick={() => setSelectedAttendanceFilter('actual')}
+                        onClick={() => { setSelectedAttendanceFilter('actual'); setAttendanceListPage(1); }}
                         className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'actual', 'green')}`}
                       >
                         <div className="text-sm font-bold text-green-600 mb-1">實到人數</div>
@@ -1674,7 +1730,7 @@ const TrainingPlanManager = () => {
 
                       <button
                         type="button"
-                        onClick={() => setSelectedAttendanceFilter('absent')}
+                        onClick={() => { setSelectedAttendanceFilter('absent'); setAttendanceListPage(1); }}
                         className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'absent', 'orange')}`}
                       >
                         <div className="text-sm font-bold text-orange-600 mb-1">未到人數</div>
@@ -1683,7 +1739,7 @@ const TrainingPlanManager = () => {
 
                       <button
                         type="button"
-                        onClick={() => setSelectedAttendanceFilter('leave')}
+                        onClick={() => { setSelectedAttendanceFilter('leave'); setAttendanceListPage(1); }}
                         className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'leave', 'purple')}`}
                       >
                         <div className="text-sm font-bold text-purple-600 mb-1">請假人數</div>
@@ -1706,6 +1762,7 @@ const TrainingPlanManager = () => {
                           {selectedAttendanceFilter === 'actual' && `實到清單 (${stats.checked_in_users.length})`}
                           {selectedAttendanceFilter === 'absent' && `未到清單 (${absentWithoutReasonCount})`}
                           {selectedAttendanceFilter === 'leave' && `請假清單 (${leaveCount})`}
+                          {attendanceListSearchTerm.trim() ? `（符合 ${filteredAttendanceList.length} 位）` : ''}
                         </h4>
                         {!absenceReasonReadOnly && (selectedAttendanceFilter === 'absent' || selectedAttendanceFilter === 'leave') && (
                           <div className="mb-3 flex justify-end">
@@ -1719,9 +1776,20 @@ const TrainingPlanManager = () => {
                           </div>
                         )}
 
-                        <div className="border border-gray-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+                        <div className="relative mb-3">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                          <input
+                            type="search"
+                            placeholder="搜尋員工編號、姓名或部門..."
+                            value={attendanceListSearchTerm}
+                            onChange={(e) => setAttendanceListSearchTerm(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200"
+                          />
+                        </div>
+
+                        <div className="border border-gray-200 rounded-xl overflow-hidden">
                           <table className="w-full text-sm">
-                            <thead className="bg-gray-50 sticky top-0">
+                            <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">ITEM</th>
                                 <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">員工編號</th>
@@ -1737,41 +1805,21 @@ const TrainingPlanManager = () => {
                             </thead>
 
                             <tbody className="divide-y divide-gray-100">
-                              {(() => {
-                                const expectedList: AttendanceListItem[] = [
-                                  ...stats.checked_in_users.map((u) => ({ ...u, kind: 'actual' as const })),
-                                  ...stats.not_checked_in_users.map((u) => ({ ...u, kind: 'absent' as const })),
-                                ];
-
-                                const currentList: AttendanceListItem[] =
-                                  selectedAttendanceFilter === 'expected'
-                                    ? expectedList
-                                    : selectedAttendanceFilter === 'actual'
-                                      ? stats.checked_in_users.map((u) => ({ ...u, kind: 'actual' as const }))
-                                      : selectedAttendanceFilter === 'absent'
-                                        ? stats.not_checked_in_users
-                                            .filter((u) => !u.absence_reason_code)
-                                            .map((u) => ({ ...u, kind: 'absent' as const }))
-                                        : stats.not_checked_in_users
-                                            .filter((u) => !!u.absence_reason_code)
-                                            .map((u) => ({ ...u, kind: 'absent' as const }));
-
-                                if (currentList.length === 0) {
+                              {filteredAttendanceList.length === 0 ? (
+                                <tr>
+                                  <td
+                                    colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 6 : 5}
+                                    className="px-4 py-4 text-center text-gray-400 text-xs"
+                                  >
+                                    {currentAttendanceList.length === 0 ? '查無資料' : '查無符合條件的人員'}
+                                  </td>
+                                </tr>
+                              ) : (
+                                paginatedAttendanceList.map((user, idx) => {
+                                  const displayIndex = attendanceListStartIndex + idx + 1;
                                   return (
-                                    <tr>
-                                      <td
-                                        colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 6 : 5}
-                                        className="px-4 py-4 text-center text-gray-400 text-xs"
-                                      >
-                                        查無資料
-                                      </td>
-                                    </tr>
-                                  );
-                                }
-
-                                return currentList.map((user, idx) => (
-                                  <tr key={`${user.emp_id}-${idx}`} className="even:bg-gray-100 hover:bg-gray-50">
-                                    <td className="px-4 py-2 font-mono text-xs">{idx + 1}</td>
+                                  <tr key={`${user.emp_id}-${displayIndex}`} className="even:bg-gray-100 hover:bg-gray-50">
+                                    <td className="px-4 py-2 font-mono text-xs">{displayIndex}</td>
                                     <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
                                     <td className="px-4 py-2 font-bold">{user.name}</td>
                                     <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
@@ -1807,11 +1855,22 @@ const TrainingPlanManager = () => {
                                       </td>
                                     )}
                                   </tr>
-                                ));
-                              })()}
+                                  );
+                                })
+                              )}
                             </tbody>
                           </table>
                         </div>
+                        {filteredAttendanceList.length > 0 && (
+                          <Pagination
+                            currentPage={attendanceListPage}
+                            totalPages={attendanceListTotalPages}
+                            pageSize={attendanceListPageSize}
+                            totalItems={filteredAttendanceList.length}
+                            onPageChange={setAttendanceListPage}
+                            onPageSizeChange={(size) => { setAttendanceListPageSize(size); setAttendanceListPage(1); }}
+                          />
+                        )}
                       </div>
                     </div>
                   </>
@@ -1821,12 +1880,7 @@ const TrainingPlanManager = () => {
 
             <div className="p-4 bg-gray-50 border-t border-gray-100">
               <button
-                onClick={() => {
-                  setIsAttendanceModalOpen(false);
-                  setSelectedPlanId(null);
-                  setAbsenceReasonEdit(null);
-                  setSelectedAttendanceFilter('expected');
-                }}
+                onClick={closeAttendanceModal}
                 className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
               >
                 關閉

@@ -102,6 +102,7 @@ const AttendanceOverviewPage = () => {
   } | null>(null);
   const [savingAbsenceReason, setSavingAbsenceReason] = useState(false);
   const [selectedAttendanceFilter, setSelectedAttendanceFilter] = useState<'expected' | 'actual' | 'absent' | 'leave'>('expected');
+  const [listSearchTerm, setListSearchTerm] = useState('');
   const [listPage, setListPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(10);
 
@@ -228,6 +229,7 @@ const AttendanceOverviewPage = () => {
     setModalPlanId(null);
     setModalStats(null);
     setSelectedAttendanceFilter('expected');
+    setListSearchTerm('');
     setListPage(1);
   };
 
@@ -260,16 +262,26 @@ const AttendanceOverviewPage = () => {
       .map((u) => ({ ...u, kind: 'absent' as const }));
   }, [modalStats, selectedAttendanceFilter]);
 
-  const listTotalPages = Math.max(1, Math.ceil(currentAttendanceList.length / listPageSize));
+  const filteredAttendanceList = useMemo(() => {
+    const keyword = listSearchTerm.trim().toLowerCase();
+    if (!keyword) return currentAttendanceList;
+    return currentAttendanceList.filter((user) =>
+      user.emp_id.toLowerCase().includes(keyword) ||
+      user.name.toLowerCase().includes(keyword) ||
+      user.dept_name.toLowerCase().includes(keyword)
+    );
+  }, [currentAttendanceList, listSearchTerm]);
+
+  const listTotalPages = Math.max(1, Math.ceil(filteredAttendanceList.length / listPageSize));
   const listStartIndex = (listPage - 1) * listPageSize;
   const paginatedAttendanceList = useMemo(
-    () => currentAttendanceList.slice(listStartIndex, listStartIndex + listPageSize),
-    [currentAttendanceList, listStartIndex, listPageSize],
+    () => filteredAttendanceList.slice(listStartIndex, listStartIndex + listPageSize),
+    [filteredAttendanceList, listStartIndex, listPageSize],
   );
 
   useEffect(() => {
     setListPage(1);
-  }, [selectedAttendanceFilter, modalPlanId, listPageSize]);
+  }, [selectedAttendanceFilter, modalPlanId, listPageSize, listSearchTerm]);
 
   useEffect(() => {
     if (listPage > listTotalPages) {
@@ -460,6 +472,7 @@ const AttendanceOverviewPage = () => {
                         {selectedAttendanceFilter === 'actual' && `實到清單 (${modalStats.checked_in_users.length})`}
                         {selectedAttendanceFilter === 'absent' && `未到清單 (${modalStats.absent_without_reason_count ?? modalStats.not_checked_in_users.filter(u => !u.absence_reason_code).length})`}
                         {selectedAttendanceFilter === 'leave' && `請假清單 (${modalStats.leave_count ?? modalStats.not_checked_in_users.filter(u => u.absence_reason_code).length})`}
+                        {listSearchTerm.trim() ? `（符合 ${filteredAttendanceList.length} 位）` : ''}
                         </h4>
                         {!absenceReasonReadOnly && (selectedAttendanceFilter === 'absent' || selectedAttendanceFilter === 'leave') && (
                           <button
@@ -470,6 +483,16 @@ const AttendanceOverviewPage = () => {
                             一鍵填寫多人請假原因
                           </button>
                         )}
+                      </div>
+                      <div className="relative mb-3">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <input
+                          type="search"
+                          placeholder="搜尋員工編號、姓名或部門..."
+                          value={listSearchTerm}
+                          onChange={(e) => setListSearchTerm(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200"
+                        />
                       </div>
                       <div className="border border-gray-200 rounded-xl overflow-hidden">
                         <table className="w-full text-sm">
@@ -492,10 +515,10 @@ const AttendanceOverviewPage = () => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {currentAttendanceList.length === 0 ? (
+                            {filteredAttendanceList.length === 0 ? (
                               <tr>
                                 <td colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 6 : 5} className="px-4 py-4 text-center text-gray-400 text-xs">
-                                  查無資料
+                                  {currentAttendanceList.length === 0 ? '查無資料' : '查無符合條件的人員'}
                                 </td>
                               </tr>
                             ) : (
@@ -537,12 +560,12 @@ const AttendanceOverviewPage = () => {
                           </tbody>
                         </table>
                       </div>
-                      {currentAttendanceList.length > 0 && (
+                      {filteredAttendanceList.length > 0 && (
                         <Pagination
                           currentPage={listPage}
                           totalPages={listTotalPages}
                           pageSize={listPageSize}
-                          totalItems={currentAttendanceList.length}
+                          totalItems={filteredAttendanceList.length}
                           onPageChange={setListPage}
                           onPageSizeChange={(size) => { setListPageSize(size); setListPage(1); }}
                         />

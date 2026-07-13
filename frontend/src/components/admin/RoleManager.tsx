@@ -52,6 +52,7 @@ const RoleManager = () => {
   const [targetRoleId, setTargetRoleId] = useState<number | null>(null);
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);
   const [roleUsers, setRoleUsers] = useState<Array<{emp_id: string; name: string; role_id: number; department?: string | null}>>([]);
+  const [memberSearchTerm, setMemberSearchTerm] = useState('');
   const [memberPage, setMemberPage] = useState(1);
   const [memberPageSize, setMemberPageSize] = useState(10);
   
@@ -174,6 +175,7 @@ const RoleManager = () => {
   const handleShowDetail = async (role: Role, type: 'user' | 'function') => {
     setLoadingDetail(true);
     setMemberPage(1);
+    setMemberSearchTerm('');
     setDetailModal({ isOpen: true, title: `載入中...`, items: [], type, roleId: role.id, roleName: role.name });
     
     try {
@@ -308,17 +310,30 @@ const RoleManager = () => {
     }
   };
 
-  // 成員清單分頁
-  const memberTotalPages = Math.max(1, Math.ceil(roleUsers.length / memberPageSize));
+  // 成員清單：先依員編／姓名／部門搜尋，再分頁
+  const filteredRoleUsers = useMemo(() => {
+    const keyword = memberSearchTerm.trim().toLowerCase();
+    if (!keyword) return roleUsers;
+    return roleUsers.filter((user) => {
+      const dept = (user.department ?? '').toLowerCase();
+      return (
+        user.emp_id.toLowerCase().includes(keyword) ||
+        user.name.toLowerCase().includes(keyword) ||
+        dept.includes(keyword)
+      );
+    });
+  }, [roleUsers, memberSearchTerm]);
+
+  const memberTotalPages = Math.max(1, Math.ceil(filteredRoleUsers.length / memberPageSize));
   const memberStartIndex = (memberPage - 1) * memberPageSize;
   const paginatedRoleUsers = useMemo(
-    () => roleUsers.slice(memberStartIndex, memberStartIndex + memberPageSize),
-    [roleUsers, memberStartIndex, memberPageSize]
+    () => filteredRoleUsers.slice(memberStartIndex, memberStartIndex + memberPageSize),
+    [filteredRoleUsers, memberStartIndex, memberPageSize]
   );
 
   useEffect(() => {
     setMemberPage(1);
-  }, [memberPageSize]);
+  }, [memberPageSize, memberSearchTerm]);
 
   useEffect(() => {
     if (memberPage > memberTotalPages) {
@@ -434,6 +449,7 @@ const RoleManager = () => {
                 {detailModal.type === 'user' && !loadingDetail && (
                   <p className="text-sm font-bold text-indigo-600/70 mt-0.5">
                     共 {roleUsers.length} 位成員
+                    {memberSearchTerm.trim() ? `（符合 ${filteredRoleUsers.length} 位）` : ''}
                   </p>
                 )}
               </div>
@@ -467,6 +483,7 @@ const RoleManager = () => {
                     setUserSearchTerm('');
                     setUserDepartmentFilter('');
                     setUserJobTitleFilter('');
+                    setMemberSearchTerm('');
                     setMemberPage(1);
                   }}
                   className="text-gray-400 hover:text-gray-600 transition-colors duration-200 cursor-pointer"
@@ -483,12 +500,28 @@ const RoleManager = () => {
                     </div>
                 ) : detailModal.type === 'user' ? (
                     <div className="space-y-3">
+                        {roleUsers.length > 0 && (
+                          <div className="relative mb-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                            <input
+                              type="search"
+                              placeholder="搜尋員工編號、姓名或部門..."
+                              value={memberSearchTerm}
+                              onChange={(e) => setMemberSearchTerm(e.target.value)}
+                              className="w-full pl-9 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200"
+                            />
+                          </div>
+                        )}
                         {roleUsers.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-12 gap-4">
                             <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center">
                               <Shield className="w-8 h-8 text-indigo-400" />
                             </div>
                             <p className="text-gray-500 font-bold">目前無成員</p>
+                          </div>
+                        ) : filteredRoleUsers.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-12 gap-4">
+                            <p className="text-gray-500 font-bold">查無符合條件的成員</p>
                           </div>
                         ) : (
                           paginatedRoleUsers.map((user: {emp_id: string; name: string; role_id: number; department?: string | null}, uIdx: number) => {
@@ -538,12 +571,12 @@ const RoleManager = () => {
                     </div>
                 )}
             </div>
-            {detailModal.type === 'user' && roleUsers.length > 0 && (
+            {detailModal.type === 'user' && filteredRoleUsers.length > 0 && (
               <Pagination
                 currentPage={memberPage}
                 totalPages={memberTotalPages}
                 pageSize={memberPageSize}
-                totalItems={roleUsers.length}
+                totalItems={filteredRoleUsers.length}
                 onPageChange={setMemberPage}
                 onPageSizeChange={(size) => { setMemberPageSize(size); setMemberPage(1); }}
               />
@@ -558,6 +591,7 @@ const RoleManager = () => {
                   setUserSearchTerm('');
                   setUserDepartmentFilter('');
                   setUserJobTitleFilter('');
+                  setMemberSearchTerm('');
                   setMemberPage(1);
                 }}
                 className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
