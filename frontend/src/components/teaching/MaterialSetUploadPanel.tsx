@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Upload, Loader2, FileText, AlertCircle, X } from 'lucide-react';
+import { Upload, Loader2, FileText, AlertCircle } from 'lucide-react';
 import { type AxiosError } from 'axios';
 import { createSet } from '../../api/teachingMaterials';
 import { mergeSelectedFiles } from './transfer';
+import SelectedFilesList from './SelectedFilesList';
 import type { MaterialType, MaterialSet, PlanOption } from '../../types/materials';
 
 interface MaterialSetUploadPanelProps {
@@ -66,7 +67,10 @@ const MaterialSetUploadPanel = ({
             .catch(err => {
                 if (isCancel(err)) return;
                 const e2 = err as AxiosError<{ detail: string }>;
-                endTransferError(e2.response?.data?.detail || (e2.response?.status === 503 ? 'NAS 無法連線' : '建立失敗'));
+                const msg = e2.response?.data?.detail
+                    || (e2.response?.status === 503 ? 'NAS 無法連線' : '建立失敗');
+                endTransferError(msg);
+                setError(msg);
             });
     };
 
@@ -135,19 +139,10 @@ const MaterialSetUploadPanel = ({
                     onChange={e => setTags(e.target.value)}
                     className="px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500 md:col-span-2"
                 />
-                {files.length > 0 && (
-                    <ul className="md:col-span-2 text-xs text-gray-600 space-y-0.5">
-                        {files.map((f, i) => (
-                            <li key={i} className="flex items-center justify-between gap-1 truncate">
-                                <span className="truncate">{i + 1}. {f.name}</span>
-                                <button type="button" onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))}
-                                    className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer shrink-0" title="移除">
-                                    <X className="w-3.5 h-3.5" />
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+                <SelectedFilesList
+                    files={files}
+                    onRemove={i => setFiles(prev => prev.filter((_, idx) => idx !== i))}
+                />
                 {planOptions.length > 0 && (
                     <div className="md:col-span-2 space-y-1">
                         <p className="text-xs text-gray-500">綁定訓練計畫（不選＝通用教材；Ctrl/Cmd+點擊可複選）</p>
@@ -180,8 +175,12 @@ const MaterialSetUploadPanel = ({
                     </button>
                 </div>
             </div>
-            {error && <p className="text-xs text-red-600 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" />{error}</p>}
-            {resultMsg && <p className="text-xs text-green-600 font-bold">{resultMsg}</p>}
+            {error && (
+                <p className="text-sm text-red-700 font-bold flex items-start gap-1.5 whitespace-pre-wrap wrap-break-word">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
+                </p>
+            )}
+            {resultMsg && <p className="text-sm text-green-700 font-bold">{resultMsg}</p>}
         </div>
     );
 };

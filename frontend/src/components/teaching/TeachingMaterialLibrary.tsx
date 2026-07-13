@@ -293,7 +293,8 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                     set={editingSet} types={types} allowedExts={allowedExts} materialAccept={materialAccept} planOptions={planOptions}
                     onUpdated={refreshAfterEdit} onClose={() => setEditingSetId(null)}
                     requireNas={nas.requireNas} beginTransfer={nas.beginTransfer} onUploadProgress={nas.onProgress}
-                    endTransferSuccess={nas.endTransferSuccess} endTransferError={nas.endTransferError} isCancel={nas.isCancel}
+                    endTransferSuccess={nas.endTransferSuccess} endTransferError={nas.endTransferError}
+                    closeTransfer={nas.closeTransfer} isCancel={nas.isCancel}
                 />
             )}
 

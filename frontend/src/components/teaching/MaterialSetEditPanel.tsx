@@ -3,6 +3,7 @@ import { Loader2, FileText, AlertCircle, X, Trash2 } from 'lucide-react';
 import { type AxiosError, type AxiosProgressEvent } from 'axios';
 import { updateSet, updateSetPlans, removeSetFile, addSetFiles } from '../../api/teachingMaterials';
 import { mergeSelectedFiles } from './transfer';
+import SelectedFilesList from './SelectedFilesList';
 import type { MaterialType, MaterialSet, PlanOption } from '../../types/materials';
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
@@ -21,6 +22,8 @@ interface MaterialSetEditPanelProps {
     onUploadProgress: (e: AxiosProgressEvent) => void;
     endTransferSuccess: () => void;
     endTransferError: (message: string) => void;
+    /** 無錯誤關閉傳輸進度窗（例如進入同名覆蓋確認前）。 */
+    closeTransfer: () => void;
     isCancel: (err: unknown) => boolean;
 }
 
@@ -28,7 +31,7 @@ interface MaterialSetEditPanelProps {
 const MaterialSetEditPanel = ({
     set, types, allowedExts, materialAccept, planOptions = [], lockedPlanId,
     onUpdated, onClose, requireNas, beginTransfer, onUploadProgress,
-    endTransferSuccess, endTransferError, isCancel,
+    endTransferSuccess, endTransferError, closeTransfer, isCancel,
 }: MaterialSetEditPanelProps) => {
     const [title, setTitle] = useState(set.title);
     const [typeId, setTypeId] = useState(String(set.material_type_id));
@@ -87,24 +90,43 @@ const MaterialSetEditPanel = ({
             const signal = beginTransfer('新增教材檔案');
             try {
                 const res = await addSetFiles(set.id, fd, { signal, onUploadProgress });
-                endTransferSuccess();
                 const conflicted = res.data.failed.filter(f => f.reason === '同名衝突，需指定是否覆蓋');
                 if (conflicted.length > 0 && overwrite === undefined) {
+                    // 尚未詢問覆蓋：關閉進度窗（非成功），改跳衝突確認
+                    closeTransfer();
                     const names = new Set(conflicted.map(f => f.original_filename));
                     setConflictFiles(files.filter(f => names.has(f.name)));
                     setConflictOpen(true);
-                } else {
-                    setNewFiles([]);
-                    setFileInputKey(k => k + 1);
+                    return;
                 }
+
+                const otherFailed = res.data.failed.filter(f => f.reason !== '同名衝突，需指定是否覆蓋');
+                if (otherFailed.length > 0 && res.data.succeeded.length === 0) {
+                    const msg = otherFailed.map(f => f.reason).join('\n');
+                    endTransferError(msg);
+                    setError(msg);
+                    return;
+                }
+
+                if (otherFailed.length > 0) {
+                    const msg = otherFailed.map(f => f.reason).join('\n');
+                    setError(`部分檔案未上傳：\n${msg}`);
+                } else {
+                    setError(null);
+                }
+
+                endTransferSuccess();
+                setNewFiles([]);
+                setFileInputKey(k => k + 1);
                 if (res.data.succeeded.length > 0) {
-                    // 內容已變動，交由呼叫端重新抓取詳情（file_count/files 需與後端同步）
                     onUpdated({ ...set });
                 }
             } catch (err) {
                 if (isCancel(err)) return;
                 const e2 = err as AxiosError<{ detail: string }>;
-                endTransferError(e2.response?.data?.detail || '新增檔案失敗');
+                const msg = e2.response?.data?.detail || '新增檔案失敗';
+                endTransferError(msg);
+                setError(msg);
             }
         });
     };
@@ -177,9 +199,9 @@ const MaterialSetEditPanel = ({
                     </ul>
                 </div>
 
-                <div className="md:col-span-2">
-                    <p className="text-xs text-gray-500 mb-1">新增檔案（選填，同名檔會詢問是否覆蓋）</p>
-                    <label className="inline-flex items-center gap-2 px-3 py-2 border-2 border-dashed border-amber-300 bg-white rounded-lg text-sm font-bold text-amber-600 hover:border-amber-500 hover:bg-amber-50 cursor-pointer transition-colors">
+                <div className="md:col-span-2 space-y-2">
+                    <p className="text-xs text-gray-500">新增檔案（選填，同名檔會詢問是否覆蓋）</p>
+                    <label className="inline-flex items-center gap-2 px-3 py-2 border-2 border-dashed border-amber-300 bg-white rounded-lg text-sm font-bold text-amber-700 hover:border-amber-500 hover:bg-amber-50 cursor-pointer transition-colors">
                         <FileText className="w-4 h-4 shrink-0" />
                         <span>{newFiles.length > 0 ? `已選 ${newFiles.length} 個檔案` : '選擇檔案…'}</span>
                         <input
@@ -199,9 +221,13 @@ const MaterialSetEditPanel = ({
                             }}
                         />
                     </label>
+                    <SelectedFilesList
+                        files={newFiles}
+                        onRemove={i => setNewFiles(prev => prev.filter((_, idx) => idx !== i))}
+                    />
                     {newFiles.length > 0 && (
                         <button type="button" onClick={() => submitNewFiles(newFiles)}
-                            className="ml-2 px-3 py-2 text-sm rounded-lg bg-amber-500 text-white font-bold hover:bg-amber-600 cursor-pointer">
+                            className="px-3 py-2 text-sm rounded-lg bg-amber-500 text-white font-bold hover:bg-amber-600 cursor-pointer">
                             上傳新檔案
                         </button>
                     )}
@@ -215,7 +241,11 @@ const MaterialSetEditPanel = ({
                     </button>
                 </div>
             </div>
-            {error && <p className="text-xs text-red-600 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" />{error}</p>}
+            {error && (
+                <p className="text-sm text-red-700 font-bold flex items-start gap-1.5 whitespace-pre-wrap wrap-break-word">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
+                </p>
+            )}
 
             {conflictOpen && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -225,7 +255,7 @@ const MaterialSetEditPanel = ({
                         </div>
                         <div className="px-5 py-4 text-sm text-gray-700 space-y-2">
                             <p>下列檔案在此套組已存在同名使用中檔案，是否覆蓋？</p>
-                            <ul className="list-disc pl-5 text-xs text-gray-600">
+                            <ul className="list-disc pl-5 text-sm text-gray-800 font-medium">
                                 {conflictFiles.map(f => <li key={f.name}>{f.name}</li>)}
                             </ul>
                         </div>

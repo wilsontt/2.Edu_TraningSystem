@@ -72,6 +72,15 @@ def _validate_filename(filename: str, db: Session) -> Tuple[str, models.Material
     return ext, fmt
 
 
+def _fmt_bytes_human(n: int) -> str:
+    """將位元組數轉為可讀字串（KB／MB／GB）。"""
+    if n >= 1_073_741_824:
+        return f"{n / 1_073_741_824:.1f} GB"
+    if n >= 1_048_576:
+        return f"{n / 1_048_576:.1f} MB"
+    return f"{max(1, (n + 1023) // 1024)} KB"
+
+
 def _effective_max_bytes(
     mt: Optional[models.MaterialType],
     fmt: Optional[models.MaterialFileFormat],
@@ -84,6 +93,53 @@ def _effective_max_bytes(
     if fmt and fmt.max_file_bytes:
         caps.append(fmt.max_file_bytes)
     return min(caps)
+
+
+def _file_size_limit_exceeded_message(
+    fname: str,
+    size: int,
+    mt: Optional[models.MaterialType],
+    fmt: Optional[models.MaterialFileFormat],
+) -> str:
+    """單檔超限說明：標明觸發層（類型／格式／系統）與各層參考上限。"""
+    hard = get_settings().teaching_material_max_file_bytes
+    type_cap = mt.max_file_bytes if mt and mt.max_file_bytes else None
+    fmt_cap = fmt.max_file_bytes if fmt and fmt.max_file_bytes else None
+    effective = _effective_max_bytes(mt, fmt)
+
+    triggers: list[str] = []
+    if type_cap is not None and type_cap == effective:
+        triggers.append(f"教材類型「{mt.name}」上限 {_fmt_bytes_human(type_cap)}")
+    if fmt_cap is not None and fmt_cap == effective:
+        triggers.append(f"檔案格式 .{fmt.ext} 上限 {_fmt_bytes_human(fmt_cap)}")
+    if hard == effective:
+        triggers.append(f"系統硬上限 {_fmt_bytes_human(hard)}")
+    trigger_txt = "；".join(triggers) if triggers else f"有效上限 {_fmt_bytes_human(effective)}"
+
+    refs = [f"系統硬上限 {_fmt_bytes_human(hard)}"]
+    if mt is not None:
+        refs.append(
+            f"類型「{mt.name}」"
+            + (_fmt_bytes_human(type_cap) if type_cap is not None else "未另限")
+        )
+    if fmt is not None:
+        refs.append(
+            f"格式 .{fmt.ext} "
+            + (_fmt_bytes_human(fmt_cap) if fmt_cap is not None else "未另限")
+        )
+
+    return (
+        f"「{fname}」超過單檔上限：{_fmt_bytes_human(size)} > {_fmt_bytes_human(effective)}"
+        f"（觸發：{trigger_txt}；參考：{'、'.join(refs)}）"
+    )
+
+
+def _batch_upload_total_exceeded_message(total: int, limit: int) -> str:
+    """單次上傳總量超限說明。"""
+    return (
+        f"單次上傳總量超過上限：目前 {_fmt_bytes_human(total)}，"
+        f"上限 {_fmt_bytes_human(limit)}（系統批次上傳總量）"
+    )
 
 
 def _parse_tags(tags_raw: Optional[str]) -> Optional[str]:

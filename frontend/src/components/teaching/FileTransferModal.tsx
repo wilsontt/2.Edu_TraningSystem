@@ -74,9 +74,9 @@ const FileTransferModal = ({ transfer, onCancel, onClose }: FileTransferModalPro
                         </div>
                     )}
                     {status === 'error' && (
-                        <div className="flex items-center gap-2 text-red-600">
-                            <AlertCircle className="w-5 h-5" />
-                            <span className="text-sm font-bold">{error || '傳輸失敗'}</span>
+                        <div className="flex items-start gap-2 text-red-700">
+                            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                            <span className="text-sm font-bold whitespace-pre-wrap wrap-break-word">{error || '傳輸失敗'}</span>
                         </div>
                     )}
                 </div>

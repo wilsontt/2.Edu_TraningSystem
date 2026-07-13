@@ -24,6 +24,7 @@ from ..services import storage
 from ..services.audit_log import record_file_transfer
 from .teaching_materials import (
     _client_ip, _validate_filename, _effective_max_bytes,
+    _file_size_limit_exceeded_message, _batch_upload_total_exceeded_message,
     _resolve_credentials, _content_disposition, _parse_tags,
 )
 
@@ -141,7 +142,12 @@ async def create_set(
         total += len(raw)
         payloads.append((os.path.basename(f.filename or ""), raw))
     if total > settings.teaching_material_max_batch_upload_bytes:
-        raise HTTPException(status_code=400, detail="單次上傳總量超過上限")
+        raise HTTPException(
+            status_code=400,
+            detail=_batch_upload_total_exceeded_message(
+                total, settings.teaching_material_max_batch_upload_bytes
+            ),
+        )
 
     validated = []
     for fname, raw in payloads:
@@ -151,7 +157,10 @@ async def create_set(
             raise HTTPException(status_code=400, detail=f"{fname}：{e}")
         max_bytes = _effective_max_bytes(mt, fmt)
         if len(raw) > max_bytes:
-            raise HTTPException(status_code=400, detail=f"{fname}：超過單檔上限（{max_bytes} bytes）")
+            raise HTTPException(
+                status_code=400,
+                detail=_file_size_limit_exceeded_message(fname, len(raw), mt, fmt),
+            )
         validated.append((fname, raw, ext))
 
     creds = _resolve_credentials(nas_session_token, nas_username, nas_password)
@@ -388,7 +397,12 @@ async def add_set_files(
         total += len(raw)
         payloads.append((os.path.basename(f.filename or ""), raw))
     if total > settings.teaching_material_max_batch_upload_bytes:
-        raise HTTPException(status_code=400, detail="單次上傳總量超過上限")
+        raise HTTPException(
+            status_code=400,
+            detail=_batch_upload_total_exceeded_message(
+                total, settings.teaching_material_max_batch_upload_bytes
+            ),
+        )
 
     plan_row = db.query(models.TeachingMaterialSetPlan).filter(
         models.TeachingMaterialSetPlan.set_id == set_id
@@ -407,7 +421,9 @@ async def add_set_files(
                     ext, fmt = _validate_filename(fname, db)
                     max_bytes = _effective_max_bytes(mt, fmt)
                     if len(raw) > max_bytes:
-                        raise ValueError(f"超過單檔上限（{max_bytes} bytes）")
+                        raise ValueError(
+                            _file_size_limit_exceeded_message(fname, len(raw), mt, fmt)
+                        )
 
                     conflict = _find_active_file_conflict(db, set_id, fname)
                     overwritten = False
