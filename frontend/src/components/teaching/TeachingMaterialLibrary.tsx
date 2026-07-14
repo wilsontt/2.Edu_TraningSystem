@@ -57,6 +57,7 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
 
     const [selected, setSelected] = useState<Map<number, SelectedEntry>>(new Map());
     const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+    const [selectingAll, setSelectingAll] = useState(false);
 
     const [uploadOpen, setUploadOpen] = useState(false);
     const [editingSetId, setEditingSetId] = useState<number | null>(null);
@@ -94,6 +95,19 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
     const onSearch = () => { setPage(1); fetchList(); };
     const switchView = (v: ViewMode) => { setView(v); setPage(1); setSelected(new Map()); };
 
+    const isSetSelected = (s: MaterialSet): boolean => {
+        const files = s.files ?? [];
+        return files.length > 0 && files.every(f => selected.has(f.id));
+    };
+
+    const mergeSetDetailIntoList = (detail: MaterialSet) => {
+        setSetItems(prev => prev.map(row =>
+            row.id === detail.id
+                ? { ...row, files: detail.files, file_count: detail.file_count ?? row.file_count }
+                : row,
+        ));
+    };
+
     const toggleFile = (fileId: number, entry: SelectedEntry) => {
         setSelected(prev => {
             const next = new Map(prev);
@@ -102,11 +116,13 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
         });
     };
 
-    /** 套組檢視下勾選整列：需先取得該套組使用中檔案清單（一次性抓詳情）。 */
+    /** 套組檢視下勾選整列：需先取得該套組使用中檔案清單，並寫回列表以便勾選狀態可顯示。 */
     const toggleSet = async (s: MaterialSet) => {
-        const detail = s.files ? s : await fetchSetDetail(s.id);
+        const detail = (s.files && s.files.length > 0) ? s : await fetchSetDetail(s.id);
+        if (!s.files?.length) mergeSetDetailIntoList(detail);
         const fileIds = (detail.files ?? []).map(f => f.id);
-        const allSelected = fileIds.length > 0 && fileIds.every(id => selected.has(id));
+        if (fileIds.length === 0) return;
+        const allSelected = fileIds.every(id => selected.has(id));
         setSelected(prev => {
             const next = new Map(prev);
             (detail.files ?? []).forEach(f => {
@@ -115,6 +131,56 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
             });
             return next;
         });
+    };
+
+    const pageFileIdsSelected = (): boolean => {
+        if (view === 'file') {
+            return fileItems.length > 0 && fileItems.every(f => selected.has(f.id));
+        }
+        return setItems.length > 0 && setItems.every(s => isSetSelected(s));
+    };
+
+    /** 全選／取消全選「目前頁」的檔案（套組檢視＝該頁各套組內全部使用中檔）。 */
+    const toggleSelectAllCurrentPage = async () => {
+        if (view === 'file') {
+            const allOn = fileItems.length > 0 && fileItems.every(f => selected.has(f.id));
+            setSelected(prev => {
+                const next = new Map(prev);
+                fileItems.forEach(f => {
+                    if (allOn) next.delete(f.id);
+                    else next.set(f.id, { original_filename: f.original_filename, set_title: f.set_title });
+                });
+                return next;
+            });
+            return;
+        }
+
+        setSelectingAll(true);
+        try {
+            const details = await Promise.all(
+                setItems.map(s => (s.files && s.files.length > 0 ? Promise.resolve(s) : fetchSetDetail(s.id))),
+            );
+            setSetItems(prev => prev.map(row => {
+                const d = details.find(x => x.id === row.id);
+                return d?.files ? { ...row, files: d.files, file_count: d.file_count ?? row.file_count } : row;
+            }));
+            const allOn = details.every(d => {
+                const files = d.files ?? [];
+                return files.length > 0 && files.every(f => selected.has(f.id));
+            });
+            setSelected(prev => {
+                const next = new Map(prev);
+                details.forEach(d => {
+                    (d.files ?? []).forEach(f => {
+                        if (allOn) next.delete(f.id);
+                        else next.set(f.id, { original_filename: f.original_filename, set_title: d.title });
+                    });
+                });
+                return next;
+            });
+        } finally {
+            setSelectingAll(false);
+        }
     };
 
     const doSingleDownload = (fileId: number, filename: string) => {
@@ -168,29 +234,55 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
 
     const setColumns: DataTableColumn<MaterialSet>[] = [
         {
-            key: 'select', header: '', width: 40,
-            render: s => (
-                <button type="button" onClick={() => toggleSet(s)} className="text-indigo-600 cursor-pointer">
-                    {(s.files ?? []).length > 0 && (s.files ?? []).every(f => selected.has(f.id))
-                        ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}
+            key: 'select',
+            header: (
+                <button
+                    type="button"
+                    onClick={() => void toggleSelectAllCurrentPage()}
+                    disabled={selectingAll || setItems.length === 0}
+                    className="text-indigo-600 cursor-pointer disabled:opacity-40"
+                    title={pageFileIdsSelected() ? '取消全選本頁' : '全選本頁'}
+                >
+                    {pageFileIdsSelected()
+                        ? <CheckSquare className="w-5 h-5" />
+                        : <Square className="w-5 h-5 text-gray-300" />}
                 </button>
             ),
+            width: 40,
+            render: s => {
+                const checked = isSetSelected(s);
+                return (
+                    <button
+                        type="button"
+                        onClick={() => void toggleSet(s)}
+                        className={`p-1 rounded cursor-pointer ${checked ? 'bg-indigo-100 text-indigo-700' : 'text-indigo-600'}`}
+                        title={checked ? '取消勾選' : '勾選此套組全部檔案'}
+                    >
+                        {checked
+                            ? <CheckSquare className="w-5 h-5" />
+                            : <Square className="w-5 h-5 text-gray-300" />}
+                    </button>
+                );
+            },
         },
         {
             key: 'title', header: '標題',
-            render: s => (
-                <>
-                    <div className="text-sm font-bold text-gray-800 truncate max-w-[280px]">{s.title}</div>
-                    {s.description && <div className="text-xs text-gray-400 truncate max-w-[280px]">{s.description}</div>}
-                    {parseTags(s.tags).length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-0.5">
-                            {parseTags(s.tags).map(tag => (
-                                <span key={tag} className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${tagColorClass(tag)}`}>{tag}</span>
-                            ))}
-                        </div>
-                    )}
-                </>
-            ),
+            render: s => {
+                const checked = isSetSelected(s);
+                return (
+                    <div className={checked ? 'pl-2 border-l-4 border-indigo-500' : ''}>
+                        <div className={`text-sm font-bold truncate max-w-[280px] ${checked ? 'text-indigo-900' : 'text-gray-800'}`}>{s.title}</div>
+                        {s.description && <div className="text-xs text-gray-400 truncate max-w-[280px]">{s.description}</div>}
+                        {parseTags(s.tags).length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                                {parseTags(s.tags).map(tag => (
+                                    <span key={tag} className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${tagColorClass(tag)}`}>{tag}</span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            },
         },
         { key: 'type', header: '類型', render: s => <span className="text-sm text-gray-600">{types.find(t => t.id === s.material_type_id)?.name || '-'}</span> },
         {
@@ -227,21 +319,47 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
 
     const fileColumns: DataTableColumn<MaterialFileListItem>[] = [
         {
-            key: 'select', header: '', width: 40,
-            render: f => (
-                <button type="button" onClick={() => toggleFile(f.id, { original_filename: f.original_filename, set_title: f.set_title })} className="text-indigo-600 cursor-pointer">
-                    {selected.has(f.id) ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-300" />}
+            key: 'select',
+            header: (
+                <button
+                    type="button"
+                    onClick={() => void toggleSelectAllCurrentPage()}
+                    disabled={fileItems.length === 0}
+                    className="text-indigo-600 cursor-pointer disabled:opacity-40"
+                    title={pageFileIdsSelected() ? '取消全選本頁' : '全選本頁'}
+                >
+                    {pageFileIdsSelected()
+                        ? <CheckSquare className="w-5 h-5" />
+                        : <Square className="w-5 h-5 text-gray-300" />}
                 </button>
             ),
+            width: 40,
+            render: f => {
+                const checked = selected.has(f.id);
+                return (
+                    <button
+                        type="button"
+                        onClick={() => toggleFile(f.id, { original_filename: f.original_filename, set_title: f.set_title })}
+                        className={`p-1 rounded cursor-pointer ${checked ? 'bg-indigo-100 text-indigo-700' : 'text-indigo-600'}`}
+                    >
+                        {checked
+                            ? <CheckSquare className="w-5 h-5" />
+                            : <Square className="w-5 h-5 text-gray-300" />}
+                    </button>
+                );
+            },
         },
         {
             key: 'filename', header: '檔名 / 所屬套組',
-            render: f => (
-                <>
-                    <div className="text-sm font-bold text-gray-800 truncate max-w-[280px]">{f.original_filename}</div>
-                    <div className="text-xs text-gray-400 truncate max-w-[280px]">{f.set_title}</div>
-                </>
-            ),
+            render: f => {
+                const checked = selected.has(f.id);
+                return (
+                    <div className={checked ? 'pl-2 border-l-4 border-indigo-500' : ''}>
+                        <div className={`text-sm font-bold truncate max-w-[280px] ${checked ? 'text-indigo-900' : 'text-gray-800'}`}>{f.original_filename}</div>
+                        <div className="text-xs text-gray-400 truncate max-w-[280px]">{f.set_title}</div>
+                    </div>
+                );
+            },
         },
         {
             key: 'plans', header: '計畫',
@@ -301,6 +419,8 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
             {uploadOpen && (
                 <MaterialSetUploadPanel
                     types={types} allowedExts={allowedExts} materialAccept={materialAccept} planOptions={planOptions}
+                    planLayout="grid"
+                    onClose={() => setUploadOpen(false)}
                     onCreated={() => { setUploadOpen(false); setPage(1); fetchList(); }}
                     requireNas={nas.requireNas} beginTransfer={nas.beginTransfer} onUploadProgress={nas.onProgress}
                     endTransferSuccess={nas.endTransferSuccess} endTransferError={nas.endTransferError} isCancel={nas.isCancel}
@@ -310,6 +430,7 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
             {editingSet && !uploadOpen && (
                 <MaterialSetEditPanel
                     set={editingSet} types={types} allowedExts={allowedExts} materialAccept={materialAccept} planOptions={planOptions}
+                    planLayout="grid"
                     onUpdated={refreshAfterEdit} onClose={() => setEditingSetId(null)}
                     requireNas={nas.requireNas} beginTransfer={nas.beginTransfer} onUploadProgress={nas.onProgress}
                     endTransferSuccess={nas.endTransferSuccess} endTransferError={nas.endTransferError}
@@ -345,12 +466,25 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                 <button type="button" onClick={onSearch} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 cursor-pointer">搜尋</button>
             </div>
 
-            <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">共 {total} 筆{selected.size > 0 ? `；已選 ${selected.size} 個檔案` : ''}</span>
-                <button type="button" disabled={selected.size === 0} onClick={() => setBatchConfirmOpen(true)}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer">
-                    <PackageOpen className="w-4 h-4" /> 批次下載
-                </button>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-sm text-gray-500">
+                    共 {total} 筆{selected.size > 0 ? `；已選 ${selected.size} 個檔案` : ''}
+                    {selectingAll ? '（全選處理中…）' : ''}
+                </span>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        disabled={selectingAll || (view === 'set' ? setItems.length === 0 : fileItems.length === 0)}
+                        onClick={() => void toggleSelectAllCurrentPage()}
+                        className="px-3 py-2 text-sm font-bold rounded-lg border-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                        {pageFileIdsSelected() ? '取消全選本頁' : '全選本頁'}
+                    </button>
+                    <button type="button" disabled={selected.size === 0} onClick={() => setBatchConfirmOpen(true)}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer">
+                        <PackageOpen className="w-4 h-4" /> 批次下載
+                    </button>
+                </div>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden p-4">

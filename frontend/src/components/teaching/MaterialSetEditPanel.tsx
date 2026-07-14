@@ -16,6 +16,8 @@ interface MaterialSetEditPanelProps {
     materialAccept: string;
     planOptions?: PlanOption[];
     lockedPlanId?: number;
+    /** 綁定清單版面；側欄建議 stack。 */
+    planLayout?: 'stack' | 'grid';
     onUpdated: (updated: MaterialSet) => void;
     onClose: () => void;
     requireNas: (purpose: string, action: (token: string) => void) => void;
@@ -33,7 +35,7 @@ type UploadOutcome = 'ok' | 'conflict' | 'fail';
 /** 編輯套組面板：中繼資料、計畫綁定、既有檔案移除、新增檔案（同名覆蓋 Yes/No，教材 PLAN §5.12.3）。
  * 「儲存」會一併寫入中繼資料與已選未上傳檔案，不可在尚有選檔時假裝只存標題成功。 */
 const MaterialSetEditPanel = ({
-    set, types, allowedExts, materialAccept, planOptions = [], lockedPlanId,
+    set, types, allowedExts, materialAccept, planOptions = [], lockedPlanId, planLayout = 'stack',
     onUpdated, onClose, requireNas, beginTransfer, onUploadProgress,
     endTransferSuccess, endTransferError, closeTransfer, isCancel,
 }: MaterialSetEditPanelProps) => {
@@ -257,6 +259,7 @@ const MaterialSetEditPanel = ({
                             planOptions={planOptions}
                             selectedIds={planIds}
                             lockedPlanId={lockedPlanId}
+                            layout={planLayout}
                             archivedTitleById={Object.fromEntries(
                                 set.plan_ids.map((id, i) => [id, set.plan_titles[i] ?? `計畫 #${id}`]),
                             )}

@@ -15,6 +15,8 @@ interface MaterialSetUploadPanelProps {
     planOptions?: PlanOption[];
     /** 提供時鎖定此計畫（固定勾選、無法取消），用於訓練計畫編輯頁上傳。 */
     lockedPlanId?: number;
+    /** 取消新增（關閉面板）；側欄／教材庫須提供以免無法退出。 */
+    onClose?: () => void;
     onCreated: (created: MaterialSet) => void;
     requireNas: (purpose: string, action: (token: string) => void) => void;
     beginTransfer: (title: string) => AbortSignal;
@@ -22,13 +24,15 @@ interface MaterialSetUploadPanelProps {
     endTransferSuccess: () => void;
     endTransferError: (message: string) => void;
     isCancel: (err: unknown) => boolean;
+    /** 綁定清單版面；側欄建議 stack（預設）。 */
+    planLayout?: 'stack' | 'grid';
 }
 
 /** 建立教材套組面板（教材 PLAN §5.12.3：上傳前須 NAS 登入；首批檔案與套組同時建立）。 */
 const MaterialSetUploadPanel = ({
-    types, allowedExts, materialAccept, planOptions = [], lockedPlanId,
+    types, allowedExts, materialAccept, planOptions = [], lockedPlanId, onClose,
     onCreated, requireNas, beginTransfer, onUploadProgress, endTransferSuccess,
-    endTransferError, isCancel,
+    endTransferError, isCancel, planLayout = 'stack',
 }: MaterialSetUploadPanelProps) => {
     const [typeId, setTypeId] = useState('');
     const [title, setTitle] = useState('');
@@ -150,22 +154,35 @@ const MaterialSetUploadPanel = ({
                             planOptions={planOptions}
                             selectedIds={planIds}
                             lockedPlanId={lockedPlanId}
+                            layout={planLayout}
                             onChange={ids => {
                                 setPlanIds(lockedPlanId ? Array.from(new Set([lockedPlanId, ...ids])) : ids);
                             }}
                         />
                     </div>
                 )}
-                <div className="md:col-span-2 flex items-center justify-between">
+                <div className="md:col-span-2 flex items-center justify-between gap-2">
                     <span className="text-xs text-gray-500">可多選；單次≤5檔</span>
-                    <button
-                        type="button"
-                        onClick={handleCreateClick}
-                        disabled={busy}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 cursor-pointer"
-                    >
-                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} 建立套組
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {onClose && (
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                disabled={busy}
+                                className="px-4 py-2 text-sm font-bold text-gray-600 hover:text-gray-900 cursor-pointer"
+                            >
+                                取消
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={handleCreateClick}
+                            disabled={busy}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 cursor-pointer"
+                        >
+                            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} 建立套組
+                        </button>
+                    </div>
                 </div>
             </div>
             {error && (

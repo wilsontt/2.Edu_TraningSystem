@@ -106,6 +106,8 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
                     <MaterialSetUploadPanel
                         types={types} allowedExts={allowedExts} materialAccept={materialAccept}
                         planOptions={planOptions} lockedPlanId={planId}
+                        planLayout="stack"
+                        onClose={() => setUploadOpen(false)}
                         onCreated={() => { setUploadOpen(false); fetchSetsForPlan(); }}
                         requireNas={nas.requireNas} beginTransfer={nas.beginTransfer} onUploadProgress={nas.onProgress}
                         endTransferSuccess={nas.endTransferSuccess} endTransferError={nas.endTransferError} isCancel={nas.isCancel}
@@ -129,7 +131,7 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
             {editingSet && !uploadOpen && (
                 <MaterialSetEditPanel
                     set={editingSet} types={types} allowedExts={allowedExts} materialAccept={materialAccept}
-                    planOptions={planOptions} lockedPlanId={planId}
+                    planOptions={planOptions} lockedPlanId={planId} planLayout="stack"
                     onUpdated={refreshAfterEdit} onClose={() => setEditingSetId(null)}
                     requireNas={nas.requireNas} beginTransfer={nas.beginTransfer} onUploadProgress={nas.onProgress}
                     endTransferSuccess={nas.endTransferSuccess} endTransferError={nas.endTransferError}

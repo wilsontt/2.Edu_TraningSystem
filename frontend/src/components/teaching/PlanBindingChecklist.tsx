@@ -40,6 +40,11 @@ interface PlanBindingChecklistProps {
     lockedPlanId?: number;
     /** 已綁定封存計畫的標題備援（例如詳情 plan_titles 對應）。 */
     archivedTitleById?: Record<number, string>;
+    /**
+     * 版面：stack＝一列一欄（側欄／窄欄預設）；
+     * grid＝寬欄可多欄（預設至多兩欄，避免四欄擠成直書）。
+     */
+    layout?: 'stack' | 'grid';
 }
 
 const CELL: Record<'active' | 'expired', string> = {
@@ -58,11 +63,12 @@ const LABEL: Record<'active' | 'expired', string> = {
 };
 
 /**
- * 教材套組綁定訓練計畫：一列四欄勾選；僅進行中／已過期可選。
+ * 教材套組綁定訓練計畫：勾選清單；僅進行中／已過期可選。
  * 作法 A：已綁定之封存計畫以灰底唯讀顯示，儲存時仍保留其 id。
  */
 const PlanBindingChecklist = ({
     planOptions, selectedIds, onChange, lockedPlanId, archivedTitleById = {},
+    layout = 'stack',
 }: PlanBindingChecklistProps) => {
     const today = todayYmd();
     const selectable = selectablePlanOptions(planOptions, today);
@@ -73,7 +79,6 @@ const PlanBindingChecklist = ({
         if (p) {
             return planProgress(p, today) === 'archived' ? [{ id, title: p.title }] : [];
         }
-        // 清單無此筆但仍在綁定內：視為既有封存／遺失選項，唯讀保留
         return [{ id, title: archivedTitleById[id] || `計畫 #${id}` }];
     });
 
@@ -91,6 +96,10 @@ const PlanBindingChecklist = ({
             <p className="text-sm text-gray-500">目前沒有可綁定的訓練計畫（不選＝通用教材）。</p>
         );
     }
+
+    const gridClass = layout === 'grid'
+        ? 'grid grid-cols-1 md:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-0.5'
+        : 'grid grid-cols-1 gap-2 max-h-56 overflow-y-auto p-0.5';
 
     return (
         <div className="space-y-2">
@@ -120,7 +129,7 @@ const PlanBindingChecklist = ({
                 </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 max-h-56 overflow-y-auto p-0.5">
+            <div className={gridClass}>
                 {selectable.map(p => {
                     const progress = planProgress(p, today) as 'active' | 'expired';
                     const checked = selectedIds.includes(p.id);
@@ -128,19 +137,19 @@ const PlanBindingChecklist = ({
                     return (
                         <label
                             key={p.id}
-                            className={`flex items-start gap-2 px-2.5 py-2 rounded-lg border-2 cursor-pointer ${CELL[progress]} ${locked ? 'opacity-90' : ''} ${checked ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 cursor-pointer ${CELL[progress]} ${locked ? 'opacity-90' : ''} ${checked ? 'ring-2 ring-offset-1 ring-emerald-600 border-emerald-600' : ''}`}
                         >
                             <input
                                 type="checkbox"
-                                className="mt-0.5 shrink-0"
+                                className="shrink-0 size-4"
                                 checked={checked}
                                 disabled={locked}
                                 onChange={e => toggle(p.id, e.target.checked)}
                             />
-                            <span className="min-w-0 flex-1">
-                                <span className="block text-sm font-bold leading-snug wrap-break-word">{p.title}</span>
-                                <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-bold ${BADGE[progress]}`}>
-                                    {LABEL[progress]}{locked ? ' · 本計畫已鎖定' : ''}
+                            <span className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                                <span className="text-sm font-bold truncate" title={p.title}>{p.title}</span>
+                                <span className={`shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold ${BADGE[progress]}`}>
+                                    {LABEL[progress]}{locked ? ' · 鎖定' : ''}
                                 </span>
                             </span>
                         </label>
