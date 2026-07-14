@@ -4,6 +4,7 @@ import { type AxiosError } from 'axios';
 import { createSet } from '../../api/teachingMaterials';
 import { mergeSelectedFiles } from './transfer';
 import SelectedFilesList from './SelectedFilesList';
+import PlanBindingChecklist from './PlanBindingChecklist';
 import type { MaterialType, MaterialSet, PlanOption } from '../../types/materials';
 
 interface MaterialSetUploadPanelProps {
@@ -144,23 +145,15 @@ const MaterialSetUploadPanel = ({
                     onRemove={i => setFiles(prev => prev.filter((_, idx) => idx !== i))}
                 />
                 {planOptions.length > 0 && (
-                    <div className="md:col-span-2 space-y-1">
-                        <p className="text-xs text-gray-500">綁定訓練計畫（不選＝通用教材；Ctrl/Cmd+點擊可複選）</p>
-                        <select
-                            multiple
-                            value={planIds.map(String)}
-                            onChange={e => {
-                                const chosen = Array.from(e.target.selectedOptions).map(o => Number(o.value));
-                                setPlanIds(lockedPlanId ? Array.from(new Set([lockedPlanId, ...chosen])) : chosen);
+                    <div className="md:col-span-2">
+                        <PlanBindingChecklist
+                            planOptions={planOptions}
+                            selectedIds={planIds}
+                            lockedPlanId={lockedPlanId}
+                            onChange={ids => {
+                                setPlanIds(lockedPlanId ? Array.from(new Set([lockedPlanId, ...ids])) : ids);
                             }}
-                            className="w-full px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500 h-28"
-                        >
-                            {planOptions.filter(p => !p.is_archived).map(p => (
-                                <option key={p.id} value={p.id} disabled={p.id === lockedPlanId}>
-                                    {p.title}{p.id === lockedPlanId ? '（本計畫，已鎖定）' : ''}
-                                </option>
-                            ))}
-                        </select>
+                        />
                     </div>
                 )}
                 <div className="md:col-span-2 flex items-center justify-between">

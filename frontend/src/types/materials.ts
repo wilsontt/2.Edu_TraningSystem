@@ -83,5 +83,6 @@ export interface SetFileUploadResult {
 export interface PlanOption {
     id: number;
     title: string;
+    end_date?: string | null;
     is_archived?: boolean;
 }

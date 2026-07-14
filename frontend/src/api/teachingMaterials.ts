@@ -19,9 +19,9 @@ export const fetchMaterialTypes = () =>
 export const fetchMaterialFileFormats = () =>
     api.get<MaterialFileFormat[]>(`${BASE}/material-file-formats`).then(r => r.data);
 
-/** 訓練計畫選項（供套組綁定計畫多選使用）；僅取用 id/title/is_archived。 */
+/** 訓練計畫選項（套組綁定）；含 end_date／is_archived 供進行中／已過期排序與作法 A 封存唯讀。 */
 export const fetchPlanOptions = () =>
-    api.get<PlanOption[]>('/training/plans').then(r => r.data);
+    api.get<PlanOption[]>('/training/plans', { params: { status: 'all' } }).then(r => r.data);
 
 export interface SetListParams {
     page: number;

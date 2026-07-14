@@ -4,6 +4,7 @@ import { type AxiosError, type AxiosProgressEvent } from 'axios';
 import { updateSet, updateSetPlans, removeSetFile, addSetFiles } from '../../api/teachingMaterials';
 import { mergeSelectedFiles } from './transfer';
 import SelectedFilesList from './SelectedFilesList';
+import PlanBindingChecklist from './PlanBindingChecklist';
 import type { MaterialType, MaterialSet, PlanOption } from '../../types/materials';
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
@@ -251,23 +252,24 @@ const MaterialSetEditPanel = ({
                     className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500" />
 
                 {planOptions.length > 0 && (
-                    <div className="md:col-span-2 space-y-1">
-                        <p className="text-xs text-gray-500">綁定訓練計畫（不選＝通用教材；Ctrl/Cmd+點擊可複選）</p>
-                        <select
-                            multiple
-                            value={planIds.map(String)}
-                            onChange={e => {
-                                const chosen = Array.from(e.target.selectedOptions).map(o => Number(o.value));
-                                setPlanIds(lockedPlanId ? Array.from(new Set([lockedPlanId, ...chosen])) : chosen);
+                    <div className="md:col-span-2">
+                        <PlanBindingChecklist
+                            planOptions={planOptions}
+                            selectedIds={planIds}
+                            lockedPlanId={lockedPlanId}
+                            archivedTitleById={Object.fromEntries(
+                                set.plan_ids.map((id, i) => [id, set.plan_titles[i] ?? `計畫 #${id}`]),
+                            )}
+                            onChange={ids => {
+                                // 作法 A：勾選變更不得丢掉既有封存綁定 id
+                                const archivedKeep = planIds.filter(id => {
+                                    const p = planOptions.find(o => o.id === id);
+                                    return p?.is_archived || (!p && set.plan_ids.includes(id));
+                                });
+                                const merged = Array.from(new Set([...ids, ...archivedKeep]));
+                                setPlanIds(lockedPlanId ? Array.from(new Set([lockedPlanId, ...merged])) : merged);
                             }}
-                            className="w-full px-3 py-2 border-2 border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500 h-28"
-                        >
-                            {planOptions.filter(p => !p.is_archived).map(p => (
-                                <option key={p.id} value={p.id} disabled={p.id === lockedPlanId}>
-                                    {p.title}{p.id === lockedPlanId ? '（本計畫，已鎖定）' : ''}
-                                </option>
-                            ))}
-                        </select>
+                        />
                     </div>
                 )}
 

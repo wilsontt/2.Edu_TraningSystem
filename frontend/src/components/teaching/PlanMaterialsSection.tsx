@@ -111,14 +111,22 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
                         endTransferSuccess={nas.endTransferSuccess} endTransferError={nas.endTransferError} isCancel={nas.isCancel}
                     />
                 ) : (
-                    <button type="button" onClick={() => setUploadOpen(true)}
-                        className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 cursor-pointer">
+                    <button
+                        type="button"
+                        disabled={editingSetId != null}
+                        onClick={() => {
+                            setEditingSetId(null);
+                            setUploadOpen(true);
+                        }}
+                        className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed cursor-pointer"
+                        title={editingSetId != null ? '請先關閉編輯面板再新增' : undefined}
+                    >
                         新增教材套組
                     </button>
                 )
             )}
 
-            {editingSet && (
+            {editingSet && !uploadOpen && (
                 <MaterialSetEditPanel
                     set={editingSet} types={types} allowedExts={allowedExts} materialAccept={materialAccept}
                     planOptions={planOptions} lockedPlanId={planId}
@@ -152,7 +160,16 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
                                     {!archived && (
-                                        <button type="button" onClick={() => setEditingSetId(s.id)} className="p-1 text-gray-500 hover:bg-gray-100 rounded cursor-pointer" title="編輯">
+                                        <button
+                                            type="button"
+                                            disabled={uploadOpen}
+                                            onClick={() => {
+                                                setUploadOpen(false);
+                                                setEditingSetId(s.id);
+                                            }}
+                                            className="p-1 text-gray-500 hover:bg-gray-100 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                            title={uploadOpen ? '請先關閉新增面板再編輯' : '編輯'}
+                                        >
                                             <Pencil className="w-4 h-4" />
                                         </button>
                                     )}
