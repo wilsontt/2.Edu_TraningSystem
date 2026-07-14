@@ -146,7 +146,7 @@ def _expand_nested_groups(
     conn, base_dn: str, user_dn: str
 ) -> list[str]:
     """使用 LDAP_MATCHING_RULE_IN_CHAIN 展開巢狀群組（AD 專屬 OID）。
-    user_dn 必須是完整 Distinguished Name（entry.entry_dn），不可用 sAMAccountName 拼接。
+    user_dn 必須是完整 Distinguished Name（entry.entry_dn），不可使用 sAMAccountName 拼接。
     """
     nested_filter = (
         f"(&(objectClass=group)"
