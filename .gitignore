@@ -39,6 +39,9 @@ build/
 data/*.db
 data/*.db.*
 
+# 本專案已禁用 ui-ux-pro-max --persist；勿再納入版控
+design-system/
+
 # Test files
 # 注意：tests/ 目錄和 1.docs/reviews/ 目錄應被版本控制
 # 只忽略測試產生的臨時文件

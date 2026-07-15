@@ -1,5 +1,13 @@
 # 教材套組（Wave 2）Implementation Plan
 
+> **歸檔說明（2026-07-15）**  
+> 本檔原路徑為 `docs/superpowers/plans/`（Superpowers agent 逐步實作計畫）。已移至 `1.docs/02-棕地專案/agent-plans/`。  
+> **功能已實作結案**；規格權威見 [`plans/已完成/20260617_教材上傳列管與教材庫_PLAN.md`](../plans/已完成/20260617_教材上傳列管與教材庫_PLAN.md) §5.12 與 [棕地功能總覽](../棕地功能總覽.md)。  
+> 檔內 `- [ ]` 未必已勾選，**勿**僅依本檔勾選狀態判斷是否完成。測試落點見專案根目錄 `tests/test_teaching_material_sets_*.py`。
+
+---
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 將教材庫從「一檔一筆」升級為「教材套組」（一標題可含多檔、可綁 0~N 個訓練計畫），依 `1.docs/02-棕地專案/plans/已完成/20260617_教材上傳列管與教材庫_PLAN.md` §5.12（2026-07-09 業主核可）實作新表、遷移、API 與前端雙檢視教材庫。

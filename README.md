@@ -184,11 +184,11 @@ npm run dev
 
 | 目錄 | 說明 |
 |------|------|
-| **1.docs/** | 全專案文件中心，分三層：`00-專案總覽/`（跨階段架構、權限、資料庫、驗收流程）、`01-綠地專案/`（憲章／規格／計畫／任務等 SDD 規格集）、`02-棕地專案/`（T 系列計畫、開發與修復記錄、交付實作文件、驗證報告）；另含 `系統測試/`、`logs/` |
+| **1.docs/** | 全專案文件中心，分三層：`00-專案總覽/`、`01-綠地專案/`、`02-棕地專案/`（含 `plans/已完成/`、`agent-plans/`、交付實作文件、reviews）；另含 `系統測試/` |
 | **backend/** | FastAPI 應用（`app/`）、路由／模型／服務；`restore_training_data.py` 為資料恢復腳本 |
-| **frontend/** | React 應用、頁面與元件、API、樣式 |
+| **frontend/** | React 應用、頁面與元件、API、樣式（權威色票／字體見 `frontend/src/index.css`；共用 UI 見 `@shared-ui`） |
 | **data/** | SQLite 資料庫、教材（`data/教材/`）與上傳檔案目錄 |
-| **tests/** | 測試腳本與 `fixtures/`（匯入範本、考卷題目來源） |
+| **tests/** | **可執行**測試與 `fixtures/`（維持專案根目錄，**不**放入 `1.docs/`）；說明見 [tests/README.md](tests/README.md) |
 
 ### 4.3 企業共用前端（`@shared-ui`）
 
@@ -307,15 +307,22 @@ npm run dev
 | 架構與使用 | [專案系統架構分析](1.docs/00-專案總覽/專案系統架構分析.md)、[專案使用說明](1.docs/00-專案總覽/專案使用說明.md)、[本機開發疑難排解](1.docs/00-專案總覽/本機開發疑難排解.md)、[生產部署指南](1.docs/00-專案總覽/生產部署指南.md)、[NAS與路徑跨平台慣例](1.docs/00-專案總覽/NAS與路徑跨平台慣例.md) |
 | 開發與交付追溯 | [1.docs 目錄](1.docs/README.md)、[交付實作文件索引](1.docs/02-棕地專案/交付實作文件/README.md)、[專案架構分析](1.docs/00-專案總覽/專案架構分析.md)、[角色與權限架構](1.docs/00-專案總覽/角色與權限管理架構說明.md) |
 | 資料庫 | [遷移指南](1.docs/00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md)、[資料遺失與恢復記錄](1.docs/02-棕地專案/reviews/2025-01-09-資料庫資料遺失與恢復記錄.md) |
-| 驗收與測試 | [驗收報告建立流程](1.docs/00-專案總覽/驗收報告建立流程.md)、[測試與修復記錄](1.docs/02-棕地專案/reviews/README.md)、[tests 目錄](tests/README.md) |
+| 驗收與測試 | [驗收報告建立流程](1.docs/00-專案總覽/驗收報告建立流程.md)、[測試與修復記錄](1.docs/02-棕地專案/reviews/README.md)、[tests 目錄](tests/README.md)（pytest／fixtures） |
+| Agent 施工歸檔 | [agent-plans](1.docs/02-棕地專案/agent-plans/README.md)（原 `docs/superpowers/`） |
 
 ---
 
-**最後更新**：2026-07-05（本機開發疑難排解、uv venv、npm uv_cwd／後端 encodings 故障）
+**最後更新**：2026-07-15（`docs/superpowers`→`agent-plans`、更新 `tests/README`、移除 `design-system`）
 
 ---
 
 ## 九、近期更新摘要
+
+### 2026-07-15（文件整理）
+
+- `docs/superpowers/plans/` 歸檔至 [1.docs/02-棕地專案/agent-plans/](1.docs/02-棕地專案/agent-plans/README.md)。
+- 更新 [tests/README.md](tests/README.md)（現行 pytest／fixtures／執行方式；明確不移入 `1.docs/`）。
+- 移除早期 `design-system/`（ui-ux-pro-max 建議稿）；現行 UI 以 `frontend/src/index.css` + `@shared-ui` 為準。
 
 ### 2026-07（本機開發／跨平台）
 

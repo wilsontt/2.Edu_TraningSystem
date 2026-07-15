@@ -34,6 +34,7 @@
 │   ├── 規格與計畫/           # 棕地計畫定稿（成績中心、T9～T13 等，原 0.standards/2.棕地專案）
 │   ├── plans/                # 實作計畫（進行中／規劃稿）
 │   │   └── 已完成/           # 已實作結案之 PLAN（2026-06 起採 A 方案：結案即移入）
+│   ├── agent-plans/          # Superpowers／agent 施工計畫歸檔（原 docs/superpowers/）
 │   ├── tasks/                # 任務記錄
 │   ├── reports/              # 開發報告
 │   ├── reviews/              # 測試與修復記錄（見 reviews/README.md）
@@ -43,7 +44,9 @@
 └── 系統測試/                 # 使用者驗證測試 (UAT) 文件（原 3.系統測試）
 ```
 
-> 非文件檔已移出文件區：匯入範本與考卷題目來源 → `tests/fixtures/`；教材 PDF → `data/教材/`。
+> 非文件檔已移出文件區：匯入範本與考卷題目來源 → `tests/fixtures/`；教材 PDF → `data/教材/`。  
+> 可執行測試維持專案根目錄 **`tests/`**（見 [tests/README.md](../tests/README.md)），不放入本文件樹。  
+> 早期 `design-system/`（ui-ux-pro-max 建議稿）已移除；現行 UI 以 `frontend/src/index.css` 與 `@shared-ui` 為準。
 
 ---
 
@@ -78,6 +81,7 @@
 ### 棕地迭代（`02-棕地專案/`）
 
 - **[棕地功能總覽.md](02-棕地專案/棕地功能總覽.md)** — 2026-04～07 棕地波次一頁匯總（功能、PLAN、程式落點、驗收狀態）。
+- **[agent-plans/README.md](02-棕地專案/agent-plans/README.md)** — Superpowers／agent 施工計畫歸檔（原 `docs/superpowers/`；非產品規格準則）。
 - **[交付實作文件/README.md](02-棕地專案/交付實作文件/README.md)** — 棕地任務單與結案註記索引（含成績中心、AD、教材等）。
 - **[規格與計畫/2.成績中心開發任務.md](02-棕地專案/規格與計畫/2.成績中心開發任務.md)** — 成績中心歷史任務清單（含狀態補註）。
 - **[plans/20260612_AD整合_系統管理者登入_PLAN.md](02-棕地專案/plans/已完成/20260612_AD整合_系統管理者登入_PLAN.md)** — IT 管理者 AD（LDAP + IT Admins）；JIT 自動建檔、`is_trainee` 隔離；**方案乙**：AD 斷線 Email OTP 備援 + break-glass；ISO 27001（僅 break-glass）。
@@ -106,6 +110,7 @@
 - **[驗收報告建立流程.md](00-專案總覽/驗收報告建立流程.md)** — 驗收清單、報告命名與存放。
 - **[系統建置與驗證報告/README.md](02-棕地專案/系統建置與驗證報告/README.md)** — 綠地階段報告索引與棕地驗收補充說明。
 - **[reviews/README.md](02-棕地專案/reviews/README.md)** — 測試與修復記錄索引（含 API 手冊、T13 變更記錄）。
+- **[tests/README.md](../tests/README.md)** — 專案根目錄可執行測試（pytest／fixtures；**不**放入 `1.docs/`）。
 
 ---
 
@@ -117,6 +122,8 @@
 | 角色與權限 | [角色與權限管理架構說明.md](00-專案總覽/角色與權限管理架構說明.md) |
 | 架構 | [專案架構分析.md](00-專案總覽/專案架構分析.md) |
 | 棕地功能總覽 | [棕地功能總覽.md](02-棕地專案/棕地功能總覽.md) |
+| Agent 施工計畫歸檔 | [agent-plans/README.md](02-棕地專案/agent-plans/README.md) |
+| 可執行測試 | [tests/README.md](../tests/README.md) |
 | 成績中心／棕地結案 | [交付實作文件/README.md](02-棕地專案/交付實作文件/README.md) |
 | Docker 部署／NAS | [生產部署指南.md](00-專案總覽/生產部署指南.md)、[NAS與路徑跨平台慣例.md](00-專案總覽/NAS與路徑跨平台慣例.md)、[MIGRATION_GUIDE](00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md) |
 | 個人成績／學習分析 | [個人成績總覽與學習分析說明.md](00-專案總覽/個人成績總覽與學習分析說明.md) |
@@ -126,6 +133,7 @@
 
 ## 最近更新
 
+- **2026-07-15**：`docs/superpowers/` 歸檔至 [`agent-plans/`](02-棕地專案/agent-plans/README.md)；更新 [`tests/README.md`](../tests/README.md)；移除早期 `design-system/`（現行 UI 以 `frontend/src/index.css` + `@shared-ui` 為準）。
 - **2026-07-11**：部門成績展開明細補 `plan_status` — [`20260710_成績中心資料口徑統一與部門計畫統計修正_PLAN.md`](02-棕地專案/plans/已完成/20260710_成績中心資料口徑統一與部門計畫統計修正_PLAN.md)（`GET .../department/{id}/details` 與前端展開／切換狀態清快取）。
 - **2026-07-11**：成績中心資料口徑統一與部門計畫統計修正 — [`20260710_成績中心資料口徑統一與部門計畫統計修正_PLAN.md`](02-棕地專案/plans/已完成/20260710_成績中心資料口徑統一與部門計畫統計修正_PLAN.md)（✅ 已實作：個人三頁籤 `plan_status`、計畫統計 `plan_id`、跨部門導覽）。
 - **2026-07-11**：修訂 [`20260710_成績中心資料口徑統一與部門計畫統計修正_PLAN.md`](02-棕地專案/plans/已完成/20260710_成績中心資料口徑統一與部門計畫統計修正_PLAN.md) — 定稿跨部門導覽（進部門清 emp_id、帶入 plan_status、URL merge、標題、403）。

@@ -16,6 +16,7 @@ Usage:
 import csv
 import json
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from core import search, DATA_DIR
@@ -488,6 +489,17 @@ def generate_design_system(query: str, project_name: str = None, output_format: 
 
 
 # ============ PERSISTENCE FUNCTIONS ============
+
+# 本專案已禁用寫入 design-system/（2026-07-15）。
+# 現行 UI 準則：frontend/src/index.css（@theme）＋ @shared-ui；勿再產出 MASTER.md。
+PERSIST_TO_DESIGN_SYSTEM_DISABLED = True
+PERSIST_DISABLED_MESSAGE = (
+    "本專案已禁用 --persist 寫入 design-system/。"
+    "現行設計基準：frontend/src/index.css 與 @shared-ui。"
+    "僅使用 --design-system（不帶 --persist）於終端輸出建議即可。"
+)
+
+
 def persist_design_system(design_system: dict, page: str = None, output_dir: str = None, page_query: str = None) -> dict:
     """
     Persist design system to design-system/<project>/ folder using Master + Overrides pattern.
@@ -501,6 +513,15 @@ def persist_design_system(design_system: dict, page: str = None, output_dir: str
     Returns:
         dict with created file paths and status
     """
+    if PERSIST_TO_DESIGN_SYSTEM_DISABLED:
+        print(f"⚠️  {PERSIST_DISABLED_MESSAGE}", file=sys.stderr)
+        return {
+            "status": "disabled",
+            "design_system_dir": None,
+            "created_files": [],
+            "message": PERSIST_DISABLED_MESSAGE,
+        }
+
     base_dir = Path(output_dir) if output_dir else Path.cwd()
     
     # Use project name for project-specific folder

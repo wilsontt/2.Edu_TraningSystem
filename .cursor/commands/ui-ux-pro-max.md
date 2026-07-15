@@ -60,30 +60,23 @@ This command:
 python3 .shared/ui-ux-pro-max/scripts/search.py "beauty spa wellness service" --design-system -p "Serenity Spa"
 ```
 
-### Step 2b: Persist Design System (Master + Overrides Pattern)
+### Step 2b: Persist Design System — **本專案已禁用**
 
-To save the design system for hierarchical retrieval across sessions, add `--persist`:
+> **2026-07-15**：本專案**禁止**寫入 `design-system/`（目錄已刪除）。  
+> **現行設計基準**：`frontend/src/index.css`（`@theme` 色票／字體／間距）＋ `@shared-ui`（`portal-nav`／`crown-brand` 等）。  
+> **禁止**對 agent／開發者下達 `--persist`，即使執行也**不會**落盤（腳本內已 disabled）。
+
+~~以下為上游 ui-ux-pro-max 原說明，僅供其他未禁用專案參考；本專案勿執行：~~
 
 ```bash
-python3 .shared/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name"
+# ❌ 本專案勿用
+# python3 .shared/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name"
 ```
 
-This creates:
-- `design-system/MASTER.md` — Global Source of Truth with all design rules
-- `design-system/pages/` — Folder for page-specific overrides
-
-**With page-specific override:**
-```bash
-python3 .shared/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name" --page "dashboard"
-```
-
-This also creates:
-- `design-system/pages/dashboard.md` — Page-specific deviations from Master
-
-**How hierarchical retrieval works:**
-1. When building a specific page (e.g., "Checkout"), first check `design-system/pages/checkout.md`
-2. If the page file exists, its rules **override** the Master file
-3. If not, use `design-system/MASTER.md` exclusively
+做 UI 時請：
+1. 讀取 `frontend/src/index.css` 的 CSS 變數與既有頁面 Tailwind 慣例；
+2. 可選：用 `--design-system`（**不帶** `--persist`）只在終端看建議，再判斷是否採納；
+3. 勿重建 `design-system/MASTER.md` 或 `pages/*.md`。
 
 ### Step 3: Supplement with Detailed Searches (as needed)
 

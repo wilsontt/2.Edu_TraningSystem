@@ -57,14 +57,15 @@ if __name__ == "__main__":
     parser.add_argument("--project-name", "-p", type=str, default=None, help="Project name for design system output")
     parser.add_argument("--format", "-f", choices=["ascii", "markdown"], default="ascii", help="Output format for design system")
     # Persistence (Master + Overrides pattern)
-    parser.add_argument("--persist", action="store_true", help="Save design system to design-system/MASTER.md (creates hierarchical structure)")
-    parser.add_argument("--page", type=str, default=None, help="Create page-specific override file in design-system/pages/")
+    parser.add_argument("--persist", action="store_true", help="(本專案已禁用) 勿寫入 design-system/；即使加上也不會落盤")
+    parser.add_argument("--page", type=str, default=None, help="(本專案已禁用 persist) page override 參數保留但不寫檔")
     parser.add_argument("--output-dir", "-o", type=str, default=None, help="Output directory for persisted files (default: current directory)")
 
     args = parser.parse_args()
 
     # Design system takes priority
     if args.design_system:
+        from design_system import PERSIST_TO_DESIGN_SYSTEM_DISABLED
         result = generate_design_system(
             args.query, 
             args.project_name, 
@@ -75,18 +76,14 @@ if __name__ == "__main__":
         )
         print(result)
         
-        # Print persistence confirmation
         if args.persist:
-            project_slug = args.project_name.lower().replace(' ', '-') if args.project_name else "default"
             print("\n" + "=" * 60)
-            print(f"✅ Design system persisted to design-system/{project_slug}/")
-            print(f"   📄 design-system/{project_slug}/MASTER.md (Global Source of Truth)")
-            if args.page:
-                page_filename = args.page.lower().replace(' ', '-')
-                print(f"   📄 design-system/{project_slug}/pages/{page_filename}.md (Page Overrides)")
-            print("")
-            print(f"📖 Usage: When building a page, check design-system/{project_slug}/pages/[page].md first.")
-            print(f"   If exists, its rules override MASTER.md. Otherwise, use MASTER.md.")
+            if PERSIST_TO_DESIGN_SYSTEM_DISABLED:
+                print("⚠️  本專案已禁用 --persist：不會寫入 design-system/")
+                print("   現行設計基準：frontend/src/index.css（@theme）＋ @shared-ui")
+            else:
+                project_slug = args.project_name.lower().replace(' ', '-') if args.project_name else "default"
+                print(f"✅ Design system persisted to design-system/{project_slug}/")
             print("=" * 60)
     # Stack search
     elif args.stack:
