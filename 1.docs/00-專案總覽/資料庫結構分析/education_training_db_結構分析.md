@@ -59,7 +59,10 @@
 | `roles` | 角色 |
 | `sub_categories` | 訓練子分類 |
 | `system_functions` | 系統功能（選單／按鈕權限樹） |
-| `teaching_materials` | 教材目錄卡（實體檔於 NAS） |
+| `teaching_material_files` | 教材套組內檔案（實體檔於 NAS；現行 API） |
+| `teaching_material_set_plans` | 套組 ↔ 訓練計畫（M2M；無列＝通用教材） |
+| `teaching_material_sets` | 教材套組主檔（一標題多檔；現行 API） |
+| `teaching_materials` | Wave1 教材目錄卡（已遷移至套組；保留表供溯源） |
 | `training_plans` | 訓練／考試計畫 |
 | `users` | 使用者（帳號） |
 
@@ -112,9 +115,15 @@ erDiagram
     material_types ||--o{ teaching_materials : "material_type_id"
     training_plans ||--o{ teaching_materials : "plan_id"
     teaching_materials ||--o| teaching_materials : "replaced_by_id"
+
+    material_types ||--o{ teaching_material_sets : "material_type_id"
+    teaching_material_sets ||--o{ teaching_material_files : "set_id"
+    teaching_material_sets ||--o{ teaching_material_set_plans : "set_id"
+    training_plans ||--o{ teaching_material_set_plans : "plan_id"
 ```
 
-> **棕地增補（2026-06～07）**：`material_types`、`material_file_formats`、`teaching_materials`、`backup_schedule_config`、`backup_records`、`admin_login_otps`、`file_transfer_audit_logs`；`users` 擴充 AD／受訓隔離欄位。完整欄位見 **5.3** 各表與 `backend/app/models.py`。
+> **棕地增補（2026-06～07）**：`material_types`、`material_file_formats`、`teaching_materials`（Wave1）、`backup_schedule_config`、`backup_records`、`admin_login_otps`、`file_transfer_audit_logs`；`users` 擴充 AD／受訓隔離欄位。  
+> **教材套組 Wave2（現行）**：`teaching_material_sets`、`teaching_material_files`、`teaching_material_set_plans`；API 本體見 `routers/teaching_material_sets.py`。完整欄位見 **5.3** 與 `backend/app/models.py`。
 
 > **說明**：`question_bank` 在 schema 上為獨立題庫，**未**宣告 FK 至 `users`；`created_by` 語意上常對應 `users.emp_id`，但 DB 層未強制。
 
@@ -550,7 +559,58 @@ erDiagram
 
 ---
 
-#### `teaching_materials` — 教材目錄卡
+#### `teaching_material_sets` — 教材套組主檔（現行）
+
+一標題可含多檔；可綁 0～N 個訓練計畫。`teaching_material_set_plans` 對該 set **無列**＝通用教材。
+
+| 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
+|------|----------|------|----------|----|------|
+| id | 流水號 | INTEGER | 是 | 是 | — |
+| title | 套組標題 | VARCHAR | 是 | — | — |
+| material_type_id | 教材類型 | INTEGER | 是 | — | → `material_types.id` |
+| description | 簡述 | VARCHAR | 否 | — | — |
+| tags | 標籤 JSON | TEXT | 否 | — | — |
+| year | 年度 | VARCHAR | 是 | — | — |
+| uploaded_by | 上傳者工號 | VARCHAR | 是 | — | — |
+| uploaded_at | 上傳時間 | DATETIME | 否 | — | 索引 |
+| is_active | 使用中 | BOOLEAN | 否 | — | 索引；軟刪 |
+
+---
+
+#### `teaching_material_files` — 套組內檔案（現行）
+
+實體檔存於 NAS；`storage_path` 為相對 `MATERIALS_ROOT` 之邏輯路徑（`/` 分段）。
+
+| 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
+|------|----------|------|----------|----|------|
+| id | 流水號 | INTEGER | 是 | 是 | — |
+| set_id | 所屬套組 | INTEGER | 是 | — | → `teaching_material_sets.id`；索引 |
+| original_filename | 原始檔名 | VARCHAR | 是 | — | 下載檔名來源 |
+| stored_filename | NAS 檔名 | VARCHAR | 是 | — | — |
+| storage_path | 儲存相對路徑 | VARCHAR | 是 | — | 邏輯 `/` 路徑 |
+| file_format | 副檔名 | VARCHAR | 是 | — | — |
+| file_size_bytes | 檔案大小 | INTEGER | 是 | — | — |
+| uploaded_by | 上傳者工號 | VARCHAR | 是 | — | — |
+| uploaded_at | 上傳時間 | DATETIME | 否 | — | — |
+| is_active | 使用中 | BOOLEAN | 否 | — | 索引；軟刪 |
+| migrated_from_id | Wave1 溯源 | INTEGER | 否 | — | 舊 `teaching_materials.id`；冪等遷移用 |
+
+---
+
+#### `teaching_material_set_plans` — 套組 ↔ 訓練計畫
+
+| 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
+|------|----------|------|----------|----|------|
+| id | 流水號 | INTEGER | 是 | 是 | — |
+| set_id | 套組 ID | INTEGER | 是 | — | → `teaching_material_sets.id`；索引 |
+| plan_id | 訓練計畫 ID | INTEGER | 是 | — | → `training_plans.id`；索引 |
+| — | UNIQUE(set_id, plan_id) | — | — | — | `uq_set_plan` |
+
+---
+
+#### `teaching_materials` — Wave1 教材目錄卡（遺留）
+
+> **狀態**：既有資料已由 `migrations/add_teaching_material_sets.py` 遷移為「1 舊筆 → 1 set + 1 file +（若有 plan_id）1 set_plan」。**現行 API 不以本表為本體**；表保留供溯源／還原排查。欄位定義如下。
 
 | 欄位 | 中文說明 | 類型 | NOT NULL | PK | 備註 |
 |------|----------|------|----------|----|------|
@@ -614,6 +674,10 @@ erDiagram
 | teaching_materials | material_type_id | material_types | id |
 | teaching_materials | replaced_by_id | teaching_materials | id |
 | teaching_materials | replaces_id | teaching_materials | id |
+| teaching_material_sets | material_type_id | material_types | id |
+| teaching_material_files | set_id | teaching_material_sets | id |
+| teaching_material_set_plans | set_id | teaching_material_sets | id |
+| teaching_material_set_plans | plan_id | training_plans | id |
 
 ### 5.5 索引一覽
 
@@ -640,6 +704,10 @@ erDiagram
 | ix_system_functions_code | UNIQUE `system_functions(code)` |
 | ix_training_plans_id | `training_plans(id)` |
 | ix_users_emp_id | `users(emp_id)` |
+| ix_tms_active | `teaching_material_sets(is_active)` |
+| ix_tmf_set_active | `teaching_material_files(set_id, is_active)` |
+| ix_tmsp_set | `teaching_material_set_plans(set_id)` |
+| ix_tmsp_plan | `teaching_material_set_plans(plan_id)` |
 
 ---
 
@@ -676,4 +744,4 @@ sqlite3 data/education_training.db "PRAGMA foreign_key_list('表名');"
 
 ---
 
-**文件版本**：依 `data/education_training.db` 靜態掃描產出；2026-04-02 補齊表中文名、欄位中文說明與長度欄。
+**文件版本**：依 `data/education_training.db`／`models.py` 對照；2026-04-02 補齊表中文名與長度欄；**2026-07-15** 補教材套組 Wave2 三表與 Wave1 遺留說明。

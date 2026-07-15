@@ -189,6 +189,53 @@ cp -a "${DATA_ROOT}/training/education_training.db" "${DATA_ROOT}/training/educa
 docker compose exec training-backend python migrations/add_material_file_formats.py
 ```
 
+#### 教材套組 Wave2（teaching_material_sets）
+
+新增 `teaching_material_sets`、`teaching_material_files`、`teaching_material_set_plans` 三表，並將 Wave1 `teaching_materials`（`is_active=1`）遷移為「1 舊筆 → 1 set + 1 file +（若有 `plan_id`）1 set_plan」。  
+NAS 實體檔路徑（`storage_path`）維持原值，不搬動實體檔。  
+對應：`backend/migrations/add_teaching_material_sets.py`；業務見教材 PLAN §5.12 與 [資料庫結構分析](../資料庫結構分析/education_training_db_結構分析.md)。
+
+> **前置**：須已有 Wave1 教材表（`add_teaching_materials.py`）與類型／格式主檔。現行教材 API 本體為套組端點（`teaching_material_sets.py`）。
+
+```bash
+# 1. 備份
+cp data/education_training.db data/education_training.db.bak-$(date +%Y%m%d)
+
+# 2. 執行（可重複跑：建表 IF NOT EXISTS；以 files.migrated_from_id 判斷是否已遷移）
+cd backend
+.venv/bin/python3 migrations/add_teaching_material_sets.py
+# Windows:
+# .\.venv\Scripts\python.exe migrations/add_teaching_material_sets.py
+```
+
+成功應看到：`Migration completed successfully.` 與 `Wave1 → Wave2 遷移完成：N 筆搬移…`。
+
+驗證：
+
+```sql
+SELECT COUNT(*) FROM teaching_material_sets;
+SELECT COUNT(*) FROM teaching_material_files;
+SELECT COUNT(*) FROM teaching_material_set_plans;
+-- 活躍 Wave1 列應對得上已遷移檔案（migrated_from_id 非空）
+SELECT COUNT(*) FROM teaching_materials WHERE is_active = 1;
+SELECT COUNT(*) FROM teaching_material_files WHERE migrated_from_id IS NOT NULL;
+```
+
+ds1 Docker：
+
+```bash
+cp -a "${DATA_ROOT}/training/education_training.db" "${DATA_ROOT}/training/education_training.db.bak.$(date +%Y%m%d_%H%M%S)"
+docker compose exec training-backend python migrations/add_teaching_material_sets.py
+```
+
+##### 症狀：教材庫空白或上傳後列表無資料
+
+| 項目 | 說明 |
+|------|------|
+| **現象** | 前端教材庫／計畫教材區無法列出套組，或僅舊資料不見 |
+| **根因** | 後端已切套組 API，但 DB 尚未執行本遷移（缺三表或未搬 Wave1 資料） |
+| **解法** | 備份後執行本節腳本；確認上表 COUNT 合理後重啟後端 |
+
 #### 報到紀錄歷史補齊（2026-07-03）
 
 報到功能（T10）上線前已交卷、卻無 `attendance_records` 的舊資料，須以**第一次考試時間**補登報到列。  

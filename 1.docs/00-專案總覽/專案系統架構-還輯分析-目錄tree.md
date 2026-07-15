@@ -68,7 +68,8 @@
 
 ### 3.4 教材與備援模組（棕地 2026-06～07）
 - **material_types** / **material_file_formats**：教材類型與允許副檔名主檔（SSOT）。
-- **teaching_materials**：教材目錄卡；實體檔存於 NAS（`MATERIALS_ROOT`）。
+- **teaching_material_sets** / **teaching_material_files** / **teaching_material_set_plans**：現行套組（一標題多檔、0～N 計畫綁定）；實體檔於 NAS（`MATERIALS_ROOT`）。
+- **teaching_materials**：Wave1 目錄卡（遺留；已遷移至套組）。
 - **backup_schedule_config** / **backup_records**：SQLite 排程備份設定與執行紀錄。
 - **file_transfer_audit_logs**：考卷 TXT、教材上傳／下載稽核。
 - **admin_login_otps**：AD 斷線時 Email OTP。
@@ -89,7 +90,7 @@
 | **訓練計畫** | `/training` | 計畫建立、更新、報到管理、報到總覽 |
 | **考卷工坊** | `/admin/exams` | TXT 上傳解析（NAS）、題目編輯 |
 | **題庫** | `/admin/question-bank` | 題庫搜尋、批次匯入至計畫 |
-| **教材庫** | `/admin/teaching-materials` | 上傳、下載、NAS session、類型／格式主檔 |
+| **教材庫** | `/admin/teaching-materials`（含 `/sets`） | 套組上傳／下載、NAS session、類型／格式主檔 |
 | **考試中心** | `/exam` | `/my_exams`, `/start/{id}`, `/submit/{id}`, 報到 |
 | **報表中心** | `/admin/reports` | 統計、部門績效、批次列印、PDF |
 | **排程備份** | `/admin/backup` | 設定、立即備份、紀錄 |
@@ -141,4 +142,4 @@
 | `1.docs/02-棕地專案/交付實作文件/README.md` | 棕地任務單與結案索引 |
 
 ---
-**最後更新時間**：2026-07-06
+**最後更新時間**：2026-07-15（教材套組 Wave2）
