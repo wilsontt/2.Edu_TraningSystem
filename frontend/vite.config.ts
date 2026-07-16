@@ -1,12 +1,48 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, type Connect, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 const trainingFrontendRoot = path.dirname(fileURLToPath(import.meta.url))
 const enterprisePortalRoot = path.resolve(trainingFrontendRoot, '../..')
 const sharedUiRoot = path.resolve(enterprisePortalRoot, '0.shared-ui')
+
+/**
+ * React Router basename="/training" 導向首頁時，網址列常變成 /training（無結尾斜線）。
+ * Vite base 為 /training/，對無斜線路徑會回「did you mean /training/」而非 SPA。
+ * 在 dev / preview 將精確路徑 /training 302 到 /training/。
+ */
+function redirectTrainingBasePlugin(): Plugin {
+  const middleware: Connect.NextHandleFunction = (
+    req: IncomingMessage,
+    res: ServerResponse,
+    next: Connect.NextFunction,
+  ) => {
+    const rawUrl = req.url ?? '/'
+    const qIndex = rawUrl.indexOf('?')
+    const pathname = qIndex === -1 ? rawUrl : rawUrl.slice(0, qIndex)
+    if (pathname !== '/training') {
+      next()
+      return
+    }
+    const query = qIndex === -1 ? '' : rawUrl.slice(qIndex)
+    res.statusCode = 302
+    res.setHeader('Location', `/training/${query}`)
+    res.end()
+  }
+
+  return {
+    name: 'redirect-training-base',
+    configureServer(server) {
+      server.middlewares.use(middleware)
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware)
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -24,6 +60,7 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   plugins: [
+    redirectTrainingBasePlugin(),
     react(),
     tailwindcss(),
   ],

@@ -267,6 +267,26 @@ const Navbar = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
 //   </div>
 // );
 
+/**
+ * React Router 導向首頁時網址列可能變成 /training（無結尾斜線）。
+ * Vite / Nginx 的 base 為 /training/，重整前先正規化，避免白字「did you mean」。
+ */
+function normalizeTrainingBasePath(): void {
+  const { pathname, search, hash } = window.location;
+  if (pathname === '/training') {
+    window.history.replaceState(null, '', `/training/${search}${hash}`);
+  }
+}
+
+/** 放在 Router 內：登入後 navigate('/') 才會寫入無斜線路徑，需隨 location 再正規化。 */
+function EnsureTrainingTrailingSlash() {
+  const location = useLocation();
+  useEffect(() => {
+    normalizeTrainingBasePath();
+  }, [location.pathname, location.search, location.hash]);
+  return null;
+}
+
 const App = () => {
   const [user, setUser] = useState<User | null>(null);
   const [initializing, setInitializing] = useState(true);
@@ -304,6 +324,7 @@ const App = () => {
 
   return (
     <Router basename="/training">
+      <EnsureTrainingTrailingSlash />
       <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
         <Routes>
           {/* 方案 A：廢止 QRcode 一次性 token 流程；舊 QR（含 UUID）掃碼後一律導向登入頁。 */}
