@@ -391,9 +391,9 @@ const ExamStudio = () => {
             </div>
 
             <div className="grid grid-cols-12 gap-6 h-full">
-                {/* Left Panel: Plan Selection */}
-                <div className="col-span-4 bg-white rounded-2xl shadow-sm border border-indigo-100/50 overflow-hidden flex flex-col h-[80vh]">
-                    <div className="p-4 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/50 to-purple-50/30">
+                {/* Left Panel: Plan Selection（約少 1/4 寬度，讓出給右欄） */}
+                <div className="col-span-3 bg-white rounded-2xl shadow-sm border border-indigo-100/50 overflow-hidden flex flex-col h-[80vh]">
+                    <div className="p-4 border-b border-indigo-100 bg-linear-to-r from-indigo-50/50 to-purple-50/30">
                         <div className="flex items-center gap-2 mb-3">
                             <select
                                 value={planStatusFilter}
@@ -463,10 +463,10 @@ const ExamStudio = () => {
                 </div>
 
                 {/* Right Panel: Workspace */}
-                <div className="col-span-8 bg-white rounded-2xl shadow-sm border border-indigo-100/50 flex flex-col h-[80vh]">
+                <div className="col-span-9 bg-white rounded-2xl shadow-sm border border-indigo-100/50 flex flex-col h-[80vh]">
                     {selectedPlan ? (
                         <>
-                            <div className="p-6 border-b border-indigo-100 flex justify-between items-start bg-gradient-to-r from-indigo-50/30 to-purple-50/20">
+                            <div className="p-6 border-b border-indigo-100 flex justify-between items-start bg-linear-to-r from-indigo-50/30 to-purple-50/20">
                                 <div>
                                     <h2 className="text-2xl font-black text-gray-800 mb-2">{selectedPlan.title}</h2>
                                     <div className="flex gap-4 text-sm text-gray-500">
@@ -484,107 +484,108 @@ const ExamStudio = () => {
                                         若需變更，請至「訓練計劃管理」解除封存或調整訓練日期後，再回到考卷工坊調整題目。
                                     </div>
                                 )}
-                                {/* Upload Section (Drag & Drop) */}
-                                <div 
-                                    className={`rounded-xl p-8 border-2 border-dashed transition-all duration-200 text-center ${
-                                        isDragOver 
-                                            ? 'border-indigo-500 bg-indigo-50 scale-[1.02]' 
-                                            : 'border-indigo-200 bg-indigo-50/30 hover:border-indigo-400 hover:bg-indigo-50/50'
-                                    } ${isSelectedPlanLocked ? 'opacity-50 pointer-events-none select-none' : ''}`}
-                                    onDrop={onDrop}
-                                    onDragOver={onDragOver}
-                                    onDragLeave={onDragLeave}
-                                >
-                                    <input 
-                                        type="file" 
-                                        accept=".txt" 
-                                        onChange={(e) => handleFileUpload(e.target.files)} 
-                                        className="hidden" 
-                                        id="file-upload" 
-                                        disabled={isUploading || isSelectedPlanLocked}
-                                    />
-                                    <label htmlFor="file-upload" className={`cursor-pointer flex flex-col items-center gap-3 ${isUploading ? 'opacity-50' : ''}`}>
-                                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white mb-2">
-                                            {isUploading ? <Loader2 className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
-                                        </div>
-                                        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                                            <div className="text-center sm:text-left">
-                                                <p className="font-bold text-xl text-gray-700">點擊或拖放上傳考卷 (TXT)</p>
-                                                <p className="text-sm text-gray-400 mt-2">系統將自動解析題目並存入資料庫</p>
+                                {/* 上傳拖放區（左）＋題目格式範例（右）並排 */}
+                                <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
+                                    {/* Upload Section (Drag & Drop) — 縮小高度／內距 */}
+                                    <div
+                                        className={`xl:col-span-4 rounded-xl p-4 border-2 border-dashed transition-all duration-200 text-center flex flex-col justify-center ${
+                                            isDragOver
+                                                ? 'border-indigo-500 bg-indigo-50 scale-[1.01]'
+                                                : 'border-indigo-200 bg-indigo-50/30 hover:border-indigo-400 hover:bg-indigo-50/50'
+                                        } ${isSelectedPlanLocked ? 'opacity-50 pointer-events-none select-none' : ''}`}
+                                        onDrop={onDrop}
+                                        onDragOver={onDragOver}
+                                        onDragLeave={onDragLeave}
+                                    >
+                                        <input
+                                            type="file"
+                                            accept=".txt"
+                                            onChange={(e) => handleFileUpload(e.target.files)}
+                                            className="hidden"
+                                            id="file-upload"
+                                            disabled={isUploading || isSelectedPlanLocked}
+                                        />
+                                        <label htmlFor="file-upload" className={`cursor-pointer flex flex-col items-center gap-2 ${isUploading ? 'opacity-50' : ''}`}>
+                                            <div className="w-10 h-10 rounded-full bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shrink-0">
+                                                {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
                                             </div>
-                                            <div className="text-right border-2 shrink-0 px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-colors duration-200">
+                                            <div className="text-center">
+                                                <p className="font-bold text-sm text-gray-700">點擊或拖放上傳考卷 (TXT)</p>
+                                                <p className="text-xs text-gray-400 mt-1">系統將自動解析題目並存入資料庫</p>
+                                            </div>
+                                            <div className="border-2 shrink-0 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-sm shadow-indigo-200 hover:bg-indigo-700 transition-colors duration-200">
                                                 選擇檔案
                                             </div>
-                                        </div>
-                                        <p className="text-xs text-gray-500 mt-2">上傳後將先預覽題目，由您勾選要匯入的題目再寫入</p>
-                                    </label>
-                                    
-                                    {uploadError && (
-                                        <div className="mt-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-lg flex items-center justify-center gap-2 animate-in fade-in slide-in-from-top-2">
-                                            <AlertCircle className="w-5 h-5" />
-                                            {uploadError}
-                                        </div>
-                                    )}
-                                    {uploadSuccess && (
-                                        <div className="mt-6 p-4 bg-green-50 text-green-600 text-sm font-bold rounded-lg flex items-center justify-center gap-2 animate-in fade-in slide-in-from-top-2">
-                                            <Check className="w-5 h-5" />
-                                            {uploadSuccess}
-                                        </div>
-                                    )}
-                                </div>
+                                            <p className="text-xs text-gray-500">上傳後將先預覽題目，由您勾選要匯入的題目再寫入</p>
+                                        </label>
 
-                                {/* Format Help Section */}
-                                <div className="bg-indigo-50/30 rounded-xl p-6 border border-indigo-100">
-                                    <h3 className="text-sm font-black text-gray-700 mb-4 flex items-center gap-2">
-                                        <AlertCircle className="w-4 h-4 text-indigo-500" />
-                                        題目格式範例 (TXT)
-                                    </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                        <div className="space-y-2">
-                                            <div className="text-xs font-bold text-gray-500 uppercase">是非題 (True/False)</div>
-                                            <div className="bg-white p-3 rounded-lg border border-gray-200 text-xs font-mono text-gray-600 leading-relaxed">
-                                                <div>Q: 資訊安全很重要，對嗎？</div>
-                                                <div className="text-green-600 font-bold">ANS: Y</div>
-                                                <div>SCORE: 10</div>
-                                                <div className="text-yellow-600 font-bold mt-1">HINT: 資訊安全是保護資訊資產的重要措施</div>
-                                                <div className="text-indigo-600 font-bold mt-1">LEVEL: E</div>
+                                        {uploadError && (
+                                            <div className="mt-3 p-2.5 bg-red-50 text-red-600 text-xs font-bold rounded-lg flex items-center justify-center gap-2 animate-in fade-in slide-in-from-top-2">
+                                                <AlertCircle className="w-4 h-4 shrink-0" />
+                                                {uploadError}
                                             </div>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="text-xs font-bold text-gray-500 uppercase">單選題 (Single Choice)</div>
-                                            <div className="bg-white p-3 rounded-lg border border-gray-200 text-xs font-mono text-gray-600 leading-relaxed">
-                                                <div>Q: 哪項不是資安要素？</div>
-                                                <div>A: 機密性</div>
-                                                <div>B: 完整性</div>
-                                                <div>C: 方便性</div>
-                                                <div className="text-green-600 font-bold">ANS: C</div>
-                                                <div>SCORE: 10</div>
-                                                <div className="text-yellow-600 font-bold mt-1">HINT: 資安三要素是 CIA：機密性、完整性、可用性</div>
-                                                <div className="text-indigo-600 font-bold mt-1">LEVEL: M</div>
+                                        )}
+                                        {uploadSuccess && (
+                                            <div className="mt-3 p-2.5 bg-green-50 text-green-600 text-xs font-bold rounded-lg flex items-center justify-center gap-2 animate-in fade-in slide-in-from-top-2">
+                                                <Check className="w-4 h-4 shrink-0" />
+                                                {uploadSuccess}
                                             </div>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="text-xs font-bold text-gray-500 uppercase">複選題 (Multiple Choice)</div>
-                                            <div className="bg-white p-3 rounded-lg border border-gray-200 text-xs font-mono text-gray-600 leading-relaxed">
-                                                <div>Q: 資安要素包含？</div>
-                                                <div>A: 機密性</div>
-                                                <div>B: 完整性</div>
-                                                <div>C: 可用性</div>
-                                                <div className="text-green-600 font-bold">ANS: ABC</div>
-                                                <div>SCORE: 20</div>
-                                                <div className="text-yellow-600 font-bold mt-1">HINT: 記住 CIA 三要素的英文縮寫</div>
-                                                <div className="text-indigo-600 font-bold mt-1">LEVEL: H</div>
-                                            </div>
-                                        </div>
+                                        )}
                                     </div>
-                                    <div className="mt-4 space-y-2">
-                                        <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200 text-xs text-indigo-700 leading-relaxed">
-                                            <span className="font-bold">提示欄位說明：</span>
-                                            <span className="ml-1">HINT 為選填，格式 <code className="bg-white px-1 py-0.5 rounded">HINT: 提示內容</code></span>
+
+                                    {/* Format Help Section */}
+                                    <div className="xl:col-span-8 bg-indigo-50/30 rounded-xl p-4 border border-indigo-100">
+                                        <h3 className="text-sm font-black text-gray-700 mb-3 flex items-center gap-2">
+                                            <AlertCircle className="w-4 h-4 text-indigo-500" />
+                                            題目格式範例 (TXT)
+                                        </h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            <div className="space-y-1.5">
+                                                <div className="text-xs font-bold text-gray-500 uppercase">是非題 (True/False)</div>
+                                                <div className="bg-white p-2.5 rounded-lg border border-gray-200 text-xs font-mono text-gray-600 leading-relaxed">
+                                                    <div>Q: 資訊安全很重要，對嗎？</div>
+                                                    <div className="text-green-600 font-bold">ANS: Y</div>
+                                                    <div>SCORE: 10</div>
+                                                    <div className="text-yellow-600 font-bold mt-1">HINT: 資訊安全是保護資訊資產的重要措施</div>
+                                                    <div className="text-indigo-600 font-bold mt-1">LEVEL: E</div>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <div className="text-xs font-bold text-gray-500 uppercase">單選題 (Single Choice)</div>
+                                                <div className="bg-white p-2.5 rounded-lg border border-gray-200 text-xs font-mono text-gray-600 leading-relaxed">
+                                                    <div>Q: 哪項不是資安要素？</div>
+                                                    <div>A: 機密性</div>
+                                                    <div>B: 完整性</div>
+                                                    <div>C: 方便性</div>
+                                                    <div className="text-green-600 font-bold">ANS: C</div>
+                                                    <div>SCORE: 10</div>
+                                                    <div className="text-yellow-600 font-bold mt-1">HINT: 資安三要素是 CIA：機密性、完整性、可用性</div>
+                                                    <div className="text-indigo-600 font-bold mt-1">LEVEL: M</div>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <div className="text-xs font-bold text-gray-500 uppercase">複選題 (Multiple Choice)</div>
+                                                <div className="bg-white p-2.5 rounded-lg border border-gray-200 text-xs font-mono text-gray-600 leading-relaxed">
+                                                    <div>Q: 資安要素包含？</div>
+                                                    <div>A: 機密性</div>
+                                                    <div>B: 完整性</div>
+                                                    <div>C: 可用性</div>
+                                                    <div className="text-green-600 font-bold">ANS: ABC</div>
+                                                    <div>SCORE: 20</div>
+                                                    <div className="text-yellow-600 font-bold mt-1">HINT: 記住 CIA 三要素的英文縮寫</div>
+                                                    <div className="text-indigo-600 font-bold mt-1">LEVEL: H</div>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200 text-xs text-indigo-700 leading-relaxed">
-                                            <span className="font-bold">難易度 LEVEL（選填）：</span>
-                                            <span className="ml-1">E / M / H 或 Easy / Medium / Hard，格式 <code className="bg-white px-1 py-0.5 rounded">LEVEL: E</code></span>
+                                        <div className="mt-3 space-y-1.5">
+                                            <div className="p-2 bg-indigo-50 rounded-lg border border-indigo-200 text-xs text-indigo-700 leading-relaxed">
+                                                <span className="font-bold">提示欄位說明：</span>
+                                                <span className="ml-1">HINT 為選填，格式 <code className="bg-white px-1 py-0.5 rounded">HINT: 提示內容</code></span>
+                                            </div>
+                                            <div className="p-2 bg-indigo-50 rounded-lg border border-indigo-200 text-xs text-indigo-700 leading-relaxed">
+                                                <span className="font-bold">難易度 LEVEL（選填）：</span>
+                                                <span className="ml-1">E / M / H 或 Easy / Medium / Hard，格式 <code className="bg-white px-1 py-0.5 rounded">LEVEL: E</code></span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -835,7 +836,7 @@ const ExamStudio = () => {
             {showUploadPreviewModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-                        <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-purple-50">
+                        <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-linear-to-r from-indigo-50 to-purple-50">
                             <h3 className="font-bold text-lg text-gray-800">預覽題目：{uploadPreviewFileName}（共 {uploadPreviewQuestions.length} 題）</h3>
                             <button onClick={() => setShowUploadPreviewModal(false)} className="p-2 hover:bg-white/50 rounded-full cursor-pointer">
                                 <X className="w-5 h-5" />
@@ -919,7 +920,7 @@ const ExamStudio = () => {
             {previewContent && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-                        <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-purple-50">
+                        <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-linear-to-r from-indigo-50 to-purple-50">
                             <h3 className="font-bold text-lg text-gray-800">{previewFileName}</h3>
                             <button 
                                 onClick={() => { setPreviewContent(null); setPreviewFileName(null); }}
