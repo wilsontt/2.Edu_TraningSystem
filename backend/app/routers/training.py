@@ -26,9 +26,9 @@ router = APIRouter(prefix="/training", tags=["training"])
 
 _ADMIN_ROLE_NAMES = frozenset({"Admin", "System Admin", "系統管理", "系統管理者"})
 
-# 報到清單 PDF 表格欄位 x 座標（A4）；報到時間／未報到原因欄較窄，姓名／部門／計畫較寬
+# 報到清單 PDF 表格欄位 x 座標（A4）；部門略窄、授課計畫略寬；報到時間／未報到原因欄較窄
 _ATTENDANCE_PDF_MARGIN = 36
-_ATTENDANCE_PDF_X = [36, 66, 116, 186, 296, 386, 466]
+_ATTENDANCE_PDF_X = [36, 66, 116, 186, 276, 386, 466]
 _ATTENDANCE_PDF_FONT_SIZE = 9
 _ATTENDANCE_PDF_COL_GAP = 4
 
@@ -732,7 +732,7 @@ def print_attendance_list_pdf(
     else:
         rows = [{"kind": "absent", **u} for u in not_checked_in_users if u.get("absence_reason_code")]
 
-    from .report import register_chinese_fonts, _sanitize_filename_segment
+    from .report import register_chinese_fonts, _sanitize_filename_segment, _draw_wrapped_text
 
     chinese_font = register_chinese_fonts()
     x_positions = _ATTENDANCE_PDF_X
@@ -744,10 +744,16 @@ def print_attendance_list_pdf(
     col_widths = _attendance_pdf_col_widths(x_positions, width)
     y = height - 36
 
-    # Title
+    # 抬頭（對齊成績歷程列印：第一列固定標題＋列印時間，第二列訓練計畫名稱）
+    now_str = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y/%m/%d %H:%M")
     p.setFont(chinese_font, 16)
-    p.drawString(36, y, f"{plan.title} 教育訓練 報到清單")
-    y -= 20
+    p.drawString(36, y, "教育訓練報到清單")
+    p.setFont(chinese_font, 10)
+    p.drawString(width - 180, y, f"列印時間：{now_str}")
+    y -= 22
+    p.setFont(chinese_font, 11)
+    y = _draw_wrapped_text(p, plan.title, 36, y, width - 72, chinese_font, 11, 14)
+    y -= 6
 
     p.setFont(chinese_font, 10)
     p.drawString(

@@ -74,7 +74,8 @@ function ScoreCardContent({
                 <div className="text-base text-gray-600 mb-2 text-center">總分 / Total Score</div>
                 <div
                   className={clsx(
-                    'font-bold text-red-600 score-handwriting leading-none whitespace-nowrap px-2',
+                    'font-bold score-handwriting leading-none whitespace-nowrap px-2',
+                    detail.basic_info.is_passed ? 'text-blue-600' : 'text-red-600',
                     'max-sm:rotate-0 sm:-rotate-3',
                     String(detail.basic_info.total_score).length >= 3 ? 'text-5xl' : 'text-6xl sm:text-7xl',
                   )}

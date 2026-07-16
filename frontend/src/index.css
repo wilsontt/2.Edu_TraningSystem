@@ -104,6 +104,7 @@ body {
   
   /* 確保文字顏色在列印時正確顯示 */
   .text-red-600,
+  .text-blue-600,
   .text-green-600,
   .text-red-700,
   .text-green-700 {

@@ -161,6 +161,8 @@ function buildExamCoverHtml(detail: ScoreDetail): string {
     ? parseBackendDateTime(detail.basic_info.submit_time)?.toLocaleDateString('zh-TW') || '-'
     : '-';
   const isPassedColor = detail.basic_info.is_passed ? '#16a34a' : '#dc2626';
+  const scoreColor = detail.basic_info.is_passed ? '#2563eb' : '#dc2626';
+  const scoreColorClass = detail.basic_info.is_passed ? 'text-blue-600' : 'text-red-600';
   const resultText = detail.basic_info.is_passed ? '通過' : '未通過';
   const resultEn = detail.basic_info.is_passed ? 'PASS' : 'FAIL';
 
@@ -198,8 +200,8 @@ function buildExamCoverHtml(detail: ScoreDetail): string {
         <div class="h-full flex flex-col" style="overflow:visible;">
           <div class="flex-1 border-2 border-gray-800 px-6 py-4 flex flex-col justify-center items-center" style="overflow:visible;">
             <div class="text-base text-gray-600 mb-2 text-center">總分 / Total Score</div>
-            <div class="font-bold text-red-600 score-handwriting"
-                 style="text-shadow:2px 2px 0px rgba(0,0,0,0.1);font-family:Caveat,'Comic Sans MS','Patrick Hand',cursive;transform:rotate(-3deg);transform-origin:center center;white-space:nowrap;line-height:1;font-size:${String(detail.basic_info.total_score).length >= 3 ? '3rem' : '4.5rem'};">
+            <div class="font-bold ${scoreColorClass} score-handwriting"
+                 style="color:${scoreColor};text-shadow:2px 2px 0px rgba(0,0,0,0.1);font-family:Caveat,'Comic Sans MS','Patrick Hand',cursive;transform:rotate(-3deg);transform-origin:center center;white-space:nowrap;line-height:1;font-size:${String(detail.basic_info.total_score).length >= 3 ? '3rem' : '4.5rem'};">
               ${detail.basic_info.total_score}
             </div>
           </div>
