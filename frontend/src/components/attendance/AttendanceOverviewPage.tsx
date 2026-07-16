@@ -350,17 +350,18 @@ const AttendanceOverviewPage = () => {
               載入各計畫報到統計中…
             </div>
           )}
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
+          {/* 手機直向：寬表需 overflow-x-auto，勿用 overflow-hidden */}
+          <div className="border border-gray-200 rounded-xl overflow-x-auto">
+            <table className="w-full min-w-[40rem] text-sm">
               <thead className="bg-gray-100">
                 <tr>
-                  <th className="px-4 py-3 text-left font-bold text-gray-700">訓練計畫</th>
-                  <th className="px-4 py-3 text-left font-bold text-gray-700">日期</th>
-                  <th className="px-4 py-3 text-right font-bold text-gray-700">應到</th>
-                  <th className="px-4 py-3 text-right font-bold text-gray-700">實到</th>
-                  <th className="px-4 py-3 text-right font-bold text-gray-700">未到</th>
-                  <th className="px-4 py-3 text-right font-bold text-gray-700">出席率</th>
-                  <th className="px-4 py-3 text-center font-bold text-gray-700">操作</th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-bold text-gray-700 whitespace-nowrap">訓練計畫</th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-bold text-gray-700 whitespace-nowrap">日期</th>
+                  <th className="px-3 sm:px-4 py-3 text-right font-bold text-gray-700 whitespace-nowrap">應到</th>
+                  <th className="px-3 sm:px-4 py-3 text-right font-bold text-gray-700 whitespace-nowrap">實到</th>
+                  <th className="px-3 sm:px-4 py-3 text-right font-bold text-gray-700 whitespace-nowrap">未到</th>
+                  <th className="px-3 sm:px-4 py-3 text-right font-bold text-gray-700 whitespace-nowrap">出席率</th>
+                  <th className="px-3 sm:px-4 py-3 text-center font-bold text-gray-700 whitespace-nowrap">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -371,21 +372,21 @@ const AttendanceOverviewPage = () => {
                     : 0;
                   return (
                     <tr key={plan.id} className="even:bg-gray-100 hover:bg-indigo-50/30 transition-colors">
-                      <td className="px-4 py-3 font-bold text-gray-900">{plan.title}</td>
-                      <td className="px-4 py-3 text-gray-600">{plan.training_date}</td>
-                      <td className="px-4 py-3 text-right font-mono">{stats ? stats.expected_count : '-'}</td>
-                      <td className="px-4 py-3 text-right font-mono text-green-600">{stats ? stats.actual_count : '-'}</td>
-                      <td className="px-4 py-3 text-right font-mono text-orange-600">{stats ? absent : '-'}</td>
-                      <td className="px-4 py-3 text-right font-bold text-indigo-600">
+                      <td className="px-3 sm:px-4 py-3 font-bold text-gray-900 whitespace-nowrap">{plan.title}</td>
+                      <td className="px-3 sm:px-4 py-3 text-gray-600 whitespace-nowrap">{plan.training_date}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right font-mono whitespace-nowrap">{stats ? stats.expected_count : '-'}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right font-mono text-green-600 whitespace-nowrap">{stats ? stats.actual_count : '-'}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right font-mono text-orange-600 whitespace-nowrap">{stats ? absent : '-'}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right font-bold text-indigo-600 whitespace-nowrap">
                         {stats ? `${stats.attendance_rate.toFixed(1)}%` : '-'}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 sm:px-4 py-3 text-center whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => openAttendanceModal(plan.id)}
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                          className="px-3 py-1.5 min-h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
                         >
-                          <BarChart3 className="w-3.5 h-3.5" />
+                          <BarChart3 className="w-3.5 h-3.5 shrink-0" />
                           報到統計
                         </button>
                       </td>
@@ -402,25 +403,25 @@ const AttendanceOverviewPage = () => {
       {modalPlanId && modalPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-linear-to-r from-indigo-50 to-purple-50">
-              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-indigo-600" />
-                報到統計 - {modalPlan.title}
+            <div className="p-4 border-b border-indigo-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-linear-to-r from-indigo-50 to-purple-50">
+              <h3 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-2 min-w-0">
+                <BarChart3 className="w-5 h-5 text-indigo-600 shrink-0" />
+                <span className="truncate">報到統計 - {modalPlan.title}</span>
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={handlePrintCurrentList}
-                  className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 cursor-pointer"
+                  className="px-3 py-1.5 min-h-11 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 cursor-pointer"
                 >
                   列印目前清單
                 </button>
-                <button type="button" onClick={closeModal} className="p-2 hover:bg-white/50 rounded-xl cursor-pointer">
+                <button type="button" onClick={closeModal} className="p-2 min-h-11 min-w-11 inline-flex items-center justify-center hover:bg-white/50 rounded-xl cursor-pointer" aria-label="關閉">
                   <X className="w-5 h-5 text-gray-400" />
                 </button>
               </div>
             </div>
-            <div className="p-6 overflow-y-auto flex-1">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
               {!modalStats ? (
                 <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>
               ) : (
@@ -494,15 +495,16 @@ const AttendanceOverviewPage = () => {
                           className="w-full pl-9 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200"
                         />
                       </div>
-                      <div className="border border-gray-200 rounded-xl overflow-hidden">
-                        <table className="w-full text-sm">
+                      {/* 手機直向：寬表需 overflow-x-auto，勿用 overflow-hidden */}
+                      <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                        <table className="w-full min-w-[36rem] text-sm">
                           <thead className="bg-gray-50">
                             <tr>
-                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">ITEM</th>
-                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">員工編號</th>
-                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
-                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">部門</th>
-                              <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">
+                              <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">ITEM</th>
+                              <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">員工編號</th>
+                              <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">姓名</th>
+                              <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">部門</th>
+                              <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">
                                 {selectedAttendanceFilter === 'actual'
                                   ? '報到時間'
                                   : selectedAttendanceFilter === 'expected'
@@ -510,14 +512,14 @@ const AttendanceOverviewPage = () => {
                                     : '未到原因'}
                               </th>
                               {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && (
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">操作</th>
+                                <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">操作</th>
                               )}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {filteredAttendanceList.length === 0 ? (
                               <tr>
-                                <td colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 6 : 5} className="px-4 py-4 text-center text-gray-400 text-xs">
+                                <td colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 6 : 5} className="px-3 sm:px-4 py-4 text-center text-gray-400 text-xs">
                                   {currentAttendanceList.length === 0 ? '查無資料' : '查無符合條件的人員'}
                                 </td>
                               </tr>
@@ -526,11 +528,11 @@ const AttendanceOverviewPage = () => {
                                 const displayIndex = listStartIndex + idx + 1;
                                 return (
                                   <tr key={`${user.emp_id}-${displayIndex}`} className="even:bg-gray-100">
-                                    <td className="px-4 py-2 font-mono text-xs">{displayIndex}</td>
-                                    <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
-                                    <td className="px-4 py-2 font-bold">{user.name}</td>
-                                    <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
-                                    <td className="px-4 py-2 text-gray-500 text-xs">
+                                    <td className="px-3 sm:px-4 py-2 font-mono text-xs whitespace-nowrap">{displayIndex}</td>
+                                    <td className="px-3 sm:px-4 py-2 font-mono text-xs whitespace-nowrap">{user.emp_id}</td>
+                                    <td className="px-3 sm:px-4 py-2 font-bold whitespace-nowrap">{user.name}</td>
+                                    <td className="px-3 sm:px-4 py-2 text-gray-600 whitespace-nowrap">{user.dept_name}</td>
+                                    <td className="px-3 sm:px-4 py-2 text-gray-500 text-xs whitespace-nowrap">
                                       {user.kind === 'actual' && 'checkin_time' in user && user.checkin_time
                                         ? parseBackendDateTime(user.checkin_time)?.toLocaleString('zh-TW', { hour12: false })
                                         : ('absence_reason_code' in user && user.absence_reason_code
@@ -538,7 +540,7 @@ const AttendanceOverviewPage = () => {
                                             : '-')}
                                     </td>
                                     {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && user.kind !== 'actual' && (
-                                      <td className="px-4 py-2">
+                                      <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
                                         <button
                                           type="button"
                                           onClick={() => setAbsenceReasonEdit({
@@ -547,7 +549,7 @@ const AttendanceOverviewPage = () => {
                                             reasonCode: 'absence_reason_code' in user ? (user.absence_reason_code || '') : '',
                                             reasonText: 'absence_reason_text' in user ? (user.absence_reason_text || '') : '',
                                           })}
-                                          className="px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
+                                          className="px-2 py-1.5 min-h-11 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
                                         >
                                           {'absence_reason_code' in user && user.absence_reason_code ? '編輯原因' : '填寫原因'}
                                         </button>

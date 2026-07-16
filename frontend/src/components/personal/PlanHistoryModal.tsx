@@ -152,46 +152,48 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
         <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           {/* Header */}
-          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold text-gray-900">考試歷程記錄</h3>
-              {detail && <div className="text-sm text-gray-500 mt-1">{detail.basic_info.plan_title}</div>}
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900">考試歷程記錄</h3>
+              {detail && <div className="text-sm text-gray-500 mt-1 truncate">{detail.basic_info.plan_title}</div>}
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-gray-400 hover:text-gray-600 transition-colors shrink-0 min-h-11 min-w-11 inline-flex items-center justify-center"
+              aria-label="關閉"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
           {/* Content */}
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {loading ? (
               <div className="py-8 flex justify-center text-gray-500">載入中...</div>
             ) : !detail ? (
               <div className="py-8 text-center text-gray-500">無法載入資料</div>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-gray-200">
+              <div className="overflow-x-auto rounded-lg border border-gray-200 -mx-1">
+                {/* 手機直向：寬表需 overflow-x-auto，勿用 overflow-hidden（會裁切且無橫向捲動） */}
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         次數
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         考試時間
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         分數
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         狀態
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         授權者
                       </th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         操作
                       </th>
                     </tr>
@@ -203,19 +205,19 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                           key={idx}
                           className={clsx(idx % 2 === 1 ? 'bg-gray-50' : 'bg-white', 'hover:bg-gray-100/80')}
                         >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             第 {idx + 1} 次
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {h.submit_time ? parseBackendDateTime(h.submit_time)?.toLocaleString('zh-TW', { hour12: false }) : '-'}
                           </td>
                           <td className={clsx(
-                            "px-6 py-4 whitespace-nowrap text-sm font-bold",
+                            "px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-bold",
                             h.is_passed ? "text-green-600" : "text-red-600"
                           )}>
                             {h.total_score}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">
                             {h.is_passed ? (
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                 <CheckCircle className="w-3 h-3 mr-1" /> 通過
@@ -226,12 +228,12 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                               </span>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                             {h.retake_authorization
                               ? `${h.retake_authorization.authorized_by_name}${h.retake_authorization.authorized_by ? ` (${h.retake_authorization.authorized_by})` : ''}`
                               : '—'}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <button
                               type="button"
                               onClick={() => {
@@ -243,9 +245,9 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                                   setSelectedHistoryId(null);
                                 }
                               }}
-                              className="text-blue-600 hover:text-blue-900 flex items-center justify-end gap-1 ml-auto"
+                              className="text-blue-600 hover:text-blue-900 inline-flex items-center justify-end gap-1 ml-auto min-h-11"
                             >
-                              <Eye className="w-4 h-4" />
+                              <Eye className="w-4 h-4 shrink-0" />
                               查看詳情
                             </button>
                           </td>
@@ -253,7 +255,7 @@ export default function PlanHistoryModal({ recordId, isOpen, onClose, targetEmpI
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
+                        <td colSpan={6} className="px-3 sm:px-6 py-4 text-center text-sm text-gray-500">
                           無歷史紀錄
                         </td>
                       </tr>

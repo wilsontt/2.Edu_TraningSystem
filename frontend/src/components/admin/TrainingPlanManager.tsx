@@ -1676,29 +1676,30 @@ const TrainingPlanManager = () => {
       {isAttendanceModalOpen && selectedPlanId && attendanceStats[selectedPlanId] && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-indigo-100 flex items-center justify-between bg-linear-to-r from-indigo-50 to-purple-50">
-              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-indigo-600" />
-                報到統計 - {plans.find(p => p.id === selectedPlanId)?.title}
+            <div className="p-4 sm:p-6 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-linear-to-r from-indigo-50 to-purple-50">
+              <h3 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-2 min-w-0">
+                <BarChart3 className="w-5 h-5 text-indigo-600 shrink-0" />
+                <span className="truncate">報到統計 - {plans.find(p => p.id === selectedPlanId)?.title}</span>
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => { void handlePrintCurrentList(); }}
-                  className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 cursor-pointer"
+                  className="px-3 py-1.5 min-h-11 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 cursor-pointer"
                 >
                   列印目前清單
                 </button>
                 <button 
                   onClick={closeAttendanceModal} 
-                  className="p-2 hover:bg-white/50 rounded-xl transition-all duration-200 cursor-pointer"
+                  className="p-2 min-h-11 min-w-11 inline-flex items-center justify-center hover:bg-white/50 rounded-xl transition-all duration-200 cursor-pointer"
+                  aria-label="關閉"
                 >
                   <X className="w-5 h-5 text-gray-400" />
                 </button>
               </div>
             </div>
             
-            <div className="p-6 overflow-y-auto space-y-6">
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-6">
               {(() => {
                 const stats = attendanceStats[selectedPlanId];
                 const modalPlan = plans.find(p => p.id === selectedPlanId) ?? null;
@@ -1787,19 +1788,20 @@ const TrainingPlanManager = () => {
                           />
                         </div>
 
-                        <div className="border border-gray-200 rounded-xl overflow-hidden">
-                          <table className="w-full text-sm">
+                        {/* 手機直向：寬表需 overflow-x-auto，勿用 overflow-hidden */}
+                        <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                          <table className="w-full min-w-[36rem] text-sm">
                             <thead className="bg-gray-50">
                               <tr>
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">ITEM</th>
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">員工編號</th>
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">部門</th>
-                                <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">
+                                <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">ITEM</th>
+                                <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">員工編號</th>
+                                <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">姓名</th>
+                                <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">部門</th>
+                                <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">
                                   {selectedAttendanceFilter === 'actual' ? '報到時間' : '未到原因'}
                                 </th>
                                 {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && (
-                                  <th className="px-4 py-2 text-left text-xs font-bold text-gray-600">操作</th>
+                                  <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">操作</th>
                                 )}
                               </tr>
                             </thead>
@@ -1809,7 +1811,7 @@ const TrainingPlanManager = () => {
                                 <tr>
                                   <td
                                     colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 6 : 5}
-                                    className="px-4 py-4 text-center text-gray-400 text-xs"
+                                    className="px-3 sm:px-4 py-4 text-center text-gray-400 text-xs"
                                   >
                                     {currentAttendanceList.length === 0 ? '查無資料' : '查無符合條件的人員'}
                                   </td>
@@ -1819,11 +1821,11 @@ const TrainingPlanManager = () => {
                                   const displayIndex = attendanceListStartIndex + idx + 1;
                                   return (
                                   <tr key={`${user.emp_id}-${displayIndex}`} className="even:bg-gray-100 hover:bg-gray-50">
-                                    <td className="px-4 py-2 font-mono text-xs">{displayIndex}</td>
-                                    <td className="px-4 py-2 font-mono text-xs">{user.emp_id}</td>
-                                    <td className="px-4 py-2 font-bold">{user.name}</td>
-                                    <td className="px-4 py-2 text-gray-600">{user.dept_name}</td>
-                                    <td className="px-4 py-2 text-gray-500 text-xs">
+                                    <td className="px-3 sm:px-4 py-2 font-mono text-xs whitespace-nowrap">{displayIndex}</td>
+                                    <td className="px-3 sm:px-4 py-2 font-mono text-xs whitespace-nowrap">{user.emp_id}</td>
+                                    <td className="px-3 sm:px-4 py-2 font-bold whitespace-nowrap">{user.name}</td>
+                                    <td className="px-3 sm:px-4 py-2 text-gray-600 whitespace-nowrap">{user.dept_name}</td>
+                                    <td className="px-3 sm:px-4 py-2 text-gray-500 text-xs whitespace-nowrap">
                                       {user.kind === 'actual' ? (
                                         parseBackendDateTime(user.checkin_time)?.toLocaleString('zh-TW', { hour12: false })
                                       ) : user.absence_reason_code ? (
@@ -1837,7 +1839,7 @@ const TrainingPlanManager = () => {
                                     </td>
 
                                     {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && user.kind !== 'actual' && (
-                                      <td className="px-4 py-2">
+                                      <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
                                         <button
                                           type="button"
                                           onClick={() =>
@@ -1848,7 +1850,7 @@ const TrainingPlanManager = () => {
                                               reasonText: user.absence_reason_text || '',
                                             })
                                           }
-                                          className="px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
+                                          className="px-2 py-1.5 min-h-11 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
                                         >
                                           {user.absence_reason_code ? '編輯原因' : '填寫原因'}
                                         </button>
