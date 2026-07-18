@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2, Clock, ArrowLeft } from 'lucide-react';
 import api from '../../api';
 import { parseBackendDateTime } from '../../utils/date';
+
+type CheckInResult = { checkin_time?: string; plan_title?: string };
+
+/** 模組級 Promise：Strict Mode 雙掛載共用同一請求，避免雙寫與第二掛載空手返回。 */
+const checkinPromises = new Map<string, Promise<CheckInResult>>();
 
 const CheckInPage = () => {
   const navigate = useNavigate();
@@ -16,8 +21,65 @@ const CheckInPage = () => {
     checkin_time?: string;
   } | null>(null);
   const [planTitle, setPlanTitle] = useState<string>('');
+  const autoStartedRef = useRef(false);
+
+  const handleCheckIn = useCallback(async (): Promise<boolean> => {
+    if (!planId) return false;
+
+    const run = async (): Promise<CheckInResult> => {
+      const res = await api.post(`/exam/plan/${planId}/attendance/checkin`);
+      return {
+        checkin_time: res.data.checkin_time || new Date().toISOString(),
+        plan_title: res.data.plan_title,
+      };
+    };
+
+    let promise = checkinPromises.get(planId);
+    if (!promise) {
+      promise = run().finally(() => {
+        checkinPromises.delete(planId);
+      });
+      checkinPromises.set(planId, promise);
+    }
+
+    try {
+      setCheckingIn(true);
+      setError(null);
+      const result = await promise;
+      if (result.plan_title) setPlanTitle(result.plan_title);
+      setAttendanceStatus({
+        is_checked_in: true,
+        checkin_time: result.checkin_time,
+      });
+      return true;
+    } catch (err: unknown) {
+      console.error('Failed to check in', err);
+      const apiErr = err as { response?: { data?: { detail?: string } } };
+      const detail = apiErr.response?.data?.detail || '';
+      if (typeof detail === 'string' && detail.includes('已經報到')) {
+        try {
+          const statusRes = await api.get(`/exam/plan/${planId}/attendance/status`);
+          if (statusRes.data.plan_title) setPlanTitle(statusRes.data.plan_title);
+          setAttendanceStatus({
+            is_checked_in: true,
+            checkin_time: statusRes.data.checkin_time,
+          });
+          return true;
+        } catch {
+          /* fall through */
+        }
+      }
+      setError((typeof detail === 'string' && detail) || '報到失敗，請稍後再試');
+      return false;
+    } finally {
+      setCheckingIn(false);
+    }
+  }, [planId]);
 
   useEffect(() => {
+    let cancelled = false;
+    autoStartedRef.current = false;
+
     const init = async () => {
       if (!planId) {
         setError('缺少訓練計畫 ID');
@@ -28,59 +90,38 @@ const CheckInPage = () => {
       try {
         setLoading(true);
         setError(null);
-        // 檢查報到狀態
         const statusRes = await api.get(`/exam/plan/${planId}/attendance/status`);
+        if (cancelled) return;
+
+        const alreadyCheckedIn = !!statusRes.data.is_checked_in;
+        if (statusRes.data.plan_title) {
+          setPlanTitle(statusRes.data.plan_title);
+        }
         setAttendanceStatus({
-          is_checked_in: statusRes.data.is_checked_in,
-          checkin_time: statusRes.data.checkin_time
+          is_checked_in: alreadyCheckedIn,
+          checkin_time: statusRes.data.checkin_time,
         });
 
-        // 獲取計畫資訊（可選）
-        try {
-          const plansRes = await api.get('/training/plans');
-          const plan = plansRes.data.find((p: { id: number; title?: string }) => p.id === parseInt(planId));
-          if (plan) {
-            setPlanTitle(plan.title);
-          }
-        } catch {
-          // 如果無法獲取計畫資訊，忽略
+        if (!alreadyCheckedIn && !autoStartedRef.current) {
+          autoStartedRef.current = true;
+          await handleCheckIn();
         }
       } catch (err: unknown) {
+        if (cancelled) return;
         console.error('Failed to load attendance status', err);
         const apiErr = err as { response?: { data?: { detail?: string } } };
         setError(apiErr.response?.data?.detail || '無法載入報到狀態');
-        setAttendanceStatus({
-          is_checked_in: false
-        });
+        setAttendanceStatus({ is_checked_in: false });
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    init();
-  }, [planId]);
-
-  const handleCheckIn = async () => {
-    if (!planId) return;
-
-    try {
-      setCheckingIn(true);
-      setError(null);
-      const res = await api.post(`/exam/plan/${planId}/attendance/checkin`);
-      
-      setAttendanceStatus({
-        is_checked_in: true,
-        checkin_time: res.data.checkin_time || new Date().toISOString()
-      });
-      navigate(`/exam/run/${planId}`);
-    } catch (err: unknown) {
-      console.error('Failed to check in', err);
-      const apiErr = err as { response?: { data?: { detail?: string } } };
-      setError(apiErr.response?.data?.detail || '報到失敗，請稍後再試');
-    } finally {
-      setCheckingIn(false);
-    }
-  };
+    void init();
+    return () => {
+      cancelled = true;
+    };
+  }, [planId, handleCheckIn]);
 
   if (loading) {
     return (
@@ -113,9 +154,9 @@ const CheckInPage = () => {
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">報到成功</h2>
-          {planTitle && (
-            <p className="text-gray-600 mb-2 font-bold">{planTitle}</p>
-          )}
+          <p className="text-gray-800 mb-2 font-bold text-lg">
+            {planTitle || '訓練計畫'}
+          </p>
           <p className="text-gray-500 mb-2">您已成功報到</p>
           {checkinTime && (
             <p className="text-sm text-gray-400 mb-6">報到時間：{checkinTime}</p>
@@ -165,7 +206,7 @@ const CheckInPage = () => {
 
         <div className="space-y-4">
           <button
-            onClick={handleCheckIn}
+            onClick={() => void handleCheckIn()}
             disabled={checkingIn || !planId}
             className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-xl shadow-blue-200 hover:shadow-blue-300 transition-all duration-300 flex items-center justify-center gap-3 disabled:bg-blue-300 disabled:shadow-none"
           >

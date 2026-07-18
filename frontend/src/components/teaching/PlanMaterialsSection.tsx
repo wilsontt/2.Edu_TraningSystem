@@ -9,9 +9,11 @@ import { useNasTransfer } from '../../hooks/useNasTransfer';
 import MaterialSetUploadPanel from './MaterialSetUploadPanel';
 import MaterialSetEditPanel from './MaterialSetEditPanel';
 import {
-    fetchMaterialTypes, fetchPlanOptions, fetchSets, fetchSetDetail, deleteSet, downloadFile,
+    fetchMaterialTypes, fetchPlanOptions, fetchDepartments, fetchSets, fetchSetDetail, deleteSet, downloadFile,
 } from '../../api/teachingMaterials';
-import type { MaterialType, MaterialSet, PlanOption } from '../../types/materials';
+import type { MaterialType, MaterialSet, PlanOption, DepartmentOption } from '../../types/materials';
+import type { User } from '../../types';
+import { canDeleteOwnedResource } from '../../utils/authGuards';
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
@@ -29,17 +31,21 @@ const tagColorClass = (tag: string): string =>
 
 interface PlanMaterialsSectionProps {
     planId: number;
+    /** 該訓練計畫目前的開課單位；新增教材套組時自動帶入並鎖定唯讀（owner 沿用計畫）。 */
+    deptId: number | null;
+    user: User;
     archived?: boolean;
 }
 
 /** 訓練計畫編輯頁的教材區（Wave 2）：套組列表（該計畫綁定）、建立/編輯套組（鎖定本計畫）。 */
-const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSectionProps) => {
+const PlanMaterialsSection = ({ planId, deptId, user, archived = false }: PlanMaterialsSectionProps) => {
     const { allowedExts } = useMaterialFileFormats();
     const materialAccept = buildMaterialAccept(allowedExts);
     const nas = useNasTransfer();
 
     const [types, setTypes] = useState<MaterialType[]>([]);
     const [planOptions, setPlanOptions] = useState<PlanOption[]>([]);
+    const [departments, setDepartments] = useState<DepartmentOption[]>([]);
     const [sets, setSets] = useState<MaterialSet[]>([]);
     const [uploadOpen, setUploadOpen] = useState(false);
     const [editingSetId, setEditingSetId] = useState<number | null>(null);
@@ -59,6 +65,7 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
 
     useEffect(() => { fetchMaterialTypes().then(setTypes).catch(() => {}); }, []);
     useEffect(() => { fetchPlanOptions().then(setPlanOptions).catch(() => {}); }, []);
+    useEffect(() => { fetchDepartments().then(setDepartments).catch(() => {}); }, []);
     useEffect(() => { fetchSetsForPlan(); }, [fetchSetsForPlan]);
 
     useEffect(() => {
@@ -105,6 +112,7 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
                 uploadOpen ? (
                     <MaterialSetUploadPanel
                         types={types} allowedExts={allowedExts} materialAccept={materialAccept}
+                        departments={departments} lockedDeptId={deptId}
                         planOptions={planOptions} lockedPlanId={planId}
                         planLayout="stack"
                         onClose={() => setUploadOpen(false)}
@@ -131,6 +139,7 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
             {editingSet && !uploadOpen && (
                 <MaterialSetEditPanel
                     set={editingSet} types={types} allowedExts={allowedExts} materialAccept={materialAccept}
+                    departments={departments} user={user}
                     planOptions={planOptions} lockedPlanId={planId} planLayout="stack"
                     onUpdated={refreshAfterEdit} onClose={() => setEditingSetId(null)}
                     requireNas={nas.requireNas} beginTransfer={nas.beginTransfer} onUploadProgress={nas.onProgress}
@@ -176,7 +185,13 @@ const PlanMaterialsSection = ({ planId, archived = false }: PlanMaterialsSection
                                         </button>
                                     )}
                                     {!archived && (
-                                        <button type="button" onClick={() => handleDelete(s)} className="p-1 text-red-500 hover:bg-red-50 rounded cursor-pointer" title="停用">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDelete(s)}
+                                            disabled={!canDeleteOwnedResource(user, s.dept_id)}
+                                            className="p-1 text-red-500 hover:bg-red-50 rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                            title={canDeleteOwnedResource(user, s.dept_id) ? '停用' : '僅開課單位可刪除'}
+                                        >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     )}

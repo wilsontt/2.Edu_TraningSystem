@@ -16,6 +16,8 @@ import BulkAbsenceReasonModal from '../attendance/BulkAbsenceReasonModal';
 import PlanMaterialsSection from '../teaching/PlanMaterialsSection';
 import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
+import type { User } from '../../types';
+import { canDeleteOwnedResource } from '../../utils/authGuards';
 
 // ----------------------------------------------------------------
 // 型別定義 (Type Definitions)
@@ -128,7 +130,11 @@ const ABSENCE_REASON_OPTIONS: Array<{ code: string; label: string }> = [
 /**
  * 主要管理元件實作 (Main Management Component)
  */
-const TrainingPlanManager = () => {
+interface TrainingPlanManagerProps {
+  user: User;
+}
+
+const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
   // ----------------------------------------------------------------
   // 狀態管理 (State Management)
   // ----------------------------------------------------------------
@@ -1125,7 +1131,9 @@ const TrainingPlanManager = () => {
                                     setOpenActionMenu(null);
                                     setDeleteTarget(plan);
                                   }}
-                                  className="w-full px-4 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                  disabled={!canDeleteOwnedResource(user, plan.dept_id)}
+                                  className="w-full px-4 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                  title={canDeleteOwnedResource(user, plan.dept_id) ? undefined : '僅開課單位可刪除'}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                   刪除計畫
@@ -1537,7 +1545,12 @@ const TrainingPlanManager = () => {
               {isEditing && editId && (
                 <div className="xl:sticky xl:top-2">
                   <div className="bg-indigo-50/40 border-2 border-indigo-100 rounded-2xl p-4">
-                    <PlanMaterialsSection planId={editId} archived={activeTab === 'archived'} />
+                    <PlanMaterialsSection
+                      planId={editId}
+                      deptId={formData.dept_id ? Number(formData.dept_id) : null}
+                      user={user}
+                      archived={activeTab === 'archived'}
+                    />
                   </div>
                 </div>
               )}

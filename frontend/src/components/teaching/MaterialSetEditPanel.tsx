@@ -5,7 +5,9 @@ import { updateSet, updateSetPlans, removeSetFile, addSetFiles } from '../../api
 import { mergeSelectedFiles } from './transfer';
 import SelectedFilesList from './SelectedFilesList';
 import PlanBindingChecklist from './PlanBindingChecklist';
-import type { MaterialType, MaterialSet, PlanOption } from '../../types/materials';
+import type { MaterialType, MaterialSet, PlanOption, DepartmentOption } from '../../types/materials';
+import type { User } from '../../types';
+import { canDeleteOwnedResource } from '../../utils/authGuards';
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
@@ -14,6 +16,9 @@ interface MaterialSetEditPanelProps {
     types: MaterialType[];
     allowedExts: string[];
     materialAccept: string;
+    /** 開課單位（owner）下拉選項；僅開課單位／超管可變更此套組的開課單位。 */
+    departments: DepartmentOption[];
+    user: User;
     planOptions?: PlanOption[];
     lockedPlanId?: number;
     /** 綁定清單版面；側欄建議 stack。 */
@@ -35,12 +40,14 @@ type UploadOutcome = 'ok' | 'conflict' | 'fail';
 /** 編輯套組面板：中繼資料、計畫綁定、既有檔案移除、新增檔案（同名覆蓋 Yes/No，教材 PLAN §5.12.3）。
  * 「儲存」會一併寫入中繼資料與已選未上傳檔案，不可在尚有選檔時假裝只存標題成功。 */
 const MaterialSetEditPanel = ({
-    set, types, allowedExts, materialAccept, planOptions = [], lockedPlanId, planLayout = 'stack',
+    set, types, allowedExts, materialAccept, departments, user, planOptions = [], lockedPlanId, planLayout = 'stack',
     onUpdated, onClose, requireNas, beginTransfer, onUploadProgress,
     endTransferSuccess, endTransferError, closeTransfer, isCancel,
 }: MaterialSetEditPanelProps) => {
+    const canEditDept = canDeleteOwnedResource(user, set.dept_id);
     const [title, setTitle] = useState(set.title);
     const [typeId, setTypeId] = useState(String(set.material_type_id));
+    const [deptId, setDeptId] = useState(set.dept_id != null ? String(set.dept_id) : '');
     const [description, setDescription] = useState(set.description ?? '');
     const [tags, setTags] = useState(() => {
         try { return ((JSON.parse(set.tags ?? '[]')) as string[]).join(', '); } catch { return ''; }
@@ -65,6 +72,7 @@ const MaterialSetEditPanel = ({
             title, material_type_id: Number(typeId),
             description: description || null,
             tags: tagsArray.length ? tagsArray : null,
+            ...(canEditDept && deptId ? { dept_id: Number(deptId) } : {}),
         });
         const withPlans = await updateSetPlans(set.id, planIds);
         onUpdated({ ...updated, plan_ids: withPlans.plan_ids, plan_titles: withPlans.plan_titles });
@@ -245,6 +253,16 @@ const MaterialSetEditPanel = ({
                     className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm font-bold focus:outline-none focus:border-amber-500">
                     <option value="">選擇教材類型…</option>
                     {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <select
+                    value={deptId}
+                    onChange={e => setDeptId(e.target.value)}
+                    disabled={!canEditDept}
+                    className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm font-bold focus:outline-none focus:border-amber-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                    title={canEditDept ? undefined : '僅開課單位或超管可變更開課單位'}
+                >
+                    <option value="">選擇開課單位…</option>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
                 <input type="text" placeholder="標題" value={title} onChange={e => setTitle(e.target.value)}
                     className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500" />

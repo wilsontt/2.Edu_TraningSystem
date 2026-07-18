@@ -1,7 +1,7 @@
 """確認 Wave1 舊端點已移除，且教材類型/格式刪除檢查涵蓋 Wave2 套組。"""
 import io
 
-from app.models import MaterialType, MaterialFileFormat
+from app.models import MaterialType, MaterialFileFormat, Department
 
 
 def test_wave1_endpoints_are_gone(client):
@@ -23,10 +23,11 @@ def test_material_type_delete_blocked_when_used_by_wave2_set(client, in_memory_d
     in_memory_db.add(mt)
     in_memory_db.add(MaterialFileFormat(ext="pdf", label="PDF", is_active=True))
     in_memory_db.commit()
+    dept = in_memory_db.query(Department).filter(Department.name == "IT部").first()
 
     resp = client.post(
         "/api/admin/teaching-materials/sets",
-        data={"title": "套組", "material_type_id": str(mt.id)},
+        data={"title": "套組", "material_type_id": str(mt.id), "dept_id": str(dept.id)},
         files=[("files", ("a.pdf", io.BytesIO(b"x"), "application/pdf"))],
     )
     assert resp.status_code == 200, resp.text

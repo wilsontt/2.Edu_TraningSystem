@@ -10,10 +10,12 @@ import { useNasTransfer } from '../../hooks/useNasTransfer';
 import MaterialSetUploadPanel from './MaterialSetUploadPanel';
 import MaterialSetEditPanel from './MaterialSetEditPanel';
 import {
-    fetchMaterialTypes, fetchPlanOptions, fetchSets, fetchFiles, fetchSetDetail,
-    deleteSet, downloadFile, batchDownloadFiles,
+    fetchMaterialTypes, fetchPlanOptions, fetchDepartments, fetchSets, fetchFiles, fetchSetDetail,
+    deleteSet, removeSetFile, downloadFile, batchDownloadFiles,
 } from '../../api/teachingMaterials';
-import type { MaterialType, MaterialSet, MaterialFileListItem, PlanOption } from '../../types/materials';
+import type { MaterialType, MaterialSet, MaterialFileListItem, PlanOption, DepartmentOption } from '../../types/materials';
+import type { User } from '../../types';
+import { canDeleteOwnedResource } from '../../utils/authGuards';
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
@@ -33,10 +35,11 @@ type ViewMode = 'set' | 'file';
 type SelectedEntry = { original_filename: string; set_title: string };
 
 interface TeachingMaterialLibraryProps {
+    user: User;
     onBack?: () => void;
 }
 
-const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) => {
+const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps) => {
     const { allowedExts } = useMaterialFileFormats();
     const materialAccept = buildMaterialAccept(allowedExts);
     const nas = useNasTransfer();
@@ -49,10 +52,12 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
     const [size, setSize] = useState(20);
     const [types, setTypes] = useState<MaterialType[]>([]);
     const [planOptions, setPlanOptions] = useState<PlanOption[]>([]);
+    const [departments, setDepartments] = useState<DepartmentOption[]>([]);
 
     const [keyword, setKeyword] = useState('');
     const [materialTypeId, setMaterialTypeId] = useState('');
     const [fileFormat, setFileFormat] = useState('');
+    const [deptFilter, setDeptFilter] = useState('');
     const [loading, setLoading] = useState(false);
 
     const [selected, setSelected] = useState<Map<number, SelectedEntry>>(new Map());
@@ -66,7 +71,12 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
     const fetchList = useCallback(async () => {
         setLoading(true);
         try {
-            const params = { page, size, keyword: keyword || undefined, material_type_id: materialTypeId || undefined, file_format: fileFormat || undefined };
+            const params = {
+                page, size, keyword: keyword || undefined,
+                material_type_id: materialTypeId || undefined,
+                file_format: fileFormat || undefined,
+                dept_id: deptFilter || undefined,
+            };
             if (view === 'set') {
                 const res = await fetchSets(params);
                 setSetItems(res.items);
@@ -81,10 +91,11 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
         } finally {
             setLoading(false);
         }
-    }, [view, page, size, keyword, materialTypeId, fileFormat]);
+    }, [view, page, size, keyword, materialTypeId, fileFormat, deptFilter]);
 
     useEffect(() => { fetchMaterialTypes().then(setTypes).catch(() => {}); }, []);
     useEffect(() => { fetchPlanOptions().then(setPlanOptions).catch(() => {}); }, []);
+    useEffect(() => { fetchDepartments().then(setDepartments).catch(() => {}); }, []);
     useEffect(() => { fetchList(); }, [fetchList]);
 
     useEffect(() => {
@@ -227,10 +238,31 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
         }
     };
 
+    const [pendingRemoveFile, setPendingRemoveFile] = useState<{ setId: number; fileId: number; filename: string } | null>(null);
+    const [removingFile, setRemovingFile] = useState(false);
+
+    const confirmRemoveFile = async () => {
+        if (!pendingRemoveFile) return;
+        setRemovingFile(true);
+        try {
+            await removeSetFile(pendingRemoveFile.setId, pendingRemoveFile.fileId);
+            setPendingRemoveFile(null);
+            fetchList();
+        } catch (err) {
+            const e2 = err as AxiosError<{ detail: string }>;
+            alert(e2.response?.data?.detail || '移除失敗');
+        } finally {
+            setRemovingFile(false);
+        }
+    };
+
     const refreshAfterEdit = () => {
         fetchList();
         if (editingSetId != null) fetchSetDetail(editingSetId).then(setEditingSet).catch(() => {});
     };
+
+    /** 編輯中（或新增面板開啟）時，鎖定所有列的編輯／刪除操作；下載/預覽不受影響。取消編輯後自動恢復。 */
+    const rowActionsLocked = editingSetId != null || uploadOpen;
 
     const setColumns: DataTableColumn<MaterialSet>[] = [
         {
@@ -292,6 +324,7 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                 : <span className="text-sm text-gray-400">通用</span>,
         },
         { key: 'file_count', header: '檔案數', render: s => <span className="text-sm text-gray-600">{s.file_count}</span> },
+        { key: 'dept', header: '開課單位', render: s => <span className="text-sm text-gray-600">{s.dept_name || '-'}</span> },
         {
             key: 'actions', header: '操作',
             render: s => (
@@ -299,17 +332,23 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                     <button
                         type="button"
                         onClick={() => {
-                            if (uploadOpen) return;
+                            if (rowActionsLocked) return;
                             setUploadOpen(false);
                             setEditingSetId(s.id);
                         }}
-                        disabled={uploadOpen}
+                        disabled={rowActionsLocked}
                         className="p-1.5 text-gray-500 hover:bg-gray-100 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                        title={uploadOpen ? '請先關閉新增面板再編輯' : '編輯'}
+                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : '編輯'}
                     >
                         <Pencil className="w-4 h-4" />
                     </button>
-                    <button type="button" onClick={() => handleDeleteSet(s)} className="p-1.5 text-red-500 hover:bg-red-50 rounded cursor-pointer" title="停用">
+                    <button
+                        type="button"
+                        onClick={() => handleDeleteSet(s)}
+                        disabled={rowActionsLocked || !canDeleteOwnedResource(user, s.dept_id)}
+                        className="p-1.5 text-red-500 hover:bg-red-50 rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : canDeleteOwnedResource(user, s.dept_id) ? '停用' : '僅開課單位可刪除'}
+                    >
                         <Trash2 className="w-4 h-4" />
                     </button>
                 </div>
@@ -368,15 +407,35 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                 : <span className="text-sm text-gray-400">通用</span>,
         },
         { key: 'size', header: '大小', render: f => <span className="text-sm text-gray-600">{fmtSize(f.file_size_bytes)}</span> },
+        { key: 'dept', header: '開課單位', render: f => <span className="text-sm text-gray-600">{f.dept_name || '-'}</span> },
         {
             key: 'actions', header: '操作',
             render: f => (
                 <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => setEditingSetId(f.set_id)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded cursor-pointer" title="編輯所屬套組">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (rowActionsLocked) return;
+                            setUploadOpen(false);
+                            setEditingSetId(f.set_id);
+                        }}
+                        disabled={rowActionsLocked}
+                        className="p-1.5 text-gray-500 hover:bg-gray-100 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : '編輯所屬套組'}
+                    >
                         <Pencil className="w-4 h-4" />
                     </button>
                     <button type="button" onClick={() => doSingleDownload(f.id, f.original_filename)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer" title="下載">
                         <Download className="w-4 h-4" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setPendingRemoveFile({ setId: f.set_id, fileId: f.id, filename: f.original_filename })}
+                        disabled={rowActionsLocked || !canDeleteOwnedResource(user, f.dept_id)}
+                        className="p-1.5 text-red-500 hover:bg-red-50 rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : canDeleteOwnedResource(user, f.dept_id) ? '刪除' : '僅開課單位可刪除'}
+                    >
+                        <Trash2 className="w-4 h-4" />
                     </button>
                 </div>
             ),
@@ -418,7 +477,8 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
 
             {uploadOpen && (
                 <MaterialSetUploadPanel
-                    types={types} allowedExts={allowedExts} materialAccept={materialAccept} planOptions={planOptions}
+                    types={types} allowedExts={allowedExts} materialAccept={materialAccept}
+                    departments={departments} planOptions={planOptions}
                     planLayout="grid"
                     onClose={() => setUploadOpen(false)}
                     onCreated={() => { setUploadOpen(false); setPage(1); fetchList(); }}
@@ -429,7 +489,8 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
 
             {editingSet && !uploadOpen && (
                 <MaterialSetEditPanel
-                    set={editingSet} types={types} allowedExts={allowedExts} materialAccept={materialAccept} planOptions={planOptions}
+                    set={editingSet} types={types} allowedExts={allowedExts} materialAccept={materialAccept}
+                    departments={departments} user={user} planOptions={planOptions}
                     planLayout="grid"
                     onUpdated={refreshAfterEdit} onClose={() => setEditingSetId(null)}
                     requireNas={nas.requireNas} beginTransfer={nas.beginTransfer} onUploadProgress={nas.onProgress}
@@ -462,6 +523,10 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                 <select value={fileFormat} onChange={e => { setFileFormat(e.target.value); setPage(1); }} className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500">
                     <option value="">全部格式</option>
                     {allowedExts.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+                <select value={deptFilter} onChange={e => { setDeptFilter(e.target.value); setPage(1); }} className="px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500">
+                    <option value="">全部開課單位</option>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
                 <button type="button" onClick={onSearch} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 cursor-pointer">搜尋</button>
             </div>
@@ -519,6 +584,39 @@ const TeachingMaterialLibrary = ({ onBack }: TeachingMaterialLibraryProps = {}) 
                         <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
                             <button type="button" onClick={() => setBatchConfirmOpen(false)} className="px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer">取消</button>
                             <button type="button" onClick={() => { setBatchConfirmOpen(false); doBatchDownload(); }} className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 cursor-pointer">下載 ZIP</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {pendingRemoveFile && (
+                <div className="fixed inset-0 z-80 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        <div className="px-5 py-4 border-b border-red-100 bg-red-50">
+                            <h3 className="font-black text-gray-900">確認移除檔案</h3>
+                        </div>
+                        <div className="px-5 py-4 text-sm text-gray-800 space-y-2">
+                            <p>確定要從套組移除下列檔案嗎？</p>
+                            <p className="font-bold text-gray-900 wrap-break-word">「{pendingRemoveFile.filename}」</p>
+                            <p className="text-gray-600">此為軟刪除：列表不再顯示，NAS 實體檔仍保留。</p>
+                        </div>
+                        <div className="px-5 py-4 border-t border-gray-100 flex flex-col gap-2">
+                            <button
+                                type="button"
+                                disabled={removingFile}
+                                onClick={() => void confirmRemoveFile()}
+                                className="px-3 py-2 text-sm rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 disabled:bg-red-300 cursor-pointer"
+                            >
+                                {removingFile ? '移除中…' : '確定移除'}
+                            </button>
+                            <button
+                                type="button"
+                                disabled={removingFile}
+                                onClick={() => setPendingRemoveFile(null)}
+                                className="px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer"
+                            >
+                                取消
+                            </button>
                         </div>
                     </div>
                 </div>

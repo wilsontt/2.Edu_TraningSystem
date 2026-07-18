@@ -3,7 +3,7 @@ import io
 from contextlib import contextmanager
 
 from app import models
-from app.models import MaterialType, MaterialFileFormat, FileTransferAuditLog
+from app.models import MaterialType, MaterialFileFormat, FileTransferAuditLog, Department
 
 
 def _seed_material_type(db):
@@ -15,6 +15,11 @@ def _seed_material_type(db):
     return mt
 
 
+def _seed_dept_id(db) -> str:
+    dept = db.query(Department).filter(Department.name == "IT部").first()
+    return str(dept.id)
+
+
 def test_create_set_with_two_files(client, in_memory_db):
     mt = _seed_material_type(in_memory_db)
 
@@ -23,6 +28,7 @@ def test_create_set_with_two_files(client, in_memory_db):
         data={
             "title": "安全教育教材",
             "material_type_id": str(mt.id),
+            "dept_id": _seed_dept_id(in_memory_db),
             "nas_session_token": "fake-token-not-used",
         },
         files=[
@@ -40,7 +46,7 @@ def test_create_set_rejects_disallowed_extension(client, in_memory_db):
 
     resp = client.post(
         "/api/admin/teaching-materials/sets",
-        data={"title": "測試", "material_type_id": str(mt.id)},
+        data={"title": "測試", "material_type_id": str(mt.id), "dept_id": _seed_dept_id(in_memory_db)},
         files=[("files", ("virus.exe", io.BytesIO(b"AAA"), "application/octet-stream"))],
     )
     assert resp.status_code == 400
@@ -83,6 +89,7 @@ def test_create_set_success_records_audit_log_in_memory(client, in_memory_db, mo
         data={
             "title": "安全教育教材（成功路徑）",
             "material_type_id": str(mt.id),
+            "dept_id": _seed_dept_id(in_memory_db),
             "nas_session_token": "fake-token",
         },
         files=[("files", ("c.pdf", io.BytesIO(b"CCC"), "application/pdf"))],
@@ -147,6 +154,7 @@ def test_create_set_second_file_failure_rolls_back_atomically(client, in_memory_
         data={
             "title": "安全教育教材（部分失敗）",
             "material_type_id": str(mt.id),
+            "dept_id": _seed_dept_id(in_memory_db),
             "nas_session_token": "fake-token",
         },
         files=[

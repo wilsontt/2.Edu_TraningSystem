@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
-import { BarChart3, Loader2, Search, X } from 'lucide-react';
+import { AxiosError } from 'axios';
+import { BarChart3, Loader2, Search, X, QrCode, Copy, Check, RefreshCw } from 'lucide-react';
 import api from '../../api';
 import BulkAbsenceReasonModal from './BulkAbsenceReasonModal';
 import Pagination from '../common/Pagination';
@@ -105,6 +106,67 @@ const AttendanceOverviewPage = () => {
   const [listSearchTerm, setListSearchTerm] = useState('');
   const [listPage, setListPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(10);
+
+  // 報到 QRcode 狀態：內嵌於「報到統計」Modal 內，可與報到狀況同時檢視
+  const [qrPanelOpen, setQrPanelOpen] = useState(false);
+  const [checkinQRCode, setCheckinQRCode] = useState<{
+    plan_id: number;
+    plan_title: string;
+    qrcode_url: string;
+    checkin_url: string;
+  } | null>(null);
+  const [generatingQRCode, setGeneratingQRCode] = useState(false);
+  const [copiedCheckinUrl, setCopiedCheckinUrl] = useState(false);
+  const [refreshingStats, setRefreshingStats] = useState(false);
+
+  /** 重新查詢目前開啟計畫的報到統計（供人員報到後手動刷新） */
+  const refreshModalStats = async () => {
+    if (!modalPlanId) return;
+    setRefreshingStats(true);
+    try {
+      const res = await api.get<AttendanceStats>(`/training/plans/${modalPlanId}/attendance/stats`);
+      setModalStats(res.data);
+      setStatsMap((prev) => ({ ...prev, [modalPlanId]: res.data }));
+    } catch {
+      alert('更新失敗，請稍後再試');
+    } finally {
+      setRefreshingStats(false);
+    }
+  };
+
+  /** 切換 QRcode 面板；首次展開且尚未產生過該計畫的 QR 時才呼叫 API */
+  const handleToggleQrPanel = async (plan: PlanSummary) => {
+    if (qrPanelOpen) {
+      setQrPanelOpen(false);
+      return;
+    }
+    setQrPanelOpen(true);
+    if (checkinQRCode && checkinQRCode.plan_id === plan.id) return;
+    setCheckinQRCode(null);
+    setCopiedCheckinUrl(false);
+    setGeneratingQRCode(true);
+    try {
+      const res = await api.post(
+        `/training/plans/${plan.id}/checkin-qrcode/generate`,
+        {},
+        {
+          headers: {
+            'X-Frontend-URL': `${window.location.origin}${import.meta.env.BASE_URL || '/'}`.replace(/\/$/, ''),
+          },
+        },
+      );
+      setCheckinQRCode(res.data);
+    } catch (err: unknown) {
+      if (err instanceof AxiosError) {
+        alert(err.response?.data?.detail || '產生報到 QRcode 失敗');
+      } else {
+        alert('產生報到 QRcode 失敗');
+      }
+      setQrPanelOpen(false);
+    } finally {
+      setGeneratingQRCode(false);
+    }
+  };
 
   const handlePrintCurrentList = async () => {
     if (!modalStats) return;
@@ -231,6 +293,8 @@ const AttendanceOverviewPage = () => {
     setSelectedAttendanceFilter('expected');
     setListSearchTerm('');
     setListPage(1);
+    setQrPanelOpen(false);
+    setCheckinQRCode(null);
   };
 
   const modalPlan = modalPlanId ? plans.find((p) => p.id === modalPlanId) : null;
@@ -408,7 +472,26 @@ const AttendanceOverviewPage = () => {
                 <BarChart3 className="w-5 h-5 text-indigo-600 shrink-0" />
                 <span className="truncate">報到統計 - {modalPlan.title}</span>
               </h3>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => { void handleToggleQrPanel(modalPlan); }}
+                  className={`px-3 py-1.5 min-h-11 text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 ${
+                    qrPanelOpen ? 'bg-indigo-700 text-white' : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50'
+                  }`}
+                >
+                  <QrCode className="w-3.5 h-3.5 shrink-0" />
+                  {qrPanelOpen ? '隱藏 QRcode' : '顯示 QRcode'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void refreshModalStats(); }}
+                  disabled={refreshingStats}
+                  className="px-3 py-1.5 min-h-11 text-xs font-bold bg-white text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 disabled:opacity-50 cursor-pointer inline-flex items-center gap-1"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${refreshingStats ? 'animate-spin' : ''}`} />
+                  更新
+                </button>
                 <button
                   type="button"
                   onClick={handlePrintCurrentList}
@@ -431,39 +514,75 @@ const AttendanceOverviewPage = () => {
                       此訓練計畫已封存，僅能檢視報到紀錄與未到名單，無法編輯未到原因。
                     </div>
                   )}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                  <div className={`flex flex-col ${qrPanelOpen ? 'lg:flex-row lg:items-stretch' : ''} gap-4 mb-6`}>
+                  {qrPanelOpen && (
+                    <div className="lg:flex-1 min-w-0 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 flex flex-col items-center justify-center gap-3">
+                      {generatingQRCode ? (
+                        <div className="flex items-center gap-2 text-gray-500 py-8">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>產生中…</span>
+                        </div>
+                      ) : checkinQRCode ? (
+                        <>
+                          <img src={checkinQRCode.qrcode_url} alt="報到 QRcode" className="w-44 h-44 shrink-0 rounded-lg bg-white p-1 border border-indigo-100" />
+                          <p className="text-xs text-gray-600 text-center max-w-md">
+                            掃描此 QRcode 或開啟連結即可報到（同一組 QR 供上課前與考試時重複使用；未登入將先導向登入頁）。人員報到後按上方「更新」重新整理統計。
+                          </p>
+                          <div className="flex items-center gap-2 text-xs w-full max-w-md">
+                            <span className="font-mono text-gray-600 bg-white px-2 py-1 rounded border border-indigo-100 flex-1 truncate">
+                              {checkinQRCode.checkin_url}
+                            </span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(checkinQRCode.checkin_url).then(() => {
+                                  setCopiedCheckinUrl(true);
+                                  setTimeout(() => setCopiedCheckinUrl(false), 2000);
+                                });
+                              }}
+                              className="p-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors duration-200 cursor-pointer shrink-0"
+                              title="複製連結"
+                            >
+                              {copiedCheckinUrl ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  )}
+                  <div className={`grid grid-cols-2 gap-2 ${qrPanelOpen ? 'lg:w-52 shrink-0 content-start' : 'sm:grid-cols-4 gap-4 flex-1'}`}>
                     <button
                       type="button"
                       onClick={() => { setSelectedAttendanceFilter('expected'); setListPage(1); }}
-                      className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'expected', 'indigo')}`}
+                      className={`${qrPanelOpen ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'expected', 'indigo')}`}
                     >
-                      <div className="text-sm font-bold text-indigo-600 mb-1">應到人數</div>
-                      <div className="text-2xl font-black text-indigo-800">{modalStats.expected_count}</div>
+                      <div className={`${qrPanelOpen ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-indigo-600`}>應到人數</div>
+                      <div className={`${qrPanelOpen ? 'text-lg' : 'text-2xl'} font-black text-indigo-800`}>{modalStats.expected_count}</div>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setSelectedAttendanceFilter('actual'); setListPage(1); }}
-                      className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'actual', 'green')}`}
+                      className={`${qrPanelOpen ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'actual', 'green')}`}
                     >
-                      <div className="text-sm font-bold text-green-600 mb-1">實到人數</div>
-                      <div className="text-2xl font-black text-green-800">{modalStats.actual_count}</div>
+                      <div className={`${qrPanelOpen ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-green-600`}>實到人數</div>
+                      <div className={`${qrPanelOpen ? 'text-lg' : 'text-2xl'} font-black text-green-800`}>{modalStats.actual_count}</div>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setSelectedAttendanceFilter('absent'); setListPage(1); }}
-                      className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'absent', 'orange')}`}
+                      className={`${qrPanelOpen ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'absent', 'orange')}`}
                     >
-                      <div className="text-sm font-bold text-orange-600 mb-1">未到人數</div>
-                      <div className="text-2xl font-black text-orange-800">{modalStats.absent_without_reason_count ?? Math.max(0, modalStats.expected_count - modalStats.actual_count)}</div>
+                      <div className={`${qrPanelOpen ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-orange-600`}>未到人數</div>
+                      <div className={`${qrPanelOpen ? 'text-lg' : 'text-2xl'} font-black text-orange-800`}>{modalStats.absent_without_reason_count ?? Math.max(0, modalStats.expected_count - modalStats.actual_count)}</div>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setSelectedAttendanceFilter('leave'); setListPage(1); }}
-                      className={`p-4 rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'leave', 'purple')}`}
+                      className={`${qrPanelOpen ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'leave', 'purple')}`}
                     >
-                      <div className="text-sm font-bold text-purple-600 mb-1">請假人數</div>
-                      <div className="text-2xl font-black text-purple-800">{modalStats.leave_count ?? 0}</div>
+                      <div className={`${qrPanelOpen ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-purple-600`}>請假人數</div>
+                      <div className={`${qrPanelOpen ? 'text-lg' : 'text-2xl'} font-black text-purple-800`}>{modalStats.leave_count ?? 0}</div>
                     </button>
+                  </div>
                   </div>
                   <div className="space-y-4">
                     <div>
@@ -693,6 +812,7 @@ const AttendanceOverviewPage = () => {
           }}
         />
       )}
+
     </div>
   );
 };

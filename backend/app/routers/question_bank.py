@@ -11,6 +11,7 @@ import json
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission
+from ..access_scope import can_delete_owned_resource
 
 router = APIRouter(prefix="/admin/question-bank", tags=["question-bank"])
 
@@ -21,6 +22,7 @@ def get_questions(
     keyword: Optional[str] = None,
     tags: Optional[str] = None,
     question_type: Optional[str] = None,
+    dept_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = check_permission("menu:exam")
 ):
@@ -28,17 +30,20 @@ def get_questions(
     查詢題庫列表 (支援分頁與篩選)
     """
     query = db.query(models.QuestionBank)
-    
+
     if keyword:
         # SQLite 大小寫不敏感支援有限，但在此專案中使用 .contains 即可
         query = query.filter(models.QuestionBank.content.ilike(f"%{keyword}%"))
-    
+
     if question_type and question_type != 'all':
         query = query.filter(models.QuestionBank.question_type == question_type)
-        
+
     if tags:
         # 簡單標籤篩選: 檢查 tags 欄位是否包含該字串
         query = query.filter(models.QuestionBank.tags.ilike(f"%{tags}%"))
+
+    if dept_id is not None:
+        query = query.filter(models.QuestionBank.dept_id == dept_id)
 
     total = query.count()
     items = query.order_by(desc(models.QuestionBank.created_at)).offset((page - 1) * size).limit(size).all()
@@ -101,12 +106,16 @@ def bulk_delete_question_bank(
     existing = db.query(models.QuestionBank).filter(models.QuestionBank.id.in_(ids)).all()
     existing_map = {q.id: q for q in existing}
     missing_ids = [qid for qid in ids if qid not in existing_map]
+    denied_ids: List[int] = []
     deleted_count = 0
 
     try:
         for qid in ids:
             q = existing_map.get(qid)
             if not q:
+                continue
+            if not can_delete_owned_resource(current_user, q.dept_id):
+                denied_ids.append(qid)
                 continue
             db.delete(q)
             deleted_count += 1
@@ -115,7 +124,7 @@ def bulk_delete_question_bank(
         db.rollback()
         raise HTTPException(status_code=400, detail=f"批次刪除失敗: {str(e)}")
 
-    return {"deleted_count": deleted_count, "missing_ids": missing_ids}
+    return {"deleted_count": deleted_count, "missing_ids": missing_ids, "denied_ids": denied_ids}
 
 
 @router.delete("/{id}")
@@ -128,7 +137,10 @@ def delete_question_bank(
     db_q = db.query(models.QuestionBank).filter(models.QuestionBank.id == id).first()
     if not db_q:
         raise HTTPException(status_code=404, detail="題目不存在")
-        
+
+    if not can_delete_owned_resource(current_user, db_q.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可刪除此題目")
+
     try:
         db.delete(db_q)
         db.commit()

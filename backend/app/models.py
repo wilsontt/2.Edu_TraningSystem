@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy import Column, Integer, String, Text, Boolean, Date, DateTime, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from .database import Base
@@ -209,6 +210,13 @@ class QuestionBank(Base):
     level = Column(String(20), nullable=True)
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    dept_id = Column(Integer, ForeignKey("departments.id"), nullable=True)  # 開課單位（owner）；NULL＝不受 owner 限制
+
+    department = relationship("Department")
+
+    @property
+    def dept_name(self) -> Optional[str]:
+        return self.department.name if self.department else None
 
 
 class ExamRecord(Base):
@@ -273,6 +281,9 @@ class ExamDetail(Base):
 class AttendanceRecord(Base):
     """報到紀錄：員工於訓練開始前的報到資訊"""
     __tablename__ = "attendance_records"
+    __table_args__ = (
+        UniqueConstraint("emp_id", "plan_id", name="uq_attendance_emp_plan"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     emp_id = Column(String, ForeignKey("users.emp_id"))
     plan_id = Column(Integer, ForeignKey("training_plans.id"))
@@ -369,10 +380,12 @@ class TeachingMaterialSet(Base):
     uploaded_by = Column(String, nullable=False)     # emp_id
     uploaded_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
     is_active = Column(Boolean, default=True, index=True)
+    dept_id = Column(Integer, ForeignKey("departments.id"), nullable=True)  # 開課單位（owner）；NULL＝不受 owner 限制
 
     material_type = relationship("MaterialType")
     files = relationship("TeachingMaterialFile", back_populates="material_set")
     set_plans = relationship("TeachingMaterialSetPlan", back_populates="material_set")
+    department = relationship("Department")
 
 
 class TeachingMaterialFile(Base):

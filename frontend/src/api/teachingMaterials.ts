@@ -2,7 +2,7 @@ import type { AxiosProgressEvent, AxiosResponse } from 'axios';
 import api from '../api';
 import type {
     MaterialType, MaterialFileFormat, MaterialSet, MaterialSetList,
-    MaterialFileList, SetFileUploadResult, PlanOption,
+    MaterialFileList, SetFileUploadResult, PlanOption, DepartmentOption,
 } from '../types/materials';
 
 const BASE = '/admin/teaching-materials';
@@ -23,6 +23,10 @@ export const fetchMaterialFileFormats = () =>
 export const fetchPlanOptions = () =>
     api.get<PlanOption[]>('/training/plans', { params: { status: 'all' } }).then(r => r.data);
 
+/** 開課單位（owner）下拉選項；公開端點，任何已登入使用者皆可查詢。 */
+export const fetchDepartments = () =>
+    api.get<DepartmentOption[]>('/auth/departments').then(r => r.data);
+
 export interface SetListParams {
     page: number;
     size: number;
@@ -30,6 +34,7 @@ export interface SetListParams {
     material_type_id?: string;
     file_format?: string;
     plan_id?: number;
+    dept_id?: number | string;
 }
 
 export const fetchSets = (params: SetListParams) =>
@@ -46,7 +51,7 @@ export const createSet = (fd: FormData, opts: TransferOpts = {}): Promise<AxiosR
 
 export const updateSet = (
     setId: number,
-    payload: { title?: string; material_type_id?: number; description?: string | null; tags?: string[] | null },
+    payload: { title?: string; material_type_id?: number; description?: string | null; tags?: string[] | null; dept_id?: number },
 ) => api.put<MaterialSet>(`${BASE}/sets/${setId}`, payload).then(r => r.data);
 
 export const updateSetPlans = (setId: number, planIds: number[]) =>

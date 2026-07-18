@@ -1,7 +1,7 @@
 """套組內新增檔案（同名覆蓋 Yes/No）／移除單檔測試（教材 PLAN §5.12.8 S2/S4/S5/S12）。"""
 import io
 
-from app.models import MaterialType, MaterialFileFormat
+from app.models import MaterialType, MaterialFileFormat, Department
 
 
 def _seed_type(db):
@@ -12,10 +12,11 @@ def _seed_type(db):
     return mt
 
 
-def _create_set(client, mt_id):
+def _create_set(client, db, mt_id):
+    dept = db.query(Department).filter(Department.name == "IT部").first()
     resp = client.post(
         "/api/admin/teaching-materials/sets",
-        data={"title": "套組", "material_type_id": str(mt_id)},
+        data={"title": "套組", "material_type_id": str(mt_id), "dept_id": str(dept.id)},
         files=[("files", ("a.pdf", io.BytesIO(b"x"), "application/pdf"))],
     )
     assert resp.status_code == 200, resp.text
@@ -24,7 +25,7 @@ def _create_set(client, mt_id):
 
 def test_add_files_keeps_single_set_row(client, in_memory_db, mock_nas):
     mt = _seed_type(in_memory_db)
-    created = _create_set(client, mt.id)
+    created = _create_set(client, in_memory_db, mt.id)
 
     resp = client.post(
         f"/api/admin/teaching-materials/sets/{created['id']}/files",
@@ -42,7 +43,7 @@ def test_add_files_keeps_single_set_row(client, in_memory_db, mock_nas):
 
 def test_duplicate_filename_no_overwrite_skips(client, in_memory_db, mock_nas):
     mt = _seed_type(in_memory_db)
-    created = _create_set(client, mt.id)
+    created = _create_set(client, in_memory_db, mt.id)
 
     resp = client.post(
         f"/api/admin/teaching-materials/sets/{created['id']}/files",
@@ -59,7 +60,7 @@ def test_duplicate_filename_no_overwrite_skips(client, in_memory_db, mock_nas):
 
 def test_duplicate_filename_overwrite_replaces_in_place(client, in_memory_db, mock_nas):
     mt = _seed_type(in_memory_db)
-    created = _create_set(client, mt.id)
+    created = _create_set(client, in_memory_db, mt.id)
     original_file_id = created["files"][0]["id"]
 
     resp = client.post(
@@ -78,7 +79,7 @@ def test_duplicate_filename_overwrite_replaces_in_place(client, in_memory_db, mo
 
 def test_remove_one_file_leaves_others(client, in_memory_db, mock_nas):
     mt = _seed_type(in_memory_db)
-    created = _create_set(client, mt.id)
+    created = _create_set(client, in_memory_db, mt.id)
     client.post(
         f"/api/admin/teaching-materials/sets/{created['id']}/files",
         files=[("files", ("b.pdf", io.BytesIO(b"y"), "application/pdf"))],

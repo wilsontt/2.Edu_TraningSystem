@@ -12,6 +12,7 @@ import QuestionBankManager from './QuestionBankManager';
 import BankImportModal from './BankImportModal';
 import Pagination from '../common/Pagination';
 import TeachingMaterialLibrary from '../teaching/TeachingMaterialLibrary';
+import type { User } from '../../types';
 
 interface TrainingPlan {
   id: number;
@@ -46,7 +47,11 @@ interface Question {
     hint?: string;
 }
 
-const ExamStudio = () => {
+interface ExamStudioProps {
+  user: User;
+}
+
+const ExamStudio = ({ user }: ExamStudioProps) => {
     const [plans, setPlans] = useState<TrainingPlan[]>([]);
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
     const [materials, setMaterials] = useState<Material[]>([]);
@@ -353,13 +358,13 @@ const ExamStudio = () => {
                         返回考卷工坊
                     </button>
                 </div>
-                <QuestionBankManager />
+                <QuestionBankManager user={user} />
             </div>
         );
     }
 
     if (mode === 'materials') {
-        return <TeachingMaterialLibrary onBack={() => setMode('plan')} />;
+        return <TeachingMaterialLibrary user={user} onBack={() => setMode('plan')} />;
     }
 
     return (

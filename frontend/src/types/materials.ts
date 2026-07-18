@@ -43,6 +43,8 @@ export interface MaterialSet {
     plan_ids: number[];
     plan_titles: string[];
     files?: MaterialSetFile[];
+    dept_id: number | null;
+    dept_name: string | null;
 }
 
 export interface MaterialSetList {
@@ -64,6 +66,8 @@ export interface MaterialFileListItem {
     uploaded_at: string;
     is_active: boolean;
     plan_titles: string[];
+    dept_id: number | null;
+    dept_name: string | null;
 }
 
 export interface MaterialFileList {
@@ -85,4 +89,10 @@ export interface PlanOption {
     title: string;
     end_date?: string | null;
     is_archived?: boolean;
+}
+
+/** 開課單位（owner）下拉選項。 */
+export interface DepartmentOption {
+    id: number;
+    name: string;
 }

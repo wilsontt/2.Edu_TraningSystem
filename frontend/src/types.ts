@@ -8,6 +8,7 @@ export interface User {
   emp_id: string;
   name: string;
   role: string; // 角色名稱字串（含 AD 管理角色，如 "系統管理者"）
+  dept_id?: number | null;
   dept_name?: string;
   functions: string[];
 }

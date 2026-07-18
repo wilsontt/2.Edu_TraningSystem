@@ -5,12 +5,16 @@ import { createSet } from '../../api/teachingMaterials';
 import { mergeSelectedFiles } from './transfer';
 import SelectedFilesList from './SelectedFilesList';
 import PlanBindingChecklist from './PlanBindingChecklist';
-import type { MaterialType, MaterialSet, PlanOption } from '../../types/materials';
+import type { MaterialType, MaterialSet, PlanOption, DepartmentOption } from '../../types/materials';
 
 interface MaterialSetUploadPanelProps {
     types: MaterialType[];
     allowedExts: string[];
     materialAccept: string;
+    /** 開課單位（owner）下拉選項。 */
+    departments: DepartmentOption[];
+    /** 提供時鎖定此開課單位（固定選取、無法變更），用於訓練計畫編輯頁上傳（沿用該計畫的開課單位）。 */
+    lockedDeptId?: number | null;
     /** 可綁定的訓練計畫選項；不提供或為空陣列時不顯示計畫多選（例如僅通用教材情境）。 */
     planOptions?: PlanOption[];
     /** 提供時鎖定此計畫（固定勾選、無法取消），用於訓練計畫編輯頁上傳。 */
@@ -30,7 +34,7 @@ interface MaterialSetUploadPanelProps {
 
 /** 建立教材套組面板（教材 PLAN §5.12.3：上傳前須 NAS 登入；首批檔案與套組同時建立）。 */
 const MaterialSetUploadPanel = ({
-    types, allowedExts, materialAccept, planOptions = [], lockedPlanId, onClose,
+    types, allowedExts, materialAccept, departments, lockedDeptId, planOptions = [], lockedPlanId, onClose,
     onCreated, requireNas, beginTransfer, onUploadProgress, endTransferSuccess,
     endTransferError, isCancel, planLayout = 'stack',
 }: MaterialSetUploadPanelProps) => {
@@ -38,6 +42,7 @@ const MaterialSetUploadPanel = ({
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [tags, setTags] = useState('');
+    const [deptId, setDeptId] = useState(lockedDeptId != null ? String(lockedDeptId) : '');
     const [planIds, setPlanIds] = useState<number[]>(lockedPlanId ? [lockedPlanId] : []);
     const [files, setFiles] = useState<File[]>([]);
     const [fileInputKey, setFileInputKey] = useState(0);
@@ -49,6 +54,7 @@ const MaterialSetUploadPanel = ({
         const fd = new FormData();
         fd.append('title', title || files[0]?.name.replace(/\.[^.]+$/, '') || '未命名教材');
         fd.append('material_type_id', typeId);
+        fd.append('dept_id', deptId);
         if (description) fd.append('description', description);
         if (tags) fd.append('tags', tags);
         if (planIds.length > 0) fd.append('plan_ids', planIds.join(','));
@@ -67,6 +73,7 @@ const MaterialSetUploadPanel = ({
                 setFiles([]);
                 setFileInputKey(k => k + 1);
                 if (!lockedPlanId) setPlanIds([]);
+                if (lockedDeptId == null) setDeptId('');
                 onCreated(res.data);
             })
             .catch(err => {
@@ -83,6 +90,7 @@ const MaterialSetUploadPanel = ({
         setError(null);
         setResultMsg(null);
         if (!typeId) { setError('請選擇教材類型'); return; }
+        if (!deptId) { setError('請選擇開課單位'); return; }
         if (files.length === 0) { setError('請選擇檔案'); return; }
         setBusy(true);
         requireNas('建立教材套組', token => { doCreate(token); setBusy(false); });
@@ -102,6 +110,16 @@ const MaterialSetUploadPanel = ({
                 >
                     <option value="">選擇教材類型…</option>
                     {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <select
+                    value={deptId}
+                    onChange={e => setDeptId(e.target.value)}
+                    disabled={lockedDeptId != null}
+                    className="px-3 py-2 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                    title={lockedDeptId != null ? '沿用該訓練計畫的開課單位' : undefined}
+                >
+                    <option value="">選擇開課單位…</option>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
                 <label className="flex items-center gap-2 px-3 py-2 border-2 border-dashed border-indigo-300 bg-white rounded-lg text-sm font-bold text-indigo-600 hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer transition-colors">
                     <FileText className="w-4 h-4 shrink-0" />

@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import api from '../api';
@@ -26,6 +26,7 @@ interface LoginPageProps {
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<LoginTab>('employee');
   const [isRegister, setIsRegister] = useState(false);
 
@@ -84,7 +85,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const handleLoginSuccess = (token: string, user: User) => {
     localStorage.setItem('token', token);
     onLoginSuccess(user);
-    navigate('/', { replace: true });
+    // 僅允許 /checkin 開頭的相對路徑，避免 open redirect
+    const returnTo = new URLSearchParams(location.search).get('returnTo');
+    navigate(returnTo && returnTo.startsWith('/checkin') ? returnTo : '/', { replace: true });
   };
 
   const switchTab = (tab: LoginTab) => {

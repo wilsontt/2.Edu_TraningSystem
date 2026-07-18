@@ -105,6 +105,7 @@ def _auth_response_dict(user: models.User, auth_src: str) -> dict:
         "user": {
             "emp_id": user.emp_id,
             "name": user.name,
+            "dept_id": user.dept_id,
             "dept_name": dept_name,
             "role": role_name,
             "functions": funcs,
@@ -362,6 +363,7 @@ async def login(req: LoginRequest, request: Request, db: Session = Depends(get_d
         "user": {
             "emp_id": user.emp_id,
             "name": user.name,
+            "dept_id": user.dept_id,
             "dept_name": user.department.name if user.department else "未知",
             "role": role_name,
             "functions": [f.code for f in user.role.functions] if user.role and user.role.functions else [],
@@ -608,6 +610,7 @@ async def get_me(
     return {
         "emp_id": current_user.emp_id,
         "name": current_user.name,
+        "dept_id": current_user.dept_id,
         "dept_name": current_user.department.name,
         "role": current_user.role.name,
         "functions": [f.code for f in current_user.role.functions],

@@ -221,7 +221,8 @@ async def upload_material(
                     tags=json.dumps(tags_list, ensure_ascii=False),
                     hint=q.get("hint"),
                     level=q.get("level"),
-                    created_by=emp_id if emp_id else 'system'
+                    created_by=emp_id if emp_id else 'system',
+                    dept_id=plan.dept_id,
                 )
                 db.add(qb)
 
@@ -317,7 +318,8 @@ async def import_from_preview(
                     tags=json.dumps(tags_list, ensure_ascii=False),
                     hint=q.get("hint"),
                     level=q.get("level"),
-                    created_by=current_user.emp_id if hasattr(current_user, 'emp_id') else 'system'
+                    created_by=current_user.emp_id if hasattr(current_user, 'emp_id') else 'system',
+                    dept_id=plan.dept_id,
                 )
                 db.add(qb)
     db.commit()

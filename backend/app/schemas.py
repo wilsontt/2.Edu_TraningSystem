@@ -295,7 +295,9 @@ class QuestionBank(QuestionBankBase):
     id: int
     created_by: Optional[str] = None
     created_at: datetime
-    
+    dept_id: Optional[int] = None
+    dept_name: Optional[str] = None
+
     class Config:
         from_attributes = True
 
@@ -325,10 +327,12 @@ class AttendanceRecord(AttendanceRecordBase):
 class AttendanceStatus(BaseModel):
     is_checked_in: bool
     checkin_time: Optional[datetime] = None
+    plan_title: Optional[str] = None  # 供報到頁顯示；員工無 menu:plan 也能取得
 
 class CheckInResponse(BaseModel):
     success: bool
     checkin_time: datetime
+    plan_title: Optional[str] = None
 
 # --- 報到統計資料結構 ---
 class AttendanceStats(BaseModel):
@@ -571,6 +575,8 @@ class TeachingMaterialSetOut(BaseModel):
     plan_ids: List[int] = []
     plan_titles: List[str] = []
     files: Optional[List[TeachingMaterialSetFileOut]] = None
+    dept_id: Optional[int] = None
+    dept_name: Optional[str] = None
 
 
 class TeachingMaterialSetListOut(BaseModel):
@@ -586,6 +592,7 @@ class TeachingMaterialSetUpdate(BaseModel):
     material_type_id: Optional[int] = None
     description: Optional[str] = None
     tags: Optional[List[str]] = None
+    dept_id: Optional[int] = None
 
 
 class TeachingMaterialSetPlansUpdate(BaseModel):
@@ -608,6 +615,8 @@ class TeachingMaterialFileListItemOut(BaseModel):
     uploaded_at: datetime
     is_active: bool
     plan_titles: List[str] = []
+    dept_id: Optional[int] = None
+    dept_name: Optional[str] = None
 
 
 class TeachingMaterialFileListOut(BaseModel):

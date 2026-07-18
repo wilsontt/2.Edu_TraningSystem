@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Body, Request as F
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, case, true
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from pydantic import BaseModel, Field
@@ -1597,6 +1598,10 @@ def get_attendance_status(
     current_user: models.User = Depends(get_current_user)
 ):
     """檢查當前用戶是否已報到該計畫"""
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+
     attendance = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.emp_id == current_user.emp_id,
         models.AttendanceRecord.plan_id == plan_id
@@ -1605,12 +1610,14 @@ def get_attendance_status(
     if attendance:
         return {
             "is_checked_in": True,
-            "checkin_time": attendance.checkin_time
+            "checkin_time": attendance.checkin_time,
+            "plan_title": plan.title,
         }
 
     return {
         "is_checked_in": False,
-        "checkin_time": None
+        "checkin_time": None,
+        "plan_title": plan.title,
     }
 
 @router.post("/plan/{plan_id}/attendance/checkin", response_model=schemas.CheckInResponse)
@@ -1620,20 +1627,24 @@ def check_in_attendance(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """執行報到動作"""
+    """執行報到動作（冪等：已報到則回傳既有紀錄，不重複建立）。"""
     # 1. 檢查計畫是否存在
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
     
-    # 2. 檢查是否已報到（避免重複報到）
+    # 2. 已報到 → 冪等成功（避免 QR 重掃／Strict Mode 雙請求被當錯誤）
     existing = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.emp_id == current_user.emp_id,
         models.AttendanceRecord.plan_id == plan_id
     ).first()
     
     if existing:
-        raise HTTPException(status_code=400, detail="您已經報到過此訓練計畫")
+        return {
+            "success": True,
+            "checkin_time": existing.checkin_time,
+            "plan_title": plan.title,
+        }
     
     # 3. 檢查計畫是否在有效期間內
     today = date.today()
@@ -1665,7 +1676,7 @@ def check_in_attendance(
         else:
             client_ip = request.client.host if request.client else None
     
-    # 6. 建立報到記錄
+    # 6. 建立報到記錄（UNIQUE(emp_id, plan_id)；競態下第二筆以既有列回傳）
     attendance = models.AttendanceRecord(
         emp_id=current_user.emp_id,
         plan_id=plan_id,
@@ -1677,11 +1688,25 @@ def check_in_attendance(
     try:
         db.commit()
         db.refresh(attendance)
+    except IntegrityError:
+        db.rollback()
+        raced = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.emp_id == current_user.emp_id,
+            models.AttendanceRecord.plan_id == plan_id
+        ).first()
+        if raced:
+            return {
+                "success": True,
+                "checkin_time": raced.checkin_time,
+                "plan_title": plan.title,
+            }
+        raise HTTPException(status_code=500, detail="報到失敗：寫入衝突")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"報到失敗：{str(e)}")
     
     return {
         "success": True,
-        "checkin_time": attendance.checkin_time
+        "checkin_time": attendance.checkin_time,
+        "plan_title": plan.title,
     }

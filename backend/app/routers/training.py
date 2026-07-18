@@ -20,7 +20,7 @@ from reportlab.lib.pagesizes import A4
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission, check_any_permission
-from ..access_scope import get_scope_emp_ids, intersect_emp_ids
+from ..access_scope import get_scope_emp_ids, intersect_emp_ids, can_delete_owned_resource
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -344,7 +344,11 @@ def delete_training_plan(
     attendance_count = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.plan_id == plan_id).count()
     if attendance_count > 0:
         raise HTTPException(status_code=400, detail=f"該計畫有 {attendance_count} 筆報到記錄，無法刪除")
-    
+
+    # Owner 檢查：僅開課單位（或超管／系統管理角色）可刪除
+    if not can_delete_owned_resource(current_user, db_plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可刪除此訓練計畫")
+
     try:
         db.delete(db_plan)
         db.commit()
