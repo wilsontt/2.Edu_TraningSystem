@@ -17,7 +17,7 @@ import PlanMaterialsSection from '../teaching/PlanMaterialsSection';
 import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
 import type { User } from '../../types';
-import { canDeleteOwnedResource } from '../../utils/authGuards';
+import { canModifyOwnedResource } from '../../utils/authGuards';
 
 // ----------------------------------------------------------------
 // 型別定義 (Type Definitions)
@@ -158,6 +158,8 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
   // 模態視窗狀態
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  /** 非開課單位開啟既有計畫時為檢視模式（不可儲存） */
+  const [isViewOnly, setIsViewOnly] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
@@ -385,9 +387,10 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
 
   const openModal = (plan?: TrainingPlan) => {
     if (plan) {
-      // 編輯模式
+      // 編輯／檢視模式
       setIsEditing(true);
       setEditId(plan.id);
+      setIsViewOnly(!canModifyOwnedResource(user, plan.dept_id));
       
       // 尋找主分類 - 改進邏輯
       let mainCatId = '';
@@ -411,7 +414,7 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
         }
       }
       
-      // 如果還是找不到，記錄警告但不阻止編輯
+      // 如果還是找不到，記錄警告但不阻止開啟
       if (!mainCatId && plan.sub_category_id) {
         console.warn(`無法找到計劃 ${plan.id} (${plan.title}) 的主分類，sub_category_id: ${plan.sub_category_id}`);
       }
@@ -434,6 +437,7 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
       // 新增模式
       setIsEditing(false);
       setEditId(null);
+      setIsViewOnly(false);
       setFormData({
         title: '',
         main_category_id: '',
@@ -456,6 +460,7 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewOnly) return;
     if (!formData.title || !formData.sub_category_id || !formData.dept_id || !formData.training_date) {
       setErrorMessage('請填寫所有必填欄位');
       return;
@@ -1063,7 +1068,7 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
                         <button 
                           onClick={() => openModal(plan)}
                           className="p-2 min-h-11 min-w-11 flex items-center justify-center text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 cursor-pointer"
-                          title="編輯計畫"
+                          title={canModifyOwnedResource(user, plan.dept_id) ? '編輯計畫' : '檢視計畫（僅開課單位可編輯）'}
                         >
                           <PenTool className="w-4 h-4" />
                         </button>
@@ -1099,12 +1104,15 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      if (!canModifyOwnedResource(user, plan.dept_id)) return;
                                       setOpenActionMenu(null);
                                       if (window.confirm(`確定要封存「${plan.title}」嗎？\n\n封存後，該計畫將不會顯示在「正在進行中」和「已過期」列表中。`)) {
                                         handleArchivePlan(plan.id);
                                       }
                                     }}
-                                    className="w-full px-4 py-2 text-left text-sm font-bold text-purple-600 hover:bg-purple-50 flex items-center gap-2"
+                                    disabled={!canModifyOwnedResource(user, plan.dept_id)}
+                                    className="w-full px-4 py-2 text-left text-sm font-bold text-purple-600 hover:bg-purple-50 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                    title={canModifyOwnedResource(user, plan.dept_id) ? undefined : '僅開課單位可封存'}
                                   >
                                     <Archive className="w-4 h-4" />
                                     封存計畫
@@ -1114,12 +1122,15 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      if (!canModifyOwnedResource(user, plan.dept_id)) return;
                                       setOpenActionMenu(null);
                                       if (window.confirm(`確定要取消封存「${plan.title}」嗎？\n\n取消封存後，該計畫將根據其狀態顯示在對應的列表中。`)) {
                                         handleUnarchivePlan(plan.id);
                                       }
                                     }}
-                                    className="w-full px-4 py-2 text-left text-sm font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2"
+                                    disabled={!canModifyOwnedResource(user, plan.dept_id)}
+                                    className="w-full px-4 py-2 text-left text-sm font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                    title={canModifyOwnedResource(user, plan.dept_id) ? undefined : '僅開課單位可取消封存'}
                                   >
                                     <Archive className="w-4 h-4" />
                                     取消封存
@@ -1131,9 +1142,9 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
                                     setOpenActionMenu(null);
                                     setDeleteTarget(plan);
                                   }}
-                                  disabled={!canDeleteOwnedResource(user, plan.dept_id)}
+                                  disabled={!canModifyOwnedResource(user, plan.dept_id)}
                                   className="w-full px-4 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                  title={canDeleteOwnedResource(user, plan.dept_id) ? undefined : '僅開課單位可刪除'}
+                                  title={canModifyOwnedResource(user, plan.dept_id) ? undefined : '僅開課單位可刪除'}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                   刪除計畫
@@ -1176,7 +1187,7 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
             <div className={`p-6 border-b flex items-center justify-between ${isEditing ? 'border-indigo-100 bg-linear-to-r from-indigo-50 to-purple-50' : 'border-green-100 bg-linear-to-r from-green-50 to-emerald-50'}`}>
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 {isEditing ? <PenTool className="w-5 h-5 text-indigo-600" /> : <Plus className="w-5 h-5 text-green-600" />}
-                {isEditing ? '編輯訓練計畫' : '新增訓練計畫'}
+                {isEditing ? (isViewOnly ? '檢視訓練計畫' : '編輯訓練計畫') : '新增訓練計畫'}
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/50 rounded-xl transition-all duration-200 cursor-pointer">
                 <X className="w-5 h-5 text-gray-400" />
@@ -1184,6 +1195,12 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
             </div>
             {/* 訓練計劃 設定卡片 */}
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
+              {isViewOnly && (
+                <p className="text-sm font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+                  僅開課單位或超管可編輯；目前為檢視模式。
+                </p>
+              )}
+              <fieldset disabled={isViewOnly} className="min-w-0 border-0 p-0 m-0 disabled:opacity-90">
               <div className={isEditing && editId ? 'grid grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-4 items-start' : 'space-y-4'}>
               <div className="space-y-4">
               {/* 計劃與時程卡片 */}
@@ -1550,27 +1567,31 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
                       deptId={formData.dept_id ? Number(formData.dept_id) : null}
                       user={user}
                       archived={activeTab === 'archived'}
+                      readOnly={isViewOnly}
                     />
                   </div>
                 </div>
               )}
               </div>
+              </fieldset>
 
               {/* ... (footer buttons) ... */}
               {/* 按鈕卡片 */}
               <div className="flex gap-3 pt-2 border-t border-gray-100">
+                {!isViewOnly && (
                 <button
                   type="submit"
                   className={`flex-1 py-3 text-white rounded-xl font-bold transition-all duration-200 shadow-lg active:scale-95 cursor-pointer ${isEditing ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300' : 'bg-green-500 hover:bg-green-600 shadow-green-200 hover:shadow-green-300'}`}
                 >
                   {isEditing ? '儲存變更' : '確認新增'}
                 </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-6 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200 cursor-pointer"
+                  className={`${isViewOnly ? 'flex-1' : 'px-6'} py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200 cursor-pointer`}
                 >
-                  取消
+                  {isViewOnly ? '關閉' : '取消'}
                 </button>
               </div>
             </form>

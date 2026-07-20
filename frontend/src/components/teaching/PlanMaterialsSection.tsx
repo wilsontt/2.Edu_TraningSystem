@@ -13,7 +13,7 @@ import {
 } from '../../api/teachingMaterials';
 import type { MaterialType, MaterialSet, PlanOption, DepartmentOption } from '../../types/materials';
 import type { User } from '../../types';
-import { canDeleteOwnedResource } from '../../utils/authGuards';
+import { canModifyOwnedResource } from '../../utils/authGuards';
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
@@ -35,10 +35,12 @@ interface PlanMaterialsSectionProps {
     deptId: number | null;
     user: User;
     archived?: boolean;
+    /** 非開課單位檢視計畫時：僅可下載，不可新增／編輯／停用套組 */
+    readOnly?: boolean;
 }
 
 /** 訓練計畫編輯頁的教材區（Wave 2）：套組列表（該計畫綁定）、建立/編輯套組（鎖定本計畫）。 */
-const PlanMaterialsSection = ({ planId, deptId, user, archived = false }: PlanMaterialsSectionProps) => {
+const PlanMaterialsSection = ({ planId, deptId, user, archived = false, readOnly = false }: PlanMaterialsSectionProps) => {
     const { allowedExts } = useMaterialFileFormats();
     const materialAccept = buildMaterialAccept(allowedExts);
     const nas = useNasTransfer();
@@ -108,7 +110,7 @@ const PlanMaterialsSection = ({ planId, deptId, user, archived = false }: PlanMa
         <div className="space-y-3 pt-2">
             <label className="text-xs font-bold text-gray-500 uppercase">教材套組（上傳前須 NAS 登入）</label>
 
-            {!archived && (
+            {!archived && !readOnly && (
                 uploadOpen ? (
                     <MaterialSetUploadPanel
                         types={types} allowedExts={allowedExts} materialAccept={materialAccept}
@@ -136,7 +138,7 @@ const PlanMaterialsSection = ({ planId, deptId, user, archived = false }: PlanMa
                 )
             )}
 
-            {editingSet && !uploadOpen && (
+            {editingSet && !uploadOpen && !readOnly && (
                 <MaterialSetEditPanel
                     set={editingSet} types={types} allowedExts={allowedExts} materialAccept={materialAccept}
                     departments={departments} user={user}
@@ -170,27 +172,30 @@ const PlanMaterialsSection = ({ planId, deptId, user, archived = false }: PlanMa
                                     )}
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
-                                    {!archived && (
+                                    {!archived && !readOnly && (
                                         <button
                                             type="button"
-                                            disabled={uploadOpen}
+                                            disabled={uploadOpen || !canModifyOwnedResource(user, s.dept_id)}
                                             onClick={() => {
                                                 setUploadOpen(false);
                                                 setEditingSetId(s.id);
                                             }}
                                             className="p-1 text-gray-500 hover:bg-gray-100 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                                            title={uploadOpen ? '請先關閉新增面板再編輯' : '編輯'}
+                                            title={
+                                                uploadOpen ? '請先關閉新增面板再編輯'
+                                                    : canModifyOwnedResource(user, s.dept_id) ? '編輯' : '僅開課單位可編輯'
+                                            }
                                         >
                                             <Pencil className="w-4 h-4" />
                                         </button>
                                     )}
-                                    {!archived && (
+                                    {!archived && !readOnly && (
                                         <button
                                             type="button"
                                             onClick={() => handleDelete(s)}
-                                            disabled={!canDeleteOwnedResource(user, s.dept_id)}
+                                            disabled={!canModifyOwnedResource(user, s.dept_id)}
                                             className="p-1 text-red-500 hover:bg-red-50 rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                            title={canDeleteOwnedResource(user, s.dept_id) ? '停用' : '僅開課單位可刪除'}
+                                            title={canModifyOwnedResource(user, s.dept_id) ? '停用' : '僅開課單位可刪除'}
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>

@@ -20,7 +20,7 @@ from reportlab.lib.pagesizes import A4
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission, check_any_permission
-from ..access_scope import get_scope_emp_ids, intersect_emp_ids, can_delete_owned_resource
+from ..access_scope import get_scope_emp_ids, intersect_emp_ids, can_modify_owned_resource
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -222,6 +222,9 @@ def update_training_plan(
     if not db_plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
 
+    if not can_modify_owned_resource(current_user, db_plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可編輯此訓練計畫")
+
     # update fields
     # 檢查開始日期是否變更，且是否已有考試紀錄
     if db_plan.training_date != plan_update.training_date:
@@ -346,7 +349,7 @@ def delete_training_plan(
         raise HTTPException(status_code=400, detail=f"該計畫有 {attendance_count} 筆報到記錄，無法刪除")
 
     # Owner 檢查：僅開課單位（或超管／系統管理角色）可刪除
-    if not can_delete_owned_resource(current_user, db_plan.dept_id):
+    if not can_modify_owned_resource(current_user, db_plan.dept_id):
         raise HTTPException(status_code=403, detail="僅開課單位可刪除此訓練計畫")
 
     try:
@@ -368,6 +371,9 @@ def archive_training_plan(
     db_plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not db_plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+
+    if not can_modify_owned_resource(current_user, db_plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可封存此訓練計畫")
     
     if db_plan.is_archived:
         raise HTTPException(status_code=400, detail="該計畫已經被封存")
@@ -392,6 +398,9 @@ def unarchive_training_plan(
     db_plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not db_plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+
+    if not can_modify_owned_resource(current_user, db_plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可取消封存此訓練計畫")
     
     if not db_plan.is_archived:
         raise HTTPException(status_code=400, detail="該計畫未被封存")
@@ -986,6 +995,9 @@ def generate_checkin_qrcode(
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+
+    if not can_modify_owned_resource(current_user, plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可產生此訓練計畫的報到 QRcode")
     
     # 構建報到 URL（動態 URL，非固定 IP）
     # 優先使用環境變數 FRONTEND_URL

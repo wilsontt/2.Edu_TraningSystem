@@ -22,7 +22,7 @@ from ..config import get_settings
 from .auth import check_permission
 from ..services import storage
 from ..services.audit_log import record_file_transfer
-from ..access_scope import can_delete_owned_resource
+from ..access_scope import can_modify_owned_resource
 from .teaching_materials import (
     _client_ip, _validate_filename, _effective_max_bytes,
     _file_size_limit_exceeded_message, _batch_upload_total_exceeded_message,
@@ -313,9 +313,9 @@ def update_set(
     s = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.id == set_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="教材套組不存在")
+    if not can_modify_owned_resource(current_user, s.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可編輯此教材套組")
     data = payload.model_dump(exclude_unset=True)
-    if "dept_id" in data and not can_delete_owned_resource(current_user, s.dept_id):
-        raise HTTPException(status_code=403, detail="僅開課單位可變更此教材套組的開課單位")
     if "tags" in data:
         tags_val = data.pop("tags")
         s.tags = json.dumps([str(t) for t in tags_val], ensure_ascii=False) if tags_val else None
@@ -345,6 +345,8 @@ def update_set_plans(
     s = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.id == set_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="教材套組不存在")
+    if not can_modify_owned_resource(current_user, s.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可變更此教材套組的計畫綁定")
     plans = []
     for pid in payload.plan_ids:
         plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == pid).first()
@@ -368,7 +370,7 @@ def delete_set(
     s = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.id == set_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="教材套組不存在")
-    if not can_delete_owned_resource(current_user, s.dept_id):
+    if not can_modify_owned_resource(current_user, s.dept_id):
         raise HTTPException(status_code=403, detail="僅開課單位可刪除此教材套組")
     s.is_active = False
     db.commit()
@@ -403,6 +405,8 @@ async def add_set_files(
     ).first()
     if not s:
         raise HTTPException(status_code=404, detail="教材套組不存在")
+    if not can_modify_owned_resource(current_user, s.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可新增檔案至此教材套組")
     mt = db.query(models.MaterialType).filter(models.MaterialType.id == s.material_type_id).first()
 
     if not files:
@@ -514,7 +518,7 @@ def remove_set_file(
     ).first()
     if not mf:
         raise HTTPException(status_code=404, detail="檔案不存在")
-    if not can_delete_owned_resource(current_user, mf.material_set.dept_id):
+    if not can_modify_owned_resource(current_user, mf.material_set.dept_id):
         raise HTTPException(status_code=403, detail="僅開課單位可刪除此檔案")
     mf.is_active = False
     db.commit()

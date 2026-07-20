@@ -29,13 +29,18 @@ export function hasAdminMenu(user: User): boolean {
 }
 
 /**
- * Owner（開課單位）刪除權限判斷，與後端 access_scope.can_delete_owned_resource 一致：
+ * Owner（開課單位）寫入權限，與後端 access_scope.can_modify_owned_resource 一致：
  * - resourceDeptId 為 null/undefined：既有資料未設定 owner，不受限制
  * - 超管／系統管理角色：一律放行
- * - 否則僅開課單位（user.dept_id 與 resourceDeptId 相同）可刪除
+ * - 否則僅開課單位（user.dept_id 與 resourceDeptId 相同）可編輯／刪除／封存
  */
-export function canDeleteOwnedResource(user: User, resourceDeptId: number | null | undefined): boolean {
+export function canModifyOwnedResource(user: User, resourceDeptId: number | null | undefined): boolean {
   if (resourceDeptId == null) return true;
   if (isProtectedSystemRole(user.role)) return true;
   return user.dept_id === resourceDeptId;
+}
+
+/** @deprecated 請改用 canModifyOwnedResource；行為相同 */
+export function canDeleteOwnedResource(user: User, resourceDeptId: number | null | undefined): boolean {
+  return canModifyOwnedResource(user, resourceDeptId);
 }

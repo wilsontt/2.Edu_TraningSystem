@@ -135,6 +135,7 @@
 
 ## 最近更新
 
+- **2026-07-20**：Owner 寫入權擴充（訓練計畫／題庫／教材／**考卷工坊考題**；非開課單位僅檢視）；考卷工坊 `list_materials` NAS 不可達改回 200 空陣列 + `X-NAS-Unavailable`；文件補 ds1 Owner 遷移／題庫 500 症狀。
 - **2026-07-18**：報到雙時機 QR／開課單位 Owner／attendance UNIQUE — [`20260717_…PLAN`](02-棕地專案/plans/20260717_報到-訓練計畫-教材-題庫_新增需求_PLAN.md)、[交付 20260718](02-棕地專案/交付實作文件/20260718_報到QR-開課單位Owner-教材庫UX.md)；同步 [棕地功能總覽](02-棕地專案/棕地功能總覽.md)、交付索引。
 - **2026-07-15**：`docs/superpowers/` 歸檔至 [`agent-plans/`](02-棕地專案/agent-plans/README.md)；更新 [`tests/README.md`](../tests/README.md)；移除早期 `design-system/`（現行 UI 以 `frontend/src/index.css` + `@shared-ui` 為準）。
 - **2026-07-11**：部門成績展開明細補 `plan_status` — [`20260710_成績中心資料口徑統一與部門計畫統計修正_PLAN.md`](02-棕地專案/plans/已完成/20260710_成績中心資料口徑統一與部門計畫統計修正_PLAN.md)（`GET .../department/{id}/details` 與前端展開／切換狀態清快取）。
@@ -174,4 +175,4 @@
 
 ---
 
-**最後更新**：2026-07-06
+**最後更新**：2026-07-20

@@ -11,7 +11,7 @@ import json
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission
-from ..access_scope import can_delete_owned_resource
+from ..access_scope import can_modify_owned_resource
 
 router = APIRouter(prefix="/admin/question-bank", tags=["question-bank"])
 
@@ -68,6 +68,9 @@ def update_question_bank(
     if not db_q:
         raise HTTPException(status_code=404, detail="題目不存在")
 
+    if not can_modify_owned_resource(current_user, db_q.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可編輯此題目")
+
     if q_update.content is not None:
         db_q.content = q_update.content
     if q_update.question_type is not None:
@@ -114,7 +117,7 @@ def bulk_delete_question_bank(
             q = existing_map.get(qid)
             if not q:
                 continue
-            if not can_delete_owned_resource(current_user, q.dept_id):
+            if not can_modify_owned_resource(current_user, q.dept_id):
                 denied_ids.append(qid)
                 continue
             db.delete(q)
@@ -138,7 +141,7 @@ def delete_question_bank(
     if not db_q:
         raise HTTPException(status_code=404, detail="題目不存在")
 
-    if not can_delete_owned_resource(current_user, db_q.dept_id):
+    if not can_modify_owned_resource(current_user, db_q.dept_id):
         raise HTTPException(status_code=403, detail="僅開課單位可刪除此題目")
 
     try:
@@ -162,6 +165,8 @@ def import_questions_to_plan(
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    if not can_modify_owned_resource(current_user, plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可管理此訓練計畫的考題")
         
     # 撈取題目
     questions = db.query(models.QuestionBank).filter(models.QuestionBank.id.in_(question_ids)).all()

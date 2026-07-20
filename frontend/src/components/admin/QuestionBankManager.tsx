@@ -4,7 +4,7 @@ import api from '../../api';
 import QuestionEditorModal from './QuestionEditorModal';
 import Pagination from '../common/Pagination';
 import type { User } from '../../types';
-import { canDeleteOwnedResource } from '../../utils/authGuards';
+import { canModifyOwnedResource } from '../../utils/authGuards';
 
 interface QuestionBankItem {
     id: number;
@@ -195,7 +195,7 @@ const QuestionBankManager = ({ user }: QuestionBankManagerProps) => {
                     <button
                         type="button"
                         onClick={() => setSelectedIds(new Set(
-                            questions.filter((q) => canDeleteOwnedResource(user, q.dept_id)).map((q) => q.id)
+                            questions.filter((q) => canModifyOwnedResource(user, q.dept_id)).map((q) => q.id)
                         ))}
                         className="px-2 py-1 text-xs font-bold rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50 cursor-pointer"
                     >
@@ -247,7 +247,7 @@ const QuestionBankManager = ({ user }: QuestionBankManagerProps) => {
                                         <input
                                             type="checkbox"
                                             checked={selectedIds.has(q.id)}
-                                            disabled={!canDeleteOwnedResource(user, q.dept_id)}
+                                            disabled={!canModifyOwnedResource(user, q.dept_id)}
                                             onChange={(e) => {
                                                 const next = new Set(selectedIds);
                                                 if (e.target.checked) next.add(q.id);
@@ -311,16 +311,17 @@ const QuestionBankManager = ({ user }: QuestionBankManagerProps) => {
                                         <div className="flex justify-end gap-1">
                                             <button
                                                 onClick={() => setEditingQuestion(q)}
-                                                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all hover:scale-110 cursor-pointer"
-                                                title="編輯題目"
+                                                disabled={!canModifyOwnedResource(user, q.dept_id)}
+                                                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all hover:scale-110 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:bg-transparent"
+                                                title={canModifyOwnedResource(user, q.dept_id) ? '編輯題目' : '僅開課單位可編輯'}
                                             >
                                                 <Edit className="w-4 h-4" />
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(q.id)}
-                                                disabled={!canDeleteOwnedResource(user, q.dept_id)}
+                                                disabled={!canModifyOwnedResource(user, q.dept_id)}
                                                 className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all hover:scale-110 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:bg-transparent"
-                                                title={canDeleteOwnedResource(user, q.dept_id) ? '刪除題目' : '僅開課單位可刪除'}
+                                                title={canModifyOwnedResource(user, q.dept_id) ? '刪除題目' : '僅開課單位可刪除'}
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>

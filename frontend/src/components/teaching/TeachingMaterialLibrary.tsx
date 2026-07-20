@@ -15,7 +15,7 @@ import {
 } from '../../api/teachingMaterials';
 import type { MaterialType, MaterialSet, MaterialFileListItem, PlanOption, DepartmentOption } from '../../types/materials';
 import type { User } from '../../types';
-import { canDeleteOwnedResource } from '../../utils/authGuards';
+import { canModifyOwnedResource } from '../../utils/authGuards';
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
@@ -333,21 +333,25 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
                         type="button"
                         onClick={() => {
                             if (rowActionsLocked) return;
+                            if (!canModifyOwnedResource(user, s.dept_id)) return;
                             setUploadOpen(false);
                             setEditingSetId(s.id);
                         }}
-                        disabled={rowActionsLocked}
+                        disabled={rowActionsLocked || !canModifyOwnedResource(user, s.dept_id)}
                         className="p-1.5 text-gray-500 hover:bg-gray-100 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : '編輯'}
+                        title={
+                            rowActionsLocked ? '請先取消目前的編輯／新增再操作'
+                                : canModifyOwnedResource(user, s.dept_id) ? '編輯' : '僅開課單位可編輯'
+                        }
                     >
                         <Pencil className="w-4 h-4" />
                     </button>
                     <button
                         type="button"
                         onClick={() => handleDeleteSet(s)}
-                        disabled={rowActionsLocked || !canDeleteOwnedResource(user, s.dept_id)}
+                        disabled={rowActionsLocked || !canModifyOwnedResource(user, s.dept_id)}
                         className="p-1.5 text-red-500 hover:bg-red-50 rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : canDeleteOwnedResource(user, s.dept_id) ? '停用' : '僅開課單位可刪除'}
+                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : canModifyOwnedResource(user, s.dept_id) ? '停用' : '僅開課單位可刪除'}
                     >
                         <Trash2 className="w-4 h-4" />
                     </button>
@@ -416,12 +420,16 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
                         type="button"
                         onClick={() => {
                             if (rowActionsLocked) return;
+                            if (!canModifyOwnedResource(user, f.dept_id)) return;
                             setUploadOpen(false);
                             setEditingSetId(f.set_id);
                         }}
-                        disabled={rowActionsLocked}
+                        disabled={rowActionsLocked || !canModifyOwnedResource(user, f.dept_id)}
                         className="p-1.5 text-gray-500 hover:bg-gray-100 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : '編輯所屬套組'}
+                        title={
+                            rowActionsLocked ? '請先取消目前的編輯／新增再操作'
+                                : canModifyOwnedResource(user, f.dept_id) ? '編輯所屬套組' : '僅開課單位可編輯'
+                        }
                     >
                         <Pencil className="w-4 h-4" />
                     </button>
@@ -431,9 +439,9 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
                     <button
                         type="button"
                         onClick={() => setPendingRemoveFile({ setId: f.set_id, fileId: f.id, filename: f.original_filename })}
-                        disabled={rowActionsLocked || !canDeleteOwnedResource(user, f.dept_id)}
+                        disabled={rowActionsLocked || !canModifyOwnedResource(user, f.dept_id)}
                         className="p-1.5 text-red-500 hover:bg-red-50 rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : canDeleteOwnedResource(user, f.dept_id) ? '刪除' : '僅開課單位可刪除'}
+                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : canModifyOwnedResource(user, f.dept_id) ? '刪除' : '僅開課單位可刪除'}
                     >
                         <Trash2 className="w-4 h-4" />
                     </button>

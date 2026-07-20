@@ -7,7 +7,7 @@ import SelectedFilesList from './SelectedFilesList';
 import PlanBindingChecklist from './PlanBindingChecklist';
 import type { MaterialType, MaterialSet, PlanOption, DepartmentOption } from '../../types/materials';
 import type { User } from '../../types';
-import { canDeleteOwnedResource } from '../../utils/authGuards';
+import { canModifyOwnedResource } from '../../utils/authGuards';
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
@@ -44,7 +44,7 @@ const MaterialSetEditPanel = ({
     onUpdated, onClose, requireNas, beginTransfer, onUploadProgress,
     endTransferSuccess, endTransferError, closeTransfer, isCancel,
 }: MaterialSetEditPanelProps) => {
-    const canEditDept = canDeleteOwnedResource(user, set.dept_id);
+    const canEdit = canModifyOwnedResource(user, set.dept_id);
     const [title, setTitle] = useState(set.title);
     const [typeId, setTypeId] = useState(String(set.material_type_id));
     const [deptId, setDeptId] = useState(set.dept_id != null ? String(set.dept_id) : '');
@@ -72,7 +72,7 @@ const MaterialSetEditPanel = ({
             title, material_type_id: Number(typeId),
             description: description || null,
             tags: tagsArray.length ? tagsArray : null,
-            ...(canEditDept && deptId ? { dept_id: Number(deptId) } : {}),
+            ...(canEdit && deptId ? { dept_id: Number(deptId) } : {}),
         });
         const withPlans = await updateSetPlans(set.id, planIds);
         onUpdated({ ...updated, plan_ids: withPlans.plan_ids, plan_titles: withPlans.plan_titles });
@@ -257,9 +257,9 @@ const MaterialSetEditPanel = ({
                 <select
                     value={deptId}
                     onChange={e => setDeptId(e.target.value)}
-                    disabled={!canEditDept}
+                    disabled={!canEdit}
                     className="px-3 py-2 border-2 border-amber-200 rounded-lg text-sm font-bold focus:outline-none focus:border-amber-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
-                    title={canEditDept ? undefined : '僅開課單位或超管可變更開課單位'}
+                    title={canEdit ? undefined : '僅開課單位或超管可變更開課單位'}
                 >
                     <option value="">選擇開課單位…</option>
                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}

@@ -7,6 +7,8 @@ import BulkAbsenceReasonModal from './BulkAbsenceReasonModal';
 import Pagination from '../common/Pagination';
 import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
+import type { User } from '../../types';
+import { canModifyOwnedResource } from '../../utils/authGuards';
 
 interface PlanSummary {
   id: number;
@@ -14,6 +16,7 @@ interface PlanSummary {
   training_date: string;
   end_date: string | null;
   year?: string;
+  dept_id?: number | null;
   /** 後端 TrainingPlan 欄位；報到總覽用於禁用封存計畫之未到原因編輯 */
   is_archived?: boolean;
 }
@@ -82,7 +85,7 @@ const getCardClass = (isActive: boolean, palette: 'indigo' | 'green' | 'orange' 
 /**
  * 報到總覽：狀態篩選（正在進行中／已過期／已封存／全部）＋搜尋，表格含操作欄可查看報到統計。
  */
-const AttendanceOverviewPage = () => {
+const AttendanceOverviewPage = ({ user }: { user: User }) => {
   const [planStatusFilter, setPlanStatusFilter] = useState<PlanStatusFilter>('active');
   const [searchTerm, setSearchTerm] = useState('');
   const [plans, setPlans] = useState<PlanSummary[]>([]);
@@ -138,6 +141,10 @@ const AttendanceOverviewPage = () => {
   const handleToggleQrPanel = async (plan: PlanSummary) => {
     if (qrPanelOpen) {
       setQrPanelOpen(false);
+      return;
+    }
+    if (!canModifyOwnedResource(user, plan.dept_id)) {
+      alert('僅開課單位或超管可產生報到 QRcode');
       return;
     }
     setQrPanelOpen(true);
@@ -476,7 +483,9 @@ const AttendanceOverviewPage = () => {
                 <button
                   type="button"
                   onClick={() => { void handleToggleQrPanel(modalPlan); }}
-                  className={`px-3 py-1.5 min-h-11 text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 ${
+                  disabled={!canModifyOwnedResource(user, modalPlan.dept_id) && !qrPanelOpen}
+                  title={canModifyOwnedResource(user, modalPlan.dept_id) ? undefined : '僅開課單位或超管可產生報到 QRcode'}
+                  className={`px-3 py-1.5 min-h-11 text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed ${
                     qrPanelOpen ? 'bg-indigo-700 text-white' : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50'
                   }`}
                 >

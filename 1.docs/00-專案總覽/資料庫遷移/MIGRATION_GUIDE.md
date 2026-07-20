@@ -399,7 +399,7 @@ PRAGMA table_info(exam_retake_authorizations);  -- 應含 consumed_history_id
 
 #### 開課單位擁有權（2026-07-17）
 
-新增 `question_bank.dept_id`、`teaching_material_sets.dept_id`（皆 nullable，NULL＝不受 owner 限制，既有資料免回填）。搭配 `access_scope.can_delete_owned_resource()`：僅開課單位或超管／系統管理角色可刪除訓練計畫、歷史題庫題目、教材套組／檔案。
+新增 `question_bank.dept_id`、`teaching_material_sets.dept_id`（皆 nullable，NULL＝不受 owner 限制，既有資料免回填）。搭配 `access_scope.can_modify_owned_resource()`：僅開課單位或超管／系統管理角色可**編輯／刪除／封存**訓練計畫、歷史題庫題目、教材套組／檔案（計畫另含產生報到 QR）。
 對應：`backend/migrations/add_owner_dept_fields.py`；PLAN／TASKS：[`20260717_報到-訓練計畫-教材-題庫_新增需求`](../../02-棕地專案/plans/20260717_報到-訓練計畫-教材-題庫_新增需求_PLAN.md)。
 
 **本機開發**：
@@ -427,6 +427,15 @@ docker compose exec training-backend python migrations/add_owner_dept_fields.py
 PRAGMA table_info(question_bank);            -- 應含 dept_id
 PRAGMA table_info(teaching_material_sets);   -- 應含 dept_id
 ```
+
+##### 症狀：歷史題庫／考卷工坊題庫維護顯示 HTTP 500（本機正常、ds1 Docker 異常）
+
+| 項目 | 說明 |
+|------|------|
+| **現象** | 部署新映像後，`GET /api/admin/question-bank/` 回 500；前端題庫維護頁顯示「HTTP 500」。本機開發環境可能已跑過遷移故正常 |
+| **根因** | 後端 model／schema 已使用 `question_bank.dept_id`，但正式／測試 DB **尚未執行** `add_owner_dept_fields.py`（典型 SQLAlchemy：`no such column: question_bank.dept_id`） |
+| **解法** | 依上方「ds1 Docker」備份後執行遷移；成功後重開題庫頁即可。**只換映像不跑遷移必現此症** |
+| **一併建議** | 同批部署請一併執行 `add_attendance_emp_plan_unique.py`（見「報到 UNIQUE」小節） |
 
 #### ds1 Docker：遷移後設定 AD 環境變數（必做，否則「AD 管理」顯示未啟用）
 

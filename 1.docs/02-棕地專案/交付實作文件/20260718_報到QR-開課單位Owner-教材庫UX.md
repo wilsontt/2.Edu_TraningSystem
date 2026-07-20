@@ -10,7 +10,7 @@
 ## 1. 目的
 
 1. 上課前／考試時共用報到 QR；登入後必回報到頁並自動報到；成功頁顯示訓練名稱。  
-2. 開課單位 Owner 防誤刪（題庫／教材／訓練計畫）。  
+2. 開課單位 Owner：**編輯／刪除／封存**（計畫另含產生報到 QR；**考卷工坊考題**依計畫 `dept_id`）僅開課單位或超管；其餘僅檢視／下載。  
 3. 教材庫編輯鎖、檔案檢視可刪；報到總覽統計 Modal 內嵌 QR 並縮卡片放大 QR。  
 4. `attendance_records` 補 UNIQUE，避免同一人兩列。
 
@@ -24,7 +24,7 @@
 | QR 入口 | 訓練計畫操作欄＋報到總覽「顯示 QRcode」；非系統管理登入 QR |
 | returnTo | 僅 `/checkin…`；`LoginReturnRedirect` 防止登入後被導回首頁 |
 | 計畫名稱 | `attendance/status` 與 `checkin` 回傳 `plan_title` |
-| Owner | `dept_id`；超管例外；NULL 不限制 |
+| Owner | `dept_id`；超管例外；NULL 不限制；**寫入**含編輯／刪除／封存（計畫含產生 QR） |
 | 教材刪除 | 軟刪（`is_active`）；無 NAS 救回產品流程 |
 
 ---
@@ -49,7 +49,17 @@ cd backend
 .venv/bin/python3 migrations/add_attendance_emp_plan_unique.py
 ```
 
-詳見 [MIGRATION_GUIDE](../../00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md)。
+**ds1 Docker（必跑，否則歷史題庫 HTTP 500）**：
+
+```bash
+cd /opt/apps/enterprise-portal/deploy
+cp -a "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/education_training.db" \
+      "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/education_training.db.bak.$(date +%Y%m%d_%H%M%S)"
+docker compose exec training-backend python migrations/add_owner_dept_fields.py
+docker compose exec training-backend python migrations/add_attendance_emp_plan_unique.py
+```
+
+詳見 [MIGRATION_GUIDE](../../00-專案總覽/資料庫遷移/MIGRATION_GUIDE.md)「開課單位擁有權」症狀表、[生產部署指南](../../00-專案總覽/生產部署指南.md) §5.7。
 
 ---
 
@@ -59,5 +69,5 @@ cd backend
 - [x] lint／build（既有無關項除外）  
 - [ ] 未登入掃碼 → 自動報到＋計畫名稱  
 - [ ] 統計無重複列；Modal QR 版面  
-- [ ] Owner／超管刪除行為  
+- [ ] Owner／超管：**編輯／刪除／封存**行為（非 Owner 403／檢視模式）  
 - [ ] 教材編輯鎖與檔案刪除  
