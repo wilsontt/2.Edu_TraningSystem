@@ -399,7 +399,7 @@ PRAGMA table_info(exam_retake_authorizations);  -- 應含 consumed_history_id
 
 #### 開課單位擁有權（2026-07-17）
 
-新增 `question_bank.dept_id`、`teaching_material_sets.dept_id`（皆 nullable，NULL＝不受 owner 限制，既有資料免回填）。搭配 `access_scope.can_modify_owned_resource()`：僅開課單位或超管／系統管理角色可**編輯／刪除／封存**訓練計畫、歷史題庫題目、教材套組／檔案（計畫另含產生報到 QR）。
+新增 `question_bank.dept_id`、`teaching_material_sets.dept_id`（皆 nullable，NULL＝不受 owner 限制，既有資料免回填）。搭配 `access_scope.can_modify_owned_resource()`：僅開課單位或超管／系統管理角色可**編輯／刪除／封存**訓練計畫、歷史題庫題目、教材套組／檔案、**考卷工坊所選計畫之考題**（考題依 `TrainingPlan.dept_id` 判斷；計畫另含產生報到 QR）。非開課單位僅能檢視／下載。
 對應：`backend/migrations/add_owner_dept_fields.py`；PLAN／TASKS：[`20260717_報到-訓練計畫-教材-題庫_新增需求`](../../02-棕地專案/plans/20260717_報到-訓練計畫-教材-題庫_新增需求_PLAN.md)。
 
 **本機開發**：

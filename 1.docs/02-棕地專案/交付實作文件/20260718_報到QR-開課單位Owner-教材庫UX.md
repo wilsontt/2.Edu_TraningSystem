@@ -1,7 +1,7 @@
 # 報到 QR／開課單位 Owner／教材庫 UX
 
-**日期**：2026-07-17～18  
-**狀態**：✅ 已實作（分支 `feature/checkin-owner-scope-20260717`）；人工瀏覽器驗收待勾選  
+**日期**：2026-07-17～20  
+**狀態**：✅ 已實作（分支 `feature/checkin-owner-scope-20260717`，commit `f21478b`）；人工瀏覽器驗收待勾選  
 **PLAN**：[../plans/20260717_報到-訓練計畫-教材-題庫_新增需求_PLAN.md](../plans/20260717_報到-訓練計畫-教材-題庫_新增需求_PLAN.md)  
 **TASKS**：[../tasks/20260717_報到-訓練計畫-教材-題庫_新增需求_TASKS.md](../tasks/20260717_報到-訓練計畫-教材-題庫_新增需求_TASKS.md)
 
@@ -10,9 +10,10 @@
 ## 1. 目的
 
 1. 上課前／考試時共用報到 QR；登入後必回報到頁並自動報到；成功頁顯示訓練名稱。  
-2. 開課單位 Owner：**編輯／刪除／封存**（計畫另含產生報到 QR；**考卷工坊考題**依計畫 `dept_id`）僅開課單位或超管；其餘僅檢視／下載。  
+2. 開課單位 Owner：**寫入權**（編輯／刪除／封存；計畫另含產生報到 QR）僅開課單位或超管；涵蓋訓練計畫、題庫、教材套組／檔、**考卷工坊計畫考題**；其餘僅檢視／下載。  
 3. 教材庫編輯鎖、檔案檢視可刪；報到總覽統計 Modal 內嵌 QR 並縮卡片放大 QR。  
-4. `attendance_records` 補 UNIQUE，避免同一人兩列。
+4. `attendance_records` 補 UNIQUE，避免同一人兩列。  
+5. 考卷工坊 `list_materials` NAS 不可達時仍可讀題目（200 空陣列＋前端提示）。
 
 ---
 
@@ -21,11 +22,13 @@
 | 項目 | 定案 |
 |------|------|
 | 報到資料 | 單一 `attendance_records`；`UNIQUE(emp_id, plan_id)`；checkin 冪等 |
-| QR 入口 | 訓練計畫操作欄＋報到總覽「顯示 QRcode」；非系統管理登入 QR |
+| QR 入口 | 訓練計畫操作欄＋報到總覽「顯示 QRcode」；非系統管理登入 QR；產生 QR 需 Owner |
 | returnTo | 僅 `/checkin…`；`LoginReturnRedirect` 防止登入後被導回首頁 |
 | 計畫名稱 | `attendance/status` 與 `checkin` 回傳 `plan_title` |
-| Owner | `dept_id`；超管例外；NULL 不限制；**寫入**含編輯／刪除／封存（計畫含產生 QR） |
+| Owner | `dept_id`；超管例外；NULL 不限制；**寫入**含編輯／刪除／封存 |
+| 考卷工坊 | 考題 Owner 依 `TrainingPlan.dept_id`；非 Owner 檢視模式 |
 | 教材刪除 | 軟刪（`is_active`）；無 NAS 救回產品流程 |
+| NAS list | `GET …/materials/{plan_id}` 不可達 → 200 `[]` + `X-NAS-Unavailable: 1` |
 
 ---
 
@@ -34,9 +37,9 @@
 | 層 | 路徑 |
 |----|------|
 | 遷移 | `backend/migrations/add_owner_dept_fields.py`、`add_attendance_emp_plan_unique.py` |
-| 後端 | `access_scope.py`、`models.py`、`schemas.py`、`exam_center.py`、`training.py`、`exam.py`、`question_bank.py`、`teaching_material_sets.py`、`auth.py`（`/me` 的 `dept_id`） |
-| 前端 | `App.tsx`、`LoginPage.tsx`、`CheckInPage.tsx`、`AttendanceOverviewPage.tsx`、`TrainingPlanManager.tsx`、`QuestionBankManager.tsx`、`TeachingMaterialLibrary.tsx`、教材 Upload／Edit／Plan 區、`authGuards.ts` |
-| 測試 | `tests/test_owner_scope.py`、`tests/test_attendance_checkin_idempotent.py` |
+| 後端 | `access_scope.py`、`training.py`、`question_bank.py`、`teaching_material_sets.py`、`exam.py`、`exam_center.py`、`main.py`（CORS） |
+| 前端 | `App.tsx`、`LoginPage.tsx`、`CheckInPage.tsx`、`TrainingPlanManager.tsx`、`AttendanceOverviewPage.tsx`、`ExamStudio.tsx`、`QuestionBankManager.tsx`、`TeachingMaterialLibrary.tsx`、教材 Upload／Edit／Plan 區、`authGuards.ts` |
+| 測試 | `tests/test_owner_scope.py`（14）、`tests/test_attendance_checkin_idempotent.py`、`tests/test_exam_list_materials_nas.py` |
 
 ---
 
@@ -65,9 +68,10 @@ docker compose exec training-backend python migrations/add_attendance_emp_plan_u
 
 ## 5. 驗收
 
-- [x] pytest（Owner、checkin 冪等、教材套組 dept_id）  
+- [x] pytest（Owner 寫入權 14 項、checkin 冪等、NAS list、教材套組 dept_id）  
 - [x] lint／build（既有無關項除外）  
 - [ ] 未登入掃碼 → 自動報到＋計畫名稱  
 - [ ] 統計無重複列；Modal QR 版面  
-- [ ] Owner／超管：**編輯／刪除／封存**行為（非 Owner 403／檢視模式）  
+- [ ] Owner／超管：**編輯／刪除／封存**（含考卷工坊考題；非 Owner 403／檢視模式）  
 - [ ] 教材編輯鎖與檔案刪除  
+- [ ] NAS 不可達時考卷工坊仍可讀題目、琥珀色提示  
