@@ -7,6 +7,7 @@ import BulkAbsenceReasonModal from './BulkAbsenceReasonModal';
 import Pagination from '../common/Pagination';
 import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
+import { matchesPlanSearch } from '../../utils/planSearch';
 import type { User } from '../../types';
 
 interface PlanSummary {
@@ -450,13 +451,16 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
   }, [fetchPlans]);
 
   const filteredPlans = useMemo(() => {
-    const k = searchTerm.trim().toLowerCase();
-    if (!k) return plans;
-    return plans.filter(
-      (p) =>
-        p.title.toLowerCase().includes(k) ||
-        p.training_date.includes(k) ||
-        (p.year ?? '').toLowerCase().includes(k),
+    return plans.filter((p) =>
+      matchesPlanSearch(
+        {
+          title: p.title,
+          year: p.year ?? '',
+          training_date: p.training_date,
+          end_date: p.end_date,
+        },
+        searchTerm,
+      ),
     );
   }, [plans, searchTerm]);
 
@@ -614,7 +618,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="search"
-            placeholder="搜尋訓練計畫..."
+            placeholder="搜尋名稱、年份或訓練日期..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200"
