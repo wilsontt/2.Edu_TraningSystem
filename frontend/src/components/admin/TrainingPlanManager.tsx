@@ -16,6 +16,7 @@ import BulkAbsenceReasonModal from '../attendance/BulkAbsenceReasonModal';
 import PlanMaterialsSection from '../teaching/PlanMaterialsSection';
 import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
+import { matchesPlanSearch } from '../../utils/planSearch';
 
 // ----------------------------------------------------------------
 // 型別定義 (Type Definitions)
@@ -636,9 +637,18 @@ const TrainingPlanManager = () => {
   };
 
   const filteredPlans = useMemo(() => {
-    const result = plans.filter(plan => 
-      plan.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      plan.year.includes(searchTerm)
+    const result = plans.filter((plan) =>
+      matchesPlanSearch(
+        {
+          title: plan.title,
+          year: plan.year,
+          training_date: plan.training_date,
+          end_date: plan.end_date,
+          deptName: getDeptName(plan.dept_id),
+          categoryName: plan.sub_category?.name,
+        },
+        searchTerm,
+      ),
     );
 
     if (sortField) {
@@ -935,7 +945,7 @@ const TrainingPlanManager = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="搜尋計畫名稱或年份..."
+              placeholder="搜尋名稱、年份、訓練日期、單位或分類..."
               className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200 font-bold"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
