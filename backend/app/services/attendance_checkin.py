@@ -34,6 +34,16 @@ def plan_is_active_for_batch(plan: models.TrainingPlan, today: Optional[date] = 
     return True
 
 
+def checkin_user_brief(user: models.User) -> dict[str, str]:
+    """報到 API 回傳用：部門名稱、員工編號、姓名。"""
+    dept = user.department.name if user.department else "未知"
+    return {
+        "emp_id": user.emp_id,
+        "name": user.name,
+        "dept_name": dept,
+    }
+
+
 def append_checkin_event(
     db: Session,
     *,

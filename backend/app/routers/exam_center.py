@@ -22,6 +22,7 @@ from .auth import get_current_user
 from ..access_scope import get_scope_emp_ids, get_role_scope_type, is_active_user_status
 from ..services.attendance_checkin import (
     append_checkin_event,
+    checkin_user_brief,
     client_ip_from_request,
     now_utc_naive,
     user_in_plan_targets,
@@ -1659,6 +1660,7 @@ def check_in_attendance(
     has_exam = question_count > 0
     client_ip = client_ip_from_request(request)
     event_time = now_utc_naive()
+    user_brief = checkin_user_brief(current_user)
 
     existing = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.emp_id == current_user.emp_id,
@@ -1683,6 +1685,7 @@ def check_in_attendance(
             "plan_title": plan.title,
             "question_count": question_count,
             "has_exam": has_exam,
+            "checked_in_user": user_brief,
         }
 
     today = date.today()
@@ -1738,6 +1741,7 @@ def check_in_attendance(
                 "plan_title": plan.title,
                 "question_count": question_count,
                 "has_exam": has_exam,
+                "checked_in_user": user_brief,
             }
         raise HTTPException(status_code=500, detail="報到失敗：寫入衝突")
     except Exception as e:
@@ -1750,6 +1754,7 @@ def check_in_attendance(
         "plan_title": plan.title,
         "question_count": question_count,
         "has_exam": has_exam,
+        "checked_in_user": user_brief,
     }
 
 
@@ -1781,6 +1786,7 @@ def check_in_attendance_batch(
 
     client_ip = client_ip_from_request(request)
     event_time = now_utc_naive()
+    user_brief = checkin_user_brief(current_user)
     succeeded: list[dict] = []
     skipped: list[dict] = []
 
@@ -1890,4 +1896,5 @@ def check_in_attendance_batch(
         "batch_label": batch.label,
         "succeeded": succeeded,
         "skipped": skipped,
+        "checked_in_user": user_brief,
     }

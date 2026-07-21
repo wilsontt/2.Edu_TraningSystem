@@ -6,10 +6,42 @@ import api from '../../api';
 import { parseBackendDateTime } from '../../utils/date';
 import type { User } from '../../types';
 
+type CheckInUserBrief = {
+  emp_id: string;
+  name: string;
+  dept_name: string;
+};
+
 /** 報到完成頁顯示：部門名稱 · 員工編號 · 姓名 */
-function formatCheckInUserLabel(user: User): string {
+function formatCheckInUserBriefLabel(brief: CheckInUserBrief): string {
+  const dept = (brief.dept_name || '').trim() || '未知部門';
+  return `${dept} · ${brief.emp_id} · ${brief.name}`;
+}
+
+function formatSessionUserLabel(user: User): string {
   const dept = (user.dept_name || '').trim() || (user.role === 'Admin' ? 'IT管理員' : '未知部門');
   return `${dept} · ${user.emp_id} · ${user.name}`;
+}
+
+function CheckInUserBanner({
+  apiUser,
+  sessionUser,
+}: {
+  apiUser?: CheckInUserBrief | null;
+  sessionUser?: User | null;
+}) {
+  const label = apiUser
+    ? formatCheckInUserBriefLabel(apiUser)
+    : sessionUser
+      ? formatSessionUserLabel(sessionUser)
+      : null;
+  if (!label) return null;
+  return (
+    <div className="mb-4 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 text-left">
+      <p className="text-xs font-bold text-indigo-600 mb-1">報到人</p>
+      <p className="text-sm font-bold text-gray-900 break-words">{label}</p>
+    </div>
+  );
 }
 
 interface CheckInPageProps {
@@ -21,6 +53,7 @@ type CheckInResult = {
   plan_title?: string;
   question_count?: number;
   has_exam?: boolean;
+  checked_in_user?: CheckInUserBrief;
 };
 
 type BatchPlanCheckinResult = {
@@ -36,6 +69,7 @@ type BatchCheckInResult = {
   batch_label: string;
   succeeded: BatchPlanCheckinResult[];
   skipped: BatchPlanCheckinResult[];
+  checked_in_user?: CheckInUserBrief;
 };
 
 const SKIPPED_RESULT_LABELS: Record<string, string> = {
@@ -62,7 +96,29 @@ const CheckInPage = ({ user }: CheckInPageProps) => {
   const [planTitle, setPlanTitle] = useState<string>('');
   const [hasExam, setHasExam] = useState(false);
   const [batchResult, setBatchResult] = useState<BatchCheckInResult | null>(null);
+  const [checkedInUserFromApi, setCheckedInUserFromApi] = useState<CheckInUserBrief | null>(null);
+  const [sessionUser, setSessionUser] = useState<User | null>(user);
   const autoStartedRef = useRef(false);
+
+  useEffect(() => {
+    setSessionUser(user);
+  }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadMe = async () => {
+      try {
+        const res = await api.get<User>('/auth/me');
+        if (!cancelled) setSessionUser(res.data);
+      } catch {
+        /* 沿用 App 傳入的 user */
+      }
+    };
+    void loadMe();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const applyExamMeta = (data: { question_count?: number; has_exam?: boolean }) => {
     const count = typeof data.question_count === 'number' ? data.question_count : 0;
@@ -91,6 +147,9 @@ const CheckInPage = ({ user }: CheckInPageProps) => {
       setError(null);
       const result = await promise;
       setBatchResult(result);
+      if (result.checked_in_user) {
+        setCheckedInUserFromApi(result.checked_in_user);
+      }
       setPlanTitle(result.batch_label || '合併報到');
       setHasExam(false);
       const firstSuccess = result.succeeded[0];
@@ -117,12 +176,13 @@ const CheckInPage = ({ user }: CheckInPageProps) => {
     if (!planId) return false;
 
     const run = async (): Promise<CheckInResult> => {
-      const res = await api.post(`/exam/plan/${planId}/attendance/checkin`);
+      const res = await api.post<CheckInResult>(`/exam/plan/${planId}/attendance/checkin`);
       return {
         checkin_time: res.data.checkin_time || new Date().toISOString(),
         plan_title: res.data.plan_title,
         question_count: res.data.question_count,
         has_exam: res.data.has_exam,
+        checked_in_user: res.data.checked_in_user,
       };
     };
 
@@ -139,6 +199,9 @@ const CheckInPage = ({ user }: CheckInPageProps) => {
       setError(null);
       const result = await promise;
       if (result.plan_title) setPlanTitle(result.plan_title);
+      if (result.checked_in_user) {
+        setCheckedInUserFromApi(result.checked_in_user);
+      }
       applyExamMeta(result);
       setAttendanceStatus({
         is_checked_in: true,
@@ -264,9 +327,10 @@ const CheckInPage = ({ user }: CheckInPageProps) => {
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">合併報到完成</h2>
-          <p className="text-sm text-gray-600 mb-3 font-medium">
-            報到人：{formatCheckInUserLabel(user)}
-          </p>
+          <CheckInUserBanner
+            apiUser={batchResult.checked_in_user ?? checkedInUserFromApi}
+            sessionUser={sessionUser}
+          />
           <p className="text-gray-800 mb-2 font-bold text-lg">
             {batchResult.batch_label || planTitle || '合併報到'}
           </p>
@@ -337,9 +401,7 @@ const CheckInPage = ({ user }: CheckInPageProps) => {
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">報到成功</h2>
-          <p className="text-sm text-gray-600 mb-3 font-medium">
-            報到人：{formatCheckInUserLabel(user)}
-          </p>
+          <CheckInUserBanner apiUser={checkedInUserFromApi} sessionUser={sessionUser} />
           <p className="text-gray-800 mb-2 font-bold text-lg">
             {planTitle || '訓練計畫'}
           </p>

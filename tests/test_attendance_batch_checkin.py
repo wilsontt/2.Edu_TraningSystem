@@ -152,6 +152,8 @@ def test_batch_checkin_and_close(client, in_memory_db):
         cin = client.post(f"/api/exam/attendance/batches/{batch_id}/checkin")
         assert cin.status_code == 200, cin.text
         body = cin.json()
+        assert body.get("checked_in_user", {}).get("emp_id") == "trainee-batch"
+        assert body.get("checked_in_user", {}).get("name") == "學員甲"
         assert len(body["succeeded"]) == 3
         assert len(body["skipped"]) == 0
 

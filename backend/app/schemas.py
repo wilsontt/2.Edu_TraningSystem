@@ -331,12 +331,20 @@ class AttendanceStatus(BaseModel):
     question_count: int = 0  # 供報到成功頁判斷是否顯示「開始考試」
     has_exam: bool = False
 
+class CheckInUserBrief(BaseModel):
+    """報到完成頁顯示之報到人摘要。"""
+    emp_id: str
+    name: str
+    dept_name: str
+
+
 class CheckInResponse(BaseModel):
     success: bool
     checkin_time: datetime
     plan_title: Optional[str] = None
     question_count: int = 0
     has_exam: bool = False
+    checked_in_user: Optional[CheckInUserBrief] = None
 
 
 # --- 合併報到批次 / 歷程 ---
@@ -404,6 +412,7 @@ class BatchCheckInResponse(BaseModel):
     batch_label: str
     succeeded: List[BatchPlanCheckinResult] = []
     skipped: List[BatchPlanCheckinResult] = []
+    checked_in_user: Optional[CheckInUserBrief] = None
 
 
 class AttendanceCheckinEventOut(BaseModel):
