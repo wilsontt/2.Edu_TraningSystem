@@ -399,9 +399,10 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
       );
       setBatchModal((prev) => ({
         ...res.data,
-        // 關閉時後端可能清空 qrcode_url；保留先前圖檔以便灰階顯示
-        qrcode_url: res.data.qrcode_url ?? prev?.qrcode_url ?? null,
-        checkin_url: res.data.checkin_url ?? prev?.checkin_url ?? null,
+        // 關閉時後端回傳 null，不從 prev 補回（避免顯示已失效的 URL）
+        // 僅在開啟狀態且後端未給圖時，保留 prev 圖檔（開啟中不會清空）
+        qrcode_url: res.data.status === 'closed' ? null : (res.data.qrcode_url ?? prev?.qrcode_url ?? null),
+        checkin_url: res.data.checkin_url ?? null,
       }));
       await refreshBatchStats(res.data.id);
     } catch (err: unknown) {
@@ -1361,12 +1362,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                 <div className="lg:w-72 shrink-0 flex flex-col items-center gap-3">
                   {batchModal.status === 'closed' ? (
                     <div className="w-56 h-56 rounded-xl bg-gray-100 border border-gray-200 flex flex-col items-center justify-center gap-2 opacity-60">
-                      {batchModal.qrcode_url ? (
-                        <img src={batchModal.qrcode_url} alt="合併報到 QRcode" className="w-44 h-44 grayscale opacity-50" />
-                      ) : (
-                        <QrCode className="w-20 h-20 text-gray-300" />
-                      )}
-                      <p className="text-sm font-bold text-gray-500">此合併報到已關閉</p>
+                      <QrCode className="w-20 h-20 text-gray-300" />
                     </div>
                   ) : batchModal.qrcode_url ? (
                     <img
@@ -1380,7 +1376,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                     </div>
                   )}
                   <p className="text-sm font-black text-gray-900 text-center">{batchModal.label}</p>
-                  {batchModal.checkin_url && (
+                  {batchModal.status !== 'closed' && batchModal.checkin_url && (
                     <div className="flex items-center gap-2 text-xs w-full">
                       <span className="font-mono text-gray-600 bg-indigo-50 px-2 py-1.5 rounded-lg border border-indigo-100 flex-1 truncate">
                         {batchModal.checkin_url}
@@ -1430,6 +1426,11 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  )}
+                  {batchModal.status === 'closed' && (
+                    <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">
+                      此合併報到已關閉，員工掃描 QR 將無法報到。
                     </div>
                   )}
                 </div>

@@ -104,7 +104,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const handleEmpLogin = async (e: FormEvent) => {
     e.preventDefault();
     if (!empId || !captchaText) { setEmpError('請輸入員工編號與驗證碼'); return; }
-    if (empId.toLowerCase() !== 'admin' && !/^[0-9]{1,6}$/.test(empId)) {
+    if (!/^[0-9]{1,6}$/.test(empId)) {
       setEmpError('員工編號必須是 1–6 碼的數字');
       return;
     }
@@ -372,30 +372,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     className="block w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium"
                     value={empId}
                     onChange={(e) => {
-                      let value = e.target.value;
-                      if (isRegister) {
-                        value = value.replace(/[^0-9]/g, '').slice(0, 10);
-                      } else {
-                        const lowerValue = value.toLowerCase();
-                        if (lowerValue === 'admin' || lowerValue.startsWith('admin')) {
-                          value = 'admin';
-                        } else if (/^[0-9]*$/.test(value)) {
-                          value = value.slice(0, 6);
-                        } else if (/^[a-zA-Z]*$/.test(value)) {
-                          const lower = value.toLowerCase();
-                          if (lower.startsWith('admin')) {
-                            value = 'admin';
-                          } else if (!'admin'.startsWith(lower)) {
-                            value = '';
-                          }
-                        } else {
-                          value = value.replace(/[^0-9]/g, '').slice(0, 6);
-                        }
-                      }
+                      const value = e.target.value.replace(/[^0-9]/g, '').slice(0, isRegister ? 10 : 6);
                       setEmpId(value);
                     }}
                     maxLength={isRegister ? 10 : 6}
-                    inputMode={isRegister ? 'numeric' : 'text'}
+                    inputMode="numeric"
                   />
                 </div>
               </div>

@@ -219,17 +219,16 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    emp_id: str = Field(..., min_length=1, max_length=10)
+    emp_id: str = Field(..., min_length=1, max_length=6)
     captcha_id: str
     answer: str
 
     @field_validator("emp_id")
     @classmethod
     def validate_emp_id(cls, v: str) -> str:
-        v_lower = v.lower()
-        if v_lower != "admin" and not re.match(r"^[0-9]{1,10}$", v):
-            raise ValueError("員工編號必須是 1-10 碼的數字")
-        return v_lower if v_lower == "admin" else v
+        if not re.match(r"^[0-9]{1,6}$", v):
+            raise ValueError("員工編號必須是 1–6 碼的數字")
+        return v
 
 
 @router.get("/departments", response_model=List[schemas.Department])

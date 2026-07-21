@@ -1133,6 +1133,23 @@ def create_attendance_batch(
     return _batch_to_out(batch, qrcode_url=qrcode_url, checkin_url=checkin_url)
 
 
+@router.get("/attendance/batches/{batch_id}/public-status")
+def get_attendance_batch_public_status(
+    batch_id: str,
+    db: Session = Depends(get_db),
+):
+    """公開端點（不需登入）：僅回傳 batch 的開放狀態，供掃碼後判斷是否已關閉。"""
+    batch = (
+        db.query(models.AttendanceCheckinBatch)
+        .filter(models.AttendanceCheckinBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="合併報到批次不存在")
+    active = batch.status in ("open", "reopened")
+    return {"batch_id": batch.id, "status": batch.status, "active": active}
+
+
 @router.get("/attendance/batches/{batch_id}", response_model=schemas.AttendanceBatchOut)
 def get_attendance_batch(
     batch_id: str,

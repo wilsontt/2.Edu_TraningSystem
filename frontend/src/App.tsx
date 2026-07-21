@@ -3,7 +3,7 @@
  * 負責全域狀態管理 (使用者資訊、登入狀態)、路由配置 (React Router) 以及響應式導覽列 (Navbar)。
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { LayoutDashboard, BookOpen, PenTool, BarChart3, Settings, LogOut, ChevronDown, Menu, X, ClipboardList } from 'lucide-react';
 import api from './api';
@@ -295,12 +295,55 @@ function safeCheckinReturnTo(raw: string | null): string | null {
 
 /**
  * 未登入時導向 /login，並帶上 returnTo（僅允許 /checkin 開頭的相對路徑，避免 open redirect）。
- * 讓報到 QRcode 掃碼未登入時，登入成功後能直接導回報到頁面。
+ * 若 returnTo 含 batch_id，先查公開 API 確認批次仍開放；已關閉則顯示結束畫面，不進行登入。
  */
 function RedirectToLoginWithReturnTo() {
   const location = useLocation();
   const fullPath = `${location.pathname}${location.search}`;
   const returnTo = safeCheckinReturnTo(fullPath);
+  const [checking, setChecking] = useState(true);
+  const [batchClosed, setBatchClosed] = useState(false);
+
+  const batchId = returnTo
+    ? new URLSearchParams(returnTo.split('?')[1] ?? '').get('batch_id')
+    : null;
+
+  const checkBatch = useCallback(async () => {
+    if (!batchId) { setChecking(false); return; }
+    try {
+      const res = await api.get<{ active: boolean }>(`/training/attendance/batches/${batchId}/public-status`);
+      if (!res.data.active) setBatchClosed(true);
+    } catch {
+      /* 查不到批次時讓後續 checkin API 自行回傳 400 */
+    } finally {
+      setChecking(false);
+    }
+  }, [batchId]);
+
+  useEffect(() => { void checkBatch(); }, [checkBatch]);
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (batchClosed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center">
+          <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl">🔒</span>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">合併報到已結束</h2>
+          <p className="text-sm text-gray-500">此合併報到已關閉，請洽承辦人或使用各計畫補報 QR。</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Navigate
       to={returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : '/login'}
