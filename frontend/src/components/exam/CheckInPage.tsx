@@ -4,6 +4,17 @@ import { CheckCircle, AlertCircle, Loader2, Clock, ArrowLeft } from 'lucide-reac
 import { AxiosError } from 'axios';
 import api from '../../api';
 import { parseBackendDateTime } from '../../utils/date';
+import type { User } from '../../types';
+
+/** 報到完成頁顯示：部門名稱 · 員工編號 · 姓名 */
+function formatCheckInUserLabel(user: User): string {
+  const dept = (user.dept_name || '').trim() || (user.role === 'Admin' ? 'IT管理員' : '未知部門');
+  return `${dept} · ${user.emp_id} · ${user.name}`;
+}
+
+interface CheckInPageProps {
+  user: User;
+}
 
 type CheckInResult = {
   checkin_time?: string;
@@ -36,7 +47,7 @@ const SKIPPED_RESULT_LABELS: Record<string, string> = {
 /** 模組級 Promise：Strict Mode 雙掛載共用同一請求，避免雙寫與第二掛載空手返回。 */
 const checkinPromises = new Map<string, Promise<CheckInResult | BatchCheckInResult>>();
 
-const CheckInPage = () => {
+const CheckInPage = ({ user }: CheckInPageProps) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const planId = searchParams.get('plan_id');
@@ -253,6 +264,9 @@ const CheckInPage = () => {
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">合併報到完成</h2>
+          <p className="text-sm text-gray-600 mb-3 font-medium">
+            報到人：{formatCheckInUserLabel(user)}
+          </p>
           <p className="text-gray-800 mb-2 font-bold text-lg">
             {batchResult.batch_label || planTitle || '合併報到'}
           </p>
@@ -323,6 +337,9 @@ const CheckInPage = () => {
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">報到成功</h2>
+          <p className="text-sm text-gray-600 mb-3 font-medium">
+            報到人：{formatCheckInUserLabel(user)}
+          </p>
           <p className="text-gray-800 mb-2 font-bold text-lg">
             {planTitle || '訓練計畫'}
           </p>

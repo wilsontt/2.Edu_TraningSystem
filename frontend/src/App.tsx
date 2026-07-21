@@ -378,7 +378,7 @@ const App = () => {
                 <Navbar user={user} onLogout={handleLogout} />
                 <main className="max-w-7xl mx-auto px-4 md:px-6">
                   <Routes>
-                    <Route path="/checkin" element={<CheckInPage />} />
+                    <Route path="/checkin" element={<CheckInPage user={user} />} />
                     <Route path="/" element={<ExamDashboard />} />
                     <Route path="/exam/run/:planId" element={<ExamRunner />} />
                     <Route path="/plans" element={user.functions?.includes('menu:plan') || user.role === 'Admin' ? <TrainingPlanManager user={user} /> : <Navigate to="/" />} />
