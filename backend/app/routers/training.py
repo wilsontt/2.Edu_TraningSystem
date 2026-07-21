@@ -1071,7 +1071,10 @@ def create_attendance_batch(
     db: Session = Depends(get_db),
     current_user=check_permission("menu:attendance-overview"),
 ):
-    """建立合併報到批次（≥2 場、同日、active）。"""
+    """建立合併報到批次（≥2 場、進行中未封存；不限同一開始日）。
+
+    `training_date` 為場次／報到日（可與各計畫開始日不同）；未傳則用今日。
+    """
     import uuid
     import logging
 
@@ -1088,17 +1091,13 @@ def create_attendance_batch(
         raise HTTPException(status_code=404, detail="部分訓練計畫不存在")
 
     today = date.today()
-    dates = {p.training_date for p in plans}
-    if len(dates) != 1:
-        raise HTTPException(status_code=400, detail="合併報到僅允許同一天的訓練計畫")
-
     for p in plans:
         if p.is_archived:
             raise HTTPException(status_code=400, detail=f"計畫「{p.title}」已封存，不可合併報到")
         if p.end_date is not None and p.end_date < today:
             raise HTTPException(status_code=400, detail=f"計畫「{p.title}」已過期，不可合併報到")
 
-    training_date = next(iter(dates))
+    training_date = body.training_date or today
     label = (body.label or "").strip() or f"{training_date.isoformat()} 合併報到"
     batch_id = str(uuid.uuid4())
     batch = models.AttendanceCheckinBatch(
@@ -1125,10 +1124,11 @@ def create_attendance_batch(
     checkin_url = f"{base_url}/checkin?batch_id={batch_id}"
     qrcode_url = generate_checkin_qrcode_image(checkin_url)
     logging.getLogger("audit").info(
-        "attendance_batch_created emp_id=%s batch_id=%s plans=%s",
+        "attendance_batch_created emp_id=%s batch_id=%s plans=%s session_date=%s",
         current_user.emp_id,
         batch_id,
         plan_ids,
+        training_date.isoformat(),
     )
     return _batch_to_out(batch, qrcode_url=qrcode_url, checkin_url=checkin_url)
 

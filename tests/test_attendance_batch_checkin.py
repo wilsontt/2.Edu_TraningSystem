@@ -89,7 +89,8 @@ def test_create_batch_requires_two_plans(client, in_memory_db):
         app.dependency_overrides[get_current_user] = lambda: admin
 
 
-def test_create_batch_rejects_different_dates(client, in_memory_db):
+def test_create_batch_allows_different_start_dates(client, in_memory_db):
+    """不同開始日的進行中計畫可合併；批次 training_date 為場次日。"""
     from app.main import app
 
     dept, plans_a = _seed_active_plans(in_memory_db, n=1, training_date=date.today(), suffix="a")
@@ -97,14 +98,21 @@ def test_create_batch_rejects_different_dates(client, in_memory_db):
         in_memory_db, n=1, training_date=date.today() - timedelta(days=1), suffix="b"
     )
     user = _ensure_overview_user(in_memory_db, "ov-2", dept.id)
+    session_day = date.today()
     app.dependency_overrides[get_current_user] = lambda: user
     try:
         r = client.post(
             "/api/training/attendance/batches",
-            json={"plan_ids": [plans_a[0].id, plans_b[0].id]},
+            json={
+                "plan_ids": [plans_a[0].id, plans_b[0].id],
+                "label": "跨開始日合併",
+                "training_date": session_day.isoformat(),
+            },
         )
-        assert r.status_code == 400
-        assert "同一天" in r.json()["detail"]
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["training_date"] == session_day.isoformat()
+        assert len(body["plans"]) == 2
     finally:
         admin = in_memory_db.query(User).filter(User.emp_id == "test-admin").first()
         app.dependency_overrides[get_current_user] = lambda: admin

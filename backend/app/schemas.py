@@ -344,6 +344,10 @@ class CheckInResponse(BaseModel):
 class AttendanceBatchCreate(BaseModel):
     plan_ids: List[int]
     label: Optional[str] = None
+    training_date: Optional[date] = Field(
+        None,
+        description="場次／報到日（寫入批次；未傳則用今日）。不要求各計畫開始日相同。",
+    )
 
 
 class AttendanceBatchPlanBrief(BaseModel):

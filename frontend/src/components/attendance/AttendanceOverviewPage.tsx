@@ -7,7 +7,7 @@ import BulkAbsenceReasonModal from './BulkAbsenceReasonModal';
 import Pagination from '../common/Pagination';
 import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
-import { matchesPlanSearch } from '../../utils/planSearch';
+import { matchesPlanSearch, matchesBatchCandidateFilter } from '../../utils/planSearch';
 import type { User } from '../../types';
 
 interface PlanSummary {
@@ -181,8 +181,12 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
 
   // 多場訓練合併報到
   const [batchSelectOpen, setBatchSelectOpen] = useState(false);
-  const [batchSelectDate, setBatchSelectDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
-  const [batchSelectPlans, setBatchSelectPlans] = useState<PlanSummary[]>([]);
+  /** 場次／報到日（寫入批次；同時可作候選日期篩選） */
+  const [batchSessionDate, setBatchSessionDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  /** 是否用場次日做候選篩選；關閉後僅關鍵字（或列全部） */
+  const [batchFilterByDate, setBatchFilterByDate] = useState(true);
+  const [batchKeyword, setBatchKeyword] = useState('');
+  const [batchActivePlans, setBatchActivePlans] = useState<PlanSummary[]>([]);
   const [batchSelectLoading, setBatchSelectLoading] = useState(false);
   const [batchSelectedIds, setBatchSelectedIds] = useState<number[]>([]);
   const [batchLabel, setBatchLabel] = useState('');
@@ -268,7 +272,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
     setBatchStats(null);
   };
 
-  const loadBatchSelectPlans = useCallback(async (dateStr: string) => {
+  const loadBatchActivePlans = useCallback(async () => {
     setBatchSelectLoading(true);
     try {
       let activePlans: PlanSummary[];
@@ -278,17 +282,49 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
         const res = await api.get<PlanSummary[]>('/training/plans', { params: { status: 'active' } });
         activePlans = res.data || [];
       }
-      setBatchSelectPlans(activePlans.filter((p) => p.training_date === dateStr));
+      setBatchActivePlans(activePlans);
     } catch {
-      setBatchSelectPlans([]);
+      setBatchActivePlans([]);
     } finally {
       setBatchSelectLoading(false);
     }
   }, [planStatusFilter, plans]);
 
+  const batchCandidatePlans = useMemo(() => {
+    return batchActivePlans.filter((p) =>
+      matchesBatchCandidateFilter(
+        {
+          title: p.title,
+          year: p.year ?? '',
+          training_date: p.training_date,
+          end_date: p.end_date,
+        },
+        {
+          filterDate: batchFilterByDate ? batchSessionDate : '',
+          keyword: batchKeyword,
+        },
+      ),
+    );
+  }, [batchActivePlans, batchFilterByDate, batchSessionDate, batchKeyword]);
+
+  const batchSelectedPlans = useMemo(() => {
+    const byId = new Map(batchActivePlans.map((p) => [p.id, p]));
+    return batchSelectedIds
+      .map((id) => byId.get(id))
+      .filter((p): p is PlanSummary => Boolean(p));
+  }, [batchActivePlans, batchSelectedIds]);
+
+  const toggleBatchPlan = (planId: number) => {
+    setBatchSelectedIds((prev) =>
+      prev.includes(planId) ? prev.filter((id) => id !== planId) : [...prev, planId],
+    );
+  };
+
   const openBatchSelectModal = () => {
     const today = format(new Date(), 'yyyy-MM-dd');
-    setBatchSelectDate(today);
+    setBatchSessionDate(today);
+    setBatchFilterByDate(true);
+    setBatchKeyword('');
     setBatchSelectedIds([]);
     setBatchLabel('');
     setBatchSelectOpen(true);
@@ -296,8 +332,8 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
 
   useEffect(() => {
     if (!batchSelectOpen) return;
-    void loadBatchSelectPlans(batchSelectDate);
-  }, [batchSelectOpen, batchSelectDate, loadBatchSelectPlans]);
+    void loadBatchActivePlans();
+  }, [batchSelectOpen, loadBatchActivePlans]);
 
   useEffect(() => {
     if (!batchModal) return;
@@ -321,6 +357,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
         {
           plan_ids: batchSelectedIds,
           label: batchLabel.trim() || undefined,
+          training_date: batchSessionDate || format(new Date(), 'yyyy-MM-dd'),
         },
         {
           headers: { 'X-Frontend-URL': frontendBaseUrl() },
@@ -1125,14 +1162,30 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
             </div>
             <div className="p-4 space-y-4 overflow-y-auto flex-1">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">訓練日期</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">場次／報到日</label>
                 <input
                   type="date"
-                  value={batchSelectDate}
-                  onChange={(e) => {
-                    setBatchSelectDate(e.target.value);
-                    setBatchSelectedIds([]);
-                  }}
+                  value={batchSessionDate}
+                  onChange={(e) => setBatchSessionDate(e.target.value)}
+                  className="w-full px-3 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
+                />
+                <label className="mt-2 flex items-center gap-2 text-xs font-bold text-gray-600 cursor-pointer min-h-11">
+                  <input
+                    type="checkbox"
+                    checked={batchFilterByDate}
+                    onChange={(e) => setBatchFilterByDate(e.target.checked)}
+                    className="w-4 h-4 accent-indigo-600 shrink-0"
+                  />
+                  用此日期篩選候選（落在開始～結束區間；與關鍵字為 OR）
+                </label>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">關鍵字（選填）</label>
+                <input
+                  type="search"
+                  value={batchKeyword}
+                  onChange={(e) => setBatchKeyword(e.target.value)}
+                  placeholder="名稱／年份；與日期條件為 OR"
                   className="w-full px-3 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
                 />
               </div>
@@ -1142,26 +1195,52 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                   type="text"
                   value={batchLabel}
                   onChange={(e) => setBatchLabel(e.target.value)}
-                  placeholder="例如：上午合併報到"
+                  placeholder="例如：上午合併報到／補課合併"
                   className="w-full px-3 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
                 />
               </div>
+
+              {batchSelectedPlans.length > 0 && (
+                <div>
+                  <p className="text-sm font-bold text-gray-700 mb-2">
+                    已選合併（換篩選不清空）
+                    <span className="text-indigo-600 font-bold ml-2">{batchSelectedPlans.length}</span>
+                  </p>
+                  <ul className="border-2 border-indigo-200 bg-indigo-50/40 rounded-xl divide-y divide-indigo-100">
+                    {batchSelectedPlans.map((p) => (
+                      <li key={p.id} className="flex items-center gap-3 px-3 py-2.5 min-h-11">
+                        <span className="text-sm font-bold text-gray-900 flex-1 min-w-0 truncate">{p.title}</span>
+                        <span className="text-xs text-gray-400 font-mono shrink-0">
+                          {p.training_date}{p.end_date ? `～${p.end_date}` : ''}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleBatchPlan(p.id)}
+                          className="text-xs font-bold text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg cursor-pointer shrink-0"
+                        >
+                          移除
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div>
                 <p className="text-sm font-bold text-gray-700 mb-2">
-                  勾選進行中計畫（至少 2 場）
-                  {batchSelectedIds.length > 0 && (
-                    <span className="text-indigo-600 font-bold ml-2">已選 {batchSelectedIds.length}</span>
-                  )}
+                  候選進行中計畫（至少合計已選 2 場）
                 </p>
                 {batchSelectLoading ? (
                   <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>
-                ) : batchSelectPlans.length === 0 ? (
+                ) : batchCandidatePlans.length === 0 ? (
                   <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 px-4 py-6 text-center text-sm text-gray-500">
-                    此日期尚無進行中的訓練計畫
+                    {batchActivePlans.length === 0
+                      ? '目前沒有進行中的訓練計畫'
+                      : '沒有符合場次日或關鍵字的計畫（條件為 OR；可關閉「用此日期篩選」或改關鍵字）'}
                   </div>
                 ) : (
                   <ul className="border border-gray-200 rounded-xl divide-y divide-gray-100 max-h-64 overflow-y-auto">
-                    {batchSelectPlans.map((p) => {
+                    {batchCandidatePlans.map((p) => {
                       const checked = batchSelectedIds.includes(p.id);
                       return (
                         <li key={p.id}>
@@ -1169,15 +1248,13 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                             <input
                               type="checkbox"
                               checked={checked}
-                              onChange={() => {
-                                setBatchSelectedIds((prev) =>
-                                  checked ? prev.filter((id) => id !== p.id) : [...prev, p.id],
-                                );
-                              }}
+                              onChange={() => toggleBatchPlan(p.id)}
                               className="w-4 h-4 accent-indigo-600 shrink-0"
                             />
                             <span className="text-sm font-bold text-gray-900 flex-1 min-w-0 truncate">{p.title}</span>
-                            <span className="text-xs text-gray-400 font-mono shrink-0">{p.training_date}</span>
+                            <span className="text-xs text-gray-400 font-mono shrink-0">
+                              {p.training_date}{p.end_date ? `～${p.end_date}` : ''}
+                            </span>
                           </label>
                         </li>
                       );
