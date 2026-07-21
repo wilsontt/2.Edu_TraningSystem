@@ -1098,7 +1098,7 @@ def create_attendance_batch(
             raise HTTPException(status_code=400, detail=f"計畫「{p.title}」已過期，不可合併報到")
 
     training_date = body.training_date or today
-    label = (body.label or "").strip() or f"{training_date.isoformat()} 合併報到"
+    label = body.label
     batch_id = str(uuid.uuid4())
     batch = models.AttendanceCheckinBatch(
         id=batch_id,
@@ -1257,5 +1257,24 @@ def list_attendance_events(
     )
     if emp_id:
         q = q.filter(models.AttendanceCheckinEvent.emp_id == emp_id)
-    return q.order_by(models.AttendanceCheckinEvent.event_time.asc()).all()
+    events = q.order_by(models.AttendanceCheckinEvent.event_time.asc()).all()
+
+    batch_ids = {ev.batch_id for ev in events if ev.batch_id}
+    label_by_batch_id: dict[str, str] = {}
+    if batch_ids:
+        rows = (
+            db.query(models.AttendanceCheckinBatch.id, models.AttendanceCheckinBatch.label)
+            .filter(models.AttendanceCheckinBatch.id.in_(batch_ids))
+            .all()
+        )
+        label_by_batch_id = {row.id: row.label for row in rows}
+
+    return [
+        schemas.AttendanceCheckinEventOut.model_validate(ev).model_copy(
+            update={
+                "batch_label": label_by_batch_id.get(ev.batch_id) if ev.batch_id else None,
+            }
+        )
+        for ev in events
+    ]
 

@@ -351,11 +351,21 @@ class CheckInResponse(BaseModel):
 
 class AttendanceBatchCreate(BaseModel):
     plan_ids: List[int]
-    label: Optional[str] = None
+    label: str = Field(..., min_length=2, max_length=50, description="合併報到批次標籤（必填）")
     training_date: Optional[date] = Field(
         None,
         description="場次／報到日（寫入批次；未傳則用今日）。不要求各計畫開始日相同。",
     )
+
+    @field_validator("label")
+    @classmethod
+    def validate_batch_label(cls, v: str) -> str:
+        trimmed = v.strip()
+        if len(trimmed) < 2:
+            raise ValueError("批次標籤至少 2 個字")
+        if len(trimmed) > 50:
+            raise ValueError("批次標籤最多 50 個字")
+        return trimmed
 
 
 class AttendanceBatchPlanBrief(BaseModel):
@@ -422,6 +432,7 @@ class AttendanceCheckinEventOut(BaseModel):
     event_time: Optional[datetime] = None
     event_type: str
     batch_id: Optional[str] = None
+    batch_label: Optional[str] = None
     source: str
     result: str
     ip_address: Optional[str] = None

@@ -8,6 +8,7 @@ import Pagination from '../common/Pagination';
 import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
 import { matchesPlanSearch, matchesBatchCandidateFilter } from '../../utils/planSearch';
+import { formatAttendanceCheckinEventLabel } from '../../utils/attendanceCheckinEventLabel';
 import type { User } from '../../types';
 
 interface PlanSummary {
@@ -45,6 +46,7 @@ interface AttendanceCheckinEvent {
   event_time: string | null;
   event_type: string;
   batch_id: string | null;
+  batch_label: string | null;
   source: string;
   result: string;
   ip_address: string | null;
@@ -351,13 +353,22 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
       alert('請至少勾選 2 場訓練計畫');
       return;
     }
+    const trimmedLabel = batchLabel.trim();
+    if (trimmedLabel.length < 2) {
+      alert('請輸入批次標籤（至少 2 個字）');
+      return;
+    }
+    if (trimmedLabel.length > 50) {
+      alert('批次標籤最多 50 個字');
+      return;
+    }
     setCreatingBatch(true);
     try {
       const res = await api.post<AttendanceBatchOut>(
         '/training/attendance/batches',
         {
           plan_ids: batchSelectedIds,
-          label: batchLabel.trim() || undefined,
+          label: trimmedLabel,
           training_date: batchSessionDate || format(new Date(), 'yyyy-MM-dd'),
         },
         {
@@ -995,13 +1006,14 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                                             <ul className="space-y-1.5">
                                               {(historyEventsMap[rowUser.emp_id] || []).map((ev) => (
                                                 <li key={ev.id} className="text-xs text-gray-700 flex flex-wrap gap-x-3 gap-y-0.5">
-                                                  <span className="font-mono text-gray-500">
+                                                  <span className="font-mono text-gray-500 shrink-0">
                                                     {ev.event_time
                                                       ? parseBackendDateTime(ev.event_time)?.toLocaleString('zh-TW', { hour12: false })
                                                       : '—'}
                                                   </span>
-                                                  <span className="font-bold text-indigo-700">{ev.source}/{ev.event_type}</span>
-                                                  <span className="text-gray-600">{ev.result}</span>
+                                                  <span className="font-bold text-gray-800">
+                                                    {formatAttendanceCheckinEventLabel(ev)}
+                                                  </span>
                                                 </li>
                                               ))}
                                             </ul>
@@ -1195,12 +1207,16 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                 </label>
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">標籤（批次名稱，選填）</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">
+                  標籤（批次名稱）<span className="text-red-500 ml-0.5">*</span>
+                </label>
                 <input
                   type="text"
                   value={batchLabel}
                   onChange={(e) => setBatchLabel(e.target.value)}
-                  placeholder="例如：上午合併報到／補課合併（非搜尋）"
+                  placeholder="例如：0721 上午場、資安＋AI 合併"
+                  maxLength={50}
+                  required
                   className="w-full px-3 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
                 />
               </div>
@@ -1278,7 +1294,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
               </button>
               <button
                 type="button"
-                disabled={creatingBatch || batchSelectedIds.length < 2}
+                disabled={creatingBatch || batchSelectedIds.length < 2 || batchLabel.trim().length < 2}
                 onClick={() => { void handleCreateBatch(); }}
                 className="px-4 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-2"
               >

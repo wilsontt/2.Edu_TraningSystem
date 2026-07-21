@@ -82,7 +82,10 @@ def test_create_batch_requires_two_plans(client, in_memory_db):
     user = _ensure_overview_user(in_memory_db, "ov-1", dept.id)
     app.dependency_overrides[get_current_user] = lambda: user
     try:
-        r = client.post("/api/training/attendance/batches", json={"plan_ids": [plans[0].id]})
+        r = client.post(
+            "/api/training/attendance/batches",
+            json={"plan_ids": [plans[0].id], "label": "測試標籤"},
+        )
         assert r.status_code == 400
     finally:
         admin = in_memory_db.query(User).filter(User.emp_id == "test-admin").first()
@@ -196,12 +199,46 @@ def test_batch_checkin_and_close(client, in_memory_db):
         assert blocked.status_code == 400
 
         app.dependency_overrides[get_current_user] = lambda: overview
+        # 歷程 API 應帶合併報到標籤
+        events_api = client.get(
+            f"/api/training/plans/{plans[0].id}/attendance/events",
+            params={"emp_id": trainee.emp_id},
+        )
+        assert events_api.status_code == 200
+        event_rows = events_api.json()
+        assert len(event_rows) >= 1
+        assert event_rows[0]["batch_label"] == "上午合併"
+        assert event_rows[0]["result"] == "success"
+
         reopened = client.patch(
             f"/api/training/attendance/batches/{batch_id}/status",
             json={"status": "reopened"},
         )
         assert reopened.status_code == 200
         assert reopened.json()["status"] == "reopened"
+    finally:
+        admin = in_memory_db.query(User).filter(User.emp_id == "test-admin").first()
+        app.dependency_overrides[get_current_user] = lambda: admin
+
+
+def test_batch_create_requires_label(client, in_memory_db):
+    from app.main import app
+
+    dept, plans = _seed_active_plans(in_memory_db, n=2, suffix="label")
+    overview = _ensure_overview_user(in_memory_db, "ov-label", dept.id)
+    app.dependency_overrides[get_current_user] = lambda: overview
+    try:
+        missing = client.post(
+            "/api/training/attendance/batches",
+            json={"plan_ids": [plans[0].id, plans[1].id]},
+        )
+        assert missing.status_code == 422
+
+        too_short = client.post(
+            "/api/training/attendance/batches",
+            json={"plan_ids": [plans[0].id, plans[1].id], "label": "A"},
+        )
+        assert too_short.status_code == 422
     finally:
         admin = in_memory_db.query(User).filter(User.emp_id == "test-admin").first()
         app.dependency_overrides[get_current_user] = lambda: admin
