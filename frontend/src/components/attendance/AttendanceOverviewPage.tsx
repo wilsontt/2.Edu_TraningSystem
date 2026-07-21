@@ -323,7 +323,8 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
   const openBatchSelectModal = () => {
     const today = format(new Date(), 'yyyy-MM-dd');
     setBatchSessionDate(today);
-    setBatchFilterByDate(true);
+    // 預設不依日期篩選，開啟即列出全部進行中計畫；需要時再開「用此日期篩選」
+    setBatchFilterByDate(false);
     setBatchKeyword('');
     setBatchSelectedIds([]);
     setBatchLabel('');
@@ -1161,6 +1162,20 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
               </button>
             </div>
             <div className="p-4 space-y-4 overflow-y-auto flex-1">
+              <p className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2">
+                先勾選至少 2 場再確認。可用「關鍵字」或「場次日」篩選（OR）；已選換條件不清空。
+                「標籤」只是批次名稱，不會用來搜尋計畫。
+              </p>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">關鍵字（搜尋計畫）</label>
+                <input
+                  type="search"
+                  value={batchKeyword}
+                  onChange={(e) => setBatchKeyword(e.target.value)}
+                  placeholder="例如：AI、資安、2026；與場次日為 OR"
+                  className="w-full px-3 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">場次／報到日</label>
                 <input
@@ -1180,22 +1195,12 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                 </label>
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">關鍵字（選填）</label>
-                <input
-                  type="search"
-                  value={batchKeyword}
-                  onChange={(e) => setBatchKeyword(e.target.value)}
-                  placeholder="名稱／年份；與日期條件為 OR"
-                  className="w-full px-3 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">標籤（選填）</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">標籤（批次名稱，選填）</label>
                 <input
                   type="text"
                   value={batchLabel}
                   onChange={(e) => setBatchLabel(e.target.value)}
-                  placeholder="例如：上午合併報到／補課合併"
+                  placeholder="例如：上午合併報到／補課合併（非搜尋）"
                   className="w-full px-3 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
                 />
               </div>
