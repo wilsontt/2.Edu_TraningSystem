@@ -9,6 +9,7 @@ import {
   Mail, Eye, EyeOff, Send,
 } from 'lucide-react';
 import type { User, CaptchaData, LoginResponse, Department, MustChangePasswordResponse } from '../types';
+import { saveSessionUser } from '../utils/sessionUser';
 
 /**
  * AD 帳號支援三種格式（前端僅基本格式檢查，後端統一標準化）：
@@ -84,6 +85,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   const handleLoginSuccess = (token: string, user: User) => {
     localStorage.setItem('token', token);
+    saveSessionUser(user);
     onLoginSuccess(user);
     // 僅允許 /checkin 開頭的相對路徑，避免 open redirect
     const returnTo = new URLSearchParams(location.search).get('returnTo');

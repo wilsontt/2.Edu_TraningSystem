@@ -5,6 +5,7 @@ import { AxiosError } from 'axios';
 import api from '../../api';
 import { parseBackendDateTime } from '../../utils/date';
 import type { User } from '../../types';
+import { formatSessionUserSnapshotLabel, loadSessionUser, saveSessionUser } from '../../utils/sessionUser';
 
 type CheckInUserBrief = {
   emp_id: string;
@@ -30,16 +31,19 @@ function CheckInUserBanner({
   apiUser?: CheckInUserBrief | null;
   sessionUser?: User | null;
 }) {
+  const cached = loadSessionUser();
   const label = apiUser
     ? formatCheckInUserBriefLabel(apiUser)
     : sessionUser
       ? formatSessionUserLabel(sessionUser)
-      : null;
-  if (!label) return null;
+      : cached
+        ? formatSessionUserSnapshotLabel(cached)
+        : null;
+
   return (
-    <div className="mb-4 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 text-left">
+    <div className="mb-4 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 text-left" data-checkin-user-banner="v3">
       <p className="text-xs font-bold text-indigo-600 mb-1">報到人</p>
-      <p className="text-sm font-bold text-gray-900 break-words">{label}</p>
+      <p className="text-sm font-bold text-gray-900 break-words">{label ?? '—'}</p>
     </div>
   );
 }
@@ -102,6 +106,7 @@ const CheckInPage = ({ user }: CheckInPageProps) => {
 
   useEffect(() => {
     setSessionUser(user);
+    saveSessionUser(user);
   }, [user]);
 
   useEffect(() => {
@@ -109,7 +114,10 @@ const CheckInPage = ({ user }: CheckInPageProps) => {
     const loadMe = async () => {
       try {
         const res = await api.get<User>('/auth/me');
-        if (!cancelled) setSessionUser(res.data);
+        if (!cancelled) {
+          setSessionUser(res.data);
+          saveSessionUser(res.data);
+        }
       } catch {
         /* 沿用 App 傳入的 user */
       }

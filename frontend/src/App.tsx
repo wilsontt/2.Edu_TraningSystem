@@ -27,6 +27,7 @@ import PersonalScorePage from './components/personal/PersonalScorePage';
 import CheckInPage from './components/exam/CheckInPage';
 import AttendanceOverviewPage from './components/attendance/AttendanceOverviewPage';
 import type { User } from './types';
+import { saveSessionUser } from './utils/sessionUser';
 import { hasAdminMenu } from './utils/authGuards';
 import ChangePasswordPage from './components/ChangePasswordPage';
 import { useRef } from 'react';
@@ -329,6 +330,7 @@ const App = () => {
         try {
           const res = await api.get('/auth/me');
           setUser(res.data);
+          saveSessionUser(res.data);
         } catch {
           localStorage.removeItem('token');
           setUser(null);
