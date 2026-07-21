@@ -1591,6 +1591,16 @@ def get_exam_history_detail(
 
 # --- 報到功能 API ---
 
+def _plan_question_count(db: Session, plan_id: int) -> int:
+    """回傳該訓練計畫有效考題數（供報到頁判斷是否顯示「開始考試」）。"""
+    return (
+        db.query(func.count(models.Question.id))
+        .filter(models.Question.plan_id == plan_id)
+        .scalar()
+        or 0
+    )
+
+
 @router.get("/plan/{plan_id}/attendance/status", response_model=schemas.AttendanceStatus)
 def get_attendance_status(
     plan_id: int,
@@ -1607,17 +1617,24 @@ def get_attendance_status(
         models.AttendanceRecord.plan_id == plan_id
     ).first()
 
+    question_count = _plan_question_count(db, plan_id)
+    has_exam = question_count > 0
+
     if attendance:
         return {
             "is_checked_in": True,
             "checkin_time": attendance.checkin_time,
             "plan_title": plan.title,
+            "question_count": question_count,
+            "has_exam": has_exam,
         }
 
     return {
         "is_checked_in": False,
         "checkin_time": None,
         "plan_title": plan.title,
+        "question_count": question_count,
+        "has_exam": has_exam,
     }
 
 @router.post("/plan/{plan_id}/attendance/checkin", response_model=schemas.CheckInResponse)
@@ -1632,6 +1649,9 @@ def check_in_attendance(
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+
+    question_count = _plan_question_count(db, plan_id)
+    has_exam = question_count > 0
     
     # 2. 已報到 → 冪等成功（避免 QR 重掃／Strict Mode 雙請求被當錯誤）
     existing = db.query(models.AttendanceRecord).filter(
@@ -1644,6 +1664,8 @@ def check_in_attendance(
             "success": True,
             "checkin_time": existing.checkin_time,
             "plan_title": plan.title,
+            "question_count": question_count,
+            "has_exam": has_exam,
         }
     
     # 3. 檢查計畫是否在有效期間內
@@ -1699,6 +1721,8 @@ def check_in_attendance(
                 "success": True,
                 "checkin_time": raced.checkin_time,
                 "plan_title": plan.title,
+                "question_count": question_count,
+                "has_exam": has_exam,
             }
         raise HTTPException(status_code=500, detail="報到失敗：寫入衝突")
     except Exception as e:
@@ -1709,4 +1733,6 @@ def check_in_attendance(
         "success": True,
         "checkin_time": attendance.checkin_time,
         "plan_title": plan.title,
+        "question_count": question_count,
+        "has_exam": has_exam,
     }

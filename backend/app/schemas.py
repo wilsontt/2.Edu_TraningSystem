@@ -328,11 +328,15 @@ class AttendanceStatus(BaseModel):
     is_checked_in: bool
     checkin_time: Optional[datetime] = None
     plan_title: Optional[str] = None  # 供報到頁顯示；員工無 menu:plan 也能取得
+    question_count: int = 0  # 供報到成功頁判斷是否顯示「開始考試」
+    has_exam: bool = False
 
 class CheckInResponse(BaseModel):
     success: bool
     checkin_time: datetime
     plan_title: Optional[str] = None
+    question_count: int = 0
+    has_exam: bool = False
 
 # --- 報到統計資料結構 ---
 class AttendanceStats(BaseModel):

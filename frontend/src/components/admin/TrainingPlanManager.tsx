@@ -9,7 +9,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { AxiosError } from 'axios';
-import { Plus, Calendar, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Archive, MoreVertical } from 'lucide-react';
+import { Plus, Calendar, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Archive, MoreVertical, QrCode, Copy, Check } from 'lucide-react';
 import api from '../../api';
 import Pagination from '../common/Pagination';
 import BulkAbsenceReasonModal from '../attendance/BulkAbsenceReasonModal';
@@ -179,6 +179,16 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
   
   // 操作選單狀態
   const [openActionMenu, setOpenActionMenu] = useState<number | null>(null);
+
+  // 報到 QRcode Modal（上課前／考試前同一連結）
+  const [checkinQRCode, setCheckinQRCode] = useState<{
+    plan_id: number;
+    plan_title: string;
+    qrcode_url: string;
+    checkin_url: string;
+  } | null>(null);
+  const [generatingQRCode, setGeneratingQRCode] = useState(false);
+  const [copiedCheckinUrl, setCopiedCheckinUrl] = useState(false);
 
   // 未報到原因編輯（報到統計 Modal 內）
   const [absenceReasonEdit, setAbsenceReasonEdit] = useState<{
@@ -552,6 +562,37 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
       }
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  /** 訓練計畫管理：產生報到 QRcode（上課前／考試前同一連結） */
+  const handleGenerateCheckinQRCode = async (plan: TrainingPlan) => {
+    if (!canModifyOwnedResource(user, plan.dept_id)) {
+      alert('僅開課單位或超管可產生報到 QRcode');
+      return;
+    }
+    setGeneratingQRCode(true);
+    setCopiedCheckinUrl(false);
+    setCheckinQRCode(null);
+    try {
+      const res = await api.post(
+        `/training/plans/${plan.id}/checkin-qrcode/generate`,
+        {},
+        {
+          headers: {
+            'X-Frontend-URL': `${window.location.origin}${import.meta.env.BASE_URL || '/'}`.replace(/\/$/, ''),
+          },
+        },
+      );
+      setCheckinQRCode(res.data);
+    } catch (err: unknown) {
+      if (err instanceof AxiosError) {
+        alert(err.response?.data?.detail || '產生報到 QRcode 失敗');
+      } else {
+        alert('產生報到 QRcode 失敗');
+      }
+    } finally {
+      setGeneratingQRCode(false);
     }
   };
 
@@ -1099,7 +1140,23 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
                                 className="fixed inset-0 z-90" 
                                 onClick={() => setOpenActionMenu(null)}
                               />
-                              <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border-2 border-gray-300 z-100 py-1">
+                              <div className="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-xl border-2 border-gray-300 z-100 py-1">
+                                {!plan.is_archived && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (!canModifyOwnedResource(user, plan.dept_id)) return;
+                                      setOpenActionMenu(null);
+                                      void handleGenerateCheckinQRCode(plan);
+                                    }}
+                                    disabled={!canModifyOwnedResource(user, plan.dept_id) || generatingQRCode}
+                                    className="w-full px-4 py-2 text-left text-sm font-bold text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                    title={canModifyOwnedResource(user, plan.dept_id) ? '產生報到 QRcode（上課前／考試前同一組）' : '僅開課單位可產生報到 QRcode'}
+                                  >
+                                    <QrCode className="w-4 h-4" />
+                                    產生 QRcode
+                                  </button>
+                                )}
                                 {!plan.is_archived && (
                                   <button
                                     onClick={(e) => {
@@ -2100,6 +2157,70 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
                 {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
                 確認刪除
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 報到 QRcode Modal */}
+      {(generatingQRCode || checkinQRCode) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col">
+            <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-linear-to-r from-indigo-50 to-purple-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-indigo-600" />
+                報到 QRcode
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setCheckinQRCode(null);
+                  setGeneratingQRCode(false);
+                  setCopiedCheckinUrl(false);
+                }}
+                className="p-2 min-h-11 min-w-11 inline-flex items-center justify-center hover:bg-white/50 rounded-xl cursor-pointer"
+                aria-label="關閉"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <div className="p-6 flex flex-col items-center gap-4">
+              {generatingQRCode ? (
+                <div className="flex items-center gap-2 text-gray-500 py-12">
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <span>產生中…</span>
+                </div>
+              ) : checkinQRCode ? (
+                <>
+                  <p className="text-base font-bold text-gray-900 text-center">{checkinQRCode.plan_title}</p>
+                  <img
+                    src={checkinQRCode.qrcode_url}
+                    alt="報到 QRcode"
+                    className="w-52 h-52 rounded-lg bg-white p-2 border border-indigo-100"
+                  />
+                  <p className="text-xs text-gray-600 text-center">
+                    上課前與考試時可使用同一組 QRcode；未登入將先導向登入頁，登入後自動完成報到。
+                  </p>
+                  <div className="flex items-center gap-2 text-xs w-full">
+                    <span className="font-mono text-gray-600 bg-gray-50 px-2 py-1.5 rounded border border-indigo-100 flex-1 truncate">
+                      {checkinQRCode.checkin_url}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(checkinQRCode.checkin_url).then(() => {
+                          setCopiedCheckinUrl(true);
+                          setTimeout(() => setCopiedCheckinUrl(false), 2000);
+                        });
+                      }}
+                      className="p-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors cursor-pointer shrink-0"
+                      title="複製連結"
+                    >
+                      {copiedCheckinUrl ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
         </div>

@@ -4,7 +4,12 @@ import { CheckCircle, AlertCircle, Loader2, Clock, ArrowLeft } from 'lucide-reac
 import api from '../../api';
 import { parseBackendDateTime } from '../../utils/date';
 
-type CheckInResult = { checkin_time?: string; plan_title?: string };
+type CheckInResult = {
+  checkin_time?: string;
+  plan_title?: string;
+  question_count?: number;
+  has_exam?: boolean;
+};
 
 /** 模組級 Promise：Strict Mode 雙掛載共用同一請求，避免雙寫與第二掛載空手返回。 */
 const checkinPromises = new Map<string, Promise<CheckInResult>>();
@@ -21,7 +26,13 @@ const CheckInPage = () => {
     checkin_time?: string;
   } | null>(null);
   const [planTitle, setPlanTitle] = useState<string>('');
+  const [hasExam, setHasExam] = useState(false);
   const autoStartedRef = useRef(false);
+
+  const applyExamMeta = (data: { question_count?: number; has_exam?: boolean }) => {
+    const count = typeof data.question_count === 'number' ? data.question_count : 0;
+    setHasExam(data.has_exam === true || count > 0);
+  };
 
   const handleCheckIn = useCallback(async (): Promise<boolean> => {
     if (!planId) return false;
@@ -31,6 +42,8 @@ const CheckInPage = () => {
       return {
         checkin_time: res.data.checkin_time || new Date().toISOString(),
         plan_title: res.data.plan_title,
+        question_count: res.data.question_count,
+        has_exam: res.data.has_exam,
       };
     };
 
@@ -47,6 +60,7 @@ const CheckInPage = () => {
       setError(null);
       const result = await promise;
       if (result.plan_title) setPlanTitle(result.plan_title);
+      applyExamMeta(result);
       setAttendanceStatus({
         is_checked_in: true,
         checkin_time: result.checkin_time,
@@ -60,6 +74,7 @@ const CheckInPage = () => {
         try {
           const statusRes = await api.get(`/exam/plan/${planId}/attendance/status`);
           if (statusRes.data.plan_title) setPlanTitle(statusRes.data.plan_title);
+          applyExamMeta(statusRes.data);
           setAttendanceStatus({
             is_checked_in: true,
             checkin_time: statusRes.data.checkin_time,
@@ -97,6 +112,7 @@ const CheckInPage = () => {
         if (statusRes.data.plan_title) {
           setPlanTitle(statusRes.data.plan_title);
         }
+        applyExamMeta(statusRes.data);
         setAttendanceStatus({
           is_checked_in: alreadyCheckedIn,
           checkin_time: statusRes.data.checkin_time,
@@ -161,8 +177,13 @@ const CheckInPage = () => {
           {checkinTime && (
             <p className="text-sm text-gray-400 mb-6">報到時間：{checkinTime}</p>
           )}
+          {!hasExam && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-6">
+              本訓練無需考試，報到完成即可。
+            </p>
+          )}
           <div className="space-y-3">
-            {planId && (
+            {planId && hasExam && (
               <button
                 onClick={() => navigate(`/exam/run/${planId}`)}
                 className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors"
@@ -174,7 +195,7 @@ const CheckInPage = () => {
               onClick={() => navigate('/')}
               className="w-full py-3 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300 transition-colors"
             >
-              返回考試中心
+              {hasExam ? '返回考試中心' : '返回首頁'}
             </button>
           </div>
         </div>
@@ -206,7 +227,7 @@ const CheckInPage = () => {
 
         <div className="space-y-4">
           <button
-            onClick={() => void handleCheckIn()}
+            onClick={() => { void handleCheckIn(); }}
             disabled={checkingIn || !planId}
             className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-xl shadow-blue-200 hover:shadow-blue-300 transition-all duration-300 flex items-center justify-center gap-3 disabled:bg-blue-300 disabled:shadow-none"
           >
