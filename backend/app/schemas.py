@@ -338,6 +338,85 @@ class CheckInResponse(BaseModel):
     question_count: int = 0
     has_exam: bool = False
 
+
+# --- 合併報到批次 / 歷程 ---
+
+class AttendanceBatchCreate(BaseModel):
+    plan_ids: List[int]
+    label: Optional[str] = None
+
+
+class AttendanceBatchPlanBrief(BaseModel):
+    plan_id: int
+    title: str
+    training_date: date
+
+
+class AttendanceBatchOut(BaseModel):
+    id: str
+    label: str
+    training_date: date
+    status: str
+    created_by: str
+    created_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
+    closed_by: Optional[str] = None
+    reopened_at: Optional[datetime] = None
+    reopened_by: Optional[str] = None
+    plans: List[AttendanceBatchPlanBrief] = []
+    qrcode_url: Optional[str] = None
+    checkin_url: Optional[str] = None
+
+
+class AttendanceBatchStatusUpdate(BaseModel):
+    status: str  # closed | reopened
+
+
+class AttendanceBatchPlanStats(BaseModel):
+    plan_id: int
+    title: str
+    expected_count: int
+    actual_count: int
+    absent_count: int
+    attendance_rate: float
+
+
+class AttendanceBatchStatsOut(BaseModel):
+    batch_id: str
+    status: str
+    plans: List[AttendanceBatchPlanStats]
+
+
+class BatchPlanCheckinResult(BaseModel):
+    plan_id: int
+    plan_title: str
+    result: str
+    checkin_time: Optional[datetime] = None
+
+
+class BatchCheckInResponse(BaseModel):
+    success: bool
+    batch_id: str
+    batch_label: str
+    succeeded: List[BatchPlanCheckinResult] = []
+    skipped: List[BatchPlanCheckinResult] = []
+
+
+class AttendanceCheckinEventOut(BaseModel):
+    id: int
+    emp_id: str
+    plan_id: int
+    event_time: Optional[datetime] = None
+    event_type: str
+    batch_id: Optional[str] = None
+    source: str
+    result: str
+    ip_address: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 # --- 報到統計資料結構 ---
 class AttendanceStats(BaseModel):
     plan_id: int

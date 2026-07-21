@@ -1,14 +1,13 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { format } from 'date-fns';
 import { AxiosError } from 'axios';
-import { BarChart3, Loader2, Search, X, QrCode, Copy, Check, RefreshCw } from 'lucide-react';
+import { BarChart3, Loader2, Search, X, QrCode, Copy, Check, RefreshCw, ChevronDown, ChevronRight, Layers } from 'lucide-react';
 import api from '../../api';
 import BulkAbsenceReasonModal from './BulkAbsenceReasonModal';
 import Pagination from '../common/Pagination';
 import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
 import type { User } from '../../types';
-import { canModifyOwnedResource } from '../../utils/authGuards';
 
 interface PlanSummary {
   id: number;
@@ -37,6 +36,58 @@ interface AttendanceStats {
     absence_reason_text?: string;
   }>;
 }
+
+interface AttendanceCheckinEvent {
+  id: number;
+  emp_id: string;
+  plan_id: number;
+  event_time: string | null;
+  event_type: string;
+  batch_id: string | null;
+  source: string;
+  result: string;
+  ip_address: string | null;
+}
+
+interface AttendanceBatchPlanBrief {
+  plan_id: number;
+  title: string;
+  training_date: string;
+}
+
+interface AttendanceBatchOut {
+  id: string;
+  label: string;
+  training_date: string;
+  status: string;
+  created_by: string;
+  created_at: string | null;
+  closed_at: string | null;
+  closed_by: string | null;
+  reopened_at: string | null;
+  reopened_by: string | null;
+  plans: AttendanceBatchPlanBrief[];
+  qrcode_url: string | null;
+  checkin_url: string | null;
+}
+
+interface AttendanceBatchPlanStats {
+  plan_id: number;
+  title: string;
+  expected_count: number;
+  actual_count: number;
+  absent_count: number;
+  attendance_rate: number;
+}
+
+interface AttendanceBatchStatsOut {
+  batch_id: string;
+  status: string;
+  plans: AttendanceBatchPlanStats[];
+}
+
+const frontendBaseUrl = () =>
+  `${window.location.origin}${import.meta.env.BASE_URL || '/'}`.replace(/\/$/, '');
 
 interface AbsenceReasonUpdateResponse {
   success: boolean;
@@ -85,7 +136,7 @@ const getCardClass = (isActive: boolean, palette: 'indigo' | 'green' | 'orange' 
 /**
  * 報到總覽：狀態篩選（正在進行中／已過期／已封存／全部）＋搜尋，表格含操作欄可查看報到統計。
  */
-const AttendanceOverviewPage = ({ user }: { user: User }) => {
+const AttendanceOverviewPage = (_props: { user: User }) => {
   const [planStatusFilter, setPlanStatusFilter] = useState<PlanStatusFilter>('active');
   const [searchTerm, setSearchTerm] = useState('');
   const [plans, setPlans] = useState<PlanSummary[]>([]);
@@ -122,6 +173,26 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
   const [copiedCheckinUrl, setCopiedCheckinUrl] = useState(false);
   const [refreshingStats, setRefreshingStats] = useState(false);
 
+  // 報到歷程（人員列展開）
+  const [expandedHistoryEmpId, setExpandedHistoryEmpId] = useState<string | null>(null);
+  const [historyEventsMap, setHistoryEventsMap] = useState<Record<string, AttendanceCheckinEvent[]>>({});
+  const [loadingHistoryEmpId, setLoadingHistoryEmpId] = useState<string | null>(null);
+
+  // 多場訓練合併報到
+  const [batchSelectOpen, setBatchSelectOpen] = useState(false);
+  const [batchSelectDate, setBatchSelectDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [batchSelectPlans, setBatchSelectPlans] = useState<PlanSummary[]>([]);
+  const [batchSelectLoading, setBatchSelectLoading] = useState(false);
+  const [batchSelectedIds, setBatchSelectedIds] = useState<number[]>([]);
+  const [batchLabel, setBatchLabel] = useState('');
+  const [creatingBatch, setCreatingBatch] = useState(false);
+
+  const [batchModal, setBatchModal] = useState<AttendanceBatchOut | null>(null);
+  const [batchStats, setBatchStats] = useState<AttendanceBatchStatsOut | null>(null);
+  const [batchStatsLoading, setBatchStatsLoading] = useState(false);
+  const [batchStatusUpdating, setBatchStatusUpdating] = useState(false);
+  const [copiedBatchUrl, setCopiedBatchUrl] = useState(false);
+
   /** 重新查詢目前開啟計畫的報到統計（供人員報到後手動刷新） */
   const refreshModalStats = async () => {
     if (!modalPlanId) return;
@@ -143,10 +214,6 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
       setQrPanelOpen(false);
       return;
     }
-    if (!canModifyOwnedResource(user, plan.dept_id)) {
-      alert('僅開課單位或超管可產生報到 QRcode');
-      return;
-    }
     setQrPanelOpen(true);
     if (checkinQRCode && checkinQRCode.plan_id === plan.id) return;
     setCheckinQRCode(null);
@@ -158,7 +225,7 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
         {},
         {
           headers: {
-            'X-Frontend-URL': `${window.location.origin}${import.meta.env.BASE_URL || '/'}`.replace(/\/$/, ''),
+            'X-Frontend-URL': frontendBaseUrl(),
           },
         },
       );
@@ -172,6 +239,150 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
       setQrPanelOpen(false);
     } finally {
       setGeneratingQRCode(false);
+    }
+  };
+
+  const refreshBatchStats = useCallback(async (batchId: string) => {
+    setBatchStatsLoading(true);
+    try {
+      const res = await api.get<AttendanceBatchStatsOut>(`/training/attendance/batches/${batchId}/stats`);
+      setBatchStats(res.data);
+      setBatchModal((prev) => (prev && prev.id === batchId ? { ...prev, status: res.data.status } : prev));
+    } catch {
+      /* keep previous stats on poll failure */
+    } finally {
+      setBatchStatsLoading(false);
+    }
+  }, []);
+
+  const openBatchModal = useCallback(async (batch: AttendanceBatchOut) => {
+    setBatchModal(batch);
+    setBatchStats(null);
+    setCopiedBatchUrl(false);
+    await refreshBatchStats(batch.id);
+  }, [refreshBatchStats]);
+
+  const closeBatchModal = () => {
+    setBatchModal(null);
+    setBatchStats(null);
+  };
+
+  const loadBatchSelectPlans = useCallback(async (dateStr: string) => {
+    setBatchSelectLoading(true);
+    try {
+      let activePlans: PlanSummary[];
+      if (planStatusFilter === 'active') {
+        activePlans = plans;
+      } else {
+        const res = await api.get<PlanSummary[]>('/training/plans', { params: { status: 'active' } });
+        activePlans = res.data || [];
+      }
+      setBatchSelectPlans(activePlans.filter((p) => p.training_date === dateStr));
+    } catch {
+      setBatchSelectPlans([]);
+    } finally {
+      setBatchSelectLoading(false);
+    }
+  }, [planStatusFilter, plans]);
+
+  const openBatchSelectModal = () => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    setBatchSelectDate(today);
+    setBatchSelectedIds([]);
+    setBatchLabel('');
+    setBatchSelectOpen(true);
+  };
+
+  useEffect(() => {
+    if (!batchSelectOpen) return;
+    void loadBatchSelectPlans(batchSelectDate);
+  }, [batchSelectOpen, batchSelectDate, loadBatchSelectPlans]);
+
+  useEffect(() => {
+    if (!batchModal) return;
+    const active = batchModal.status === 'open' || batchModal.status === 'reopened';
+    if (!active) return;
+    const timer = window.setInterval(() => {
+      void refreshBatchStats(batchModal.id);
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [batchModal, refreshBatchStats]);
+
+  const handleCreateBatch = async () => {
+    if (batchSelectedIds.length < 2) {
+      alert('請至少勾選 2 場訓練計畫');
+      return;
+    }
+    setCreatingBatch(true);
+    try {
+      const res = await api.post<AttendanceBatchOut>(
+        '/training/attendance/batches',
+        {
+          plan_ids: batchSelectedIds,
+          label: batchLabel.trim() || undefined,
+        },
+        {
+          headers: { 'X-Frontend-URL': frontendBaseUrl() },
+        },
+      );
+      setBatchSelectOpen(false);
+      await openBatchModal(res.data);
+    } catch (err: unknown) {
+      if (err instanceof AxiosError) {
+        alert(err.response?.data?.detail || '建立合併報到失敗');
+      } else {
+        alert('建立合併報到失敗');
+      }
+    } finally {
+      setCreatingBatch(false);
+    }
+  };
+
+  const handleBatchStatusChange = async (status: 'closed' | 'reopened') => {
+    if (!batchModal) return;
+    setBatchStatusUpdating(true);
+    try {
+      const res = await api.patch<AttendanceBatchOut>(
+        `/training/attendance/batches/${batchModal.id}/status`,
+        { status },
+        { headers: { 'X-Frontend-URL': frontendBaseUrl() } },
+      );
+      setBatchModal((prev) => ({
+        ...res.data,
+        // 關閉時後端可能清空 qrcode_url；保留先前圖檔以便灰階顯示
+        qrcode_url: res.data.qrcode_url ?? prev?.qrcode_url ?? null,
+        checkin_url: res.data.checkin_url ?? prev?.checkin_url ?? null,
+      }));
+      await refreshBatchStats(res.data.id);
+    } catch (err: unknown) {
+      if (err instanceof AxiosError) {
+        alert(err.response?.data?.detail || '更新批次狀態失敗');
+      } else {
+        alert('更新批次狀態失敗');
+      }
+    } finally {
+      setBatchStatusUpdating(false);
+    }
+  };
+
+  const toggleHistory = async (empId: string) => {
+    if (expandedHistoryEmpId === empId) {
+      setExpandedHistoryEmpId(null);
+      return;
+    }
+    setExpandedHistoryEmpId(empId);
+    if (historyEventsMap[empId] || !modalPlanId) return;
+    setLoadingHistoryEmpId(empId);
+    try {
+      const res = await api.get<AttendanceCheckinEvent[]>(
+        `/training/plans/${modalPlanId}/attendance/events`,
+        { params: { emp_id: empId } },
+      );
+      setHistoryEventsMap((prev) => ({ ...prev, [empId]: res.data || [] }));
+    } catch {
+      setHistoryEventsMap((prev) => ({ ...prev, [empId]: [] }));
+    } finally {
+      setLoadingHistoryEmpId(null);
     }
   };
 
@@ -280,6 +491,9 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
 
   const openAttendanceModal = async (planId: number) => {
     setModalPlanId(planId);
+    setExpandedHistoryEmpId(null);
+    setHistoryEventsMap({});
+    setLoadingHistoryEmpId(null);
     const stats = statsMap[planId];
     if (stats) {
       setModalStats(stats);
@@ -302,6 +516,9 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
     setListPage(1);
     setQrPanelOpen(false);
     setCheckinQRCode(null);
+    setExpandedHistoryEmpId(null);
+    setHistoryEventsMap({});
+    setLoadingHistoryEmpId(null);
   };
 
   const modalPlan = modalPlanId ? plans.find((p) => p.id === modalPlanId) : null;
@@ -361,15 +578,25 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
   }, [listPage, listTotalPages]);
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
-      <header className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
-          <BarChart3 className="w-7 h-7 text-white" />
+    <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 rounded-2xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+            <BarChart3 className="w-7 h-7 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight mb-1">報到總覽</h1>
+            <p className="text-gray-500 font-medium">同時檢視多個訓練計畫的報到統計</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight mb-1">報到總覽</h1>
-          <p className="text-gray-500 font-medium">同時檢視多個訓練計畫的報到統計</p>
-        </div>
+        <button
+          type="button"
+          onClick={openBatchSelectModal}
+          className="px-4 py-2.5 min-h-11 bg-white text-indigo-700 border-2 border-indigo-200 rounded-xl text-sm font-bold hover:bg-indigo-50 transition-colors duration-200 shadow-sm cursor-pointer shrink-0 inline-flex items-center justify-center gap-2 w-full sm:w-auto"
+        >
+          <Layers className="w-4 h-4 shrink-0" />
+          多場訓練合併報到
+        </button>
       </header>
 
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
@@ -483,9 +710,7 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
                 <button
                   type="button"
                   onClick={() => { void handleToggleQrPanel(modalPlan); }}
-                  disabled={!canModifyOwnedResource(user, modalPlan.dept_id) && !qrPanelOpen}
-                  title={canModifyOwnedResource(user, modalPlan.dept_id) ? undefined : '僅開課單位或超管可產生報到 QRcode'}
-                  className={`px-3 py-1.5 min-h-11 text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed ${
+                  className={`px-3 py-1.5 min-h-11 text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 ${
                     qrPanelOpen ? 'bg-indigo-700 text-white' : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50'
                   }`}
                 >
@@ -639,6 +864,7 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
                                     ? '報到時間／未到原因'
                                     : '未到原因'}
                               </th>
+                              <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">歷程</th>
                               {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && (
                                 <th className="px-3 sm:px-4 py-2 text-left text-xs font-bold text-gray-600 whitespace-nowrap">操作</th>
                               )}
@@ -647,43 +873,101 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
                           <tbody className="divide-y divide-gray-100">
                             {filteredAttendanceList.length === 0 ? (
                               <tr>
-                                <td colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 6 : 5} className="px-3 sm:px-4 py-4 text-center text-gray-400 text-xs">
+                                <td colSpan={!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 7 : 6} className="px-3 sm:px-4 py-4 text-center text-gray-400 text-xs">
                                   {currentAttendanceList.length === 0 ? '查無資料' : '查無符合條件的人員'}
                                 </td>
                               </tr>
                             ) : (
-                              paginatedAttendanceList.map((user, idx) => {
+                              paginatedAttendanceList.map((rowUser, idx) => {
                                 const displayIndex = listStartIndex + idx + 1;
+                                const historyOpen = expandedHistoryEmpId === rowUser.emp_id;
+                                const absenceLabel =
+                                  'absence_reason_code' in rowUser && rowUser.absence_reason_code
+                                    ? ABSENCE_REASON_OPTIONS.find((o) => o.code === rowUser.absence_reason_code)?.label
+                                      || rowUser.absence_reason_code
+                                    : null;
+                                const absenceText =
+                                  'absence_reason_text' in rowUser && rowUser.absence_reason_text
+                                    ? rowUser.absence_reason_text
+                                    : '';
+                                const colSpan = !absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 7 : 6;
                                 return (
-                                  <tr key={`${user.emp_id}-${displayIndex}`} className="even:bg-gray-100">
-                                    <td className="px-3 sm:px-4 py-2 font-mono text-xs whitespace-nowrap">{displayIndex}</td>
-                                    <td className="px-3 sm:px-4 py-2 font-mono text-xs whitespace-nowrap">{user.emp_id}</td>
-                                    <td className="px-3 sm:px-4 py-2 font-bold whitespace-nowrap">{user.name}</td>
-                                    <td className="px-3 sm:px-4 py-2 text-gray-600 whitespace-nowrap">{user.dept_name}</td>
-                                    <td className="px-3 sm:px-4 py-2 text-gray-500 text-xs whitespace-nowrap">
-                                      {user.kind === 'actual' && 'checkin_time' in user && user.checkin_time
-                                        ? parseBackendDateTime(user.checkin_time)?.toLocaleString('zh-TW', { hour12: false })
-                                        : ('absence_reason_code' in user && user.absence_reason_code
-                                            ? `${ABSENCE_REASON_OPTIONS.find(o => o.code === user.absence_reason_code)?.label || user.absence_reason_code}${user.absence_reason_code === 'other' && user.absence_reason_text ? `：${user.absence_reason_text}` : ''}`
-                                            : '-')}
-                                    </td>
-                                    {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && user.kind !== 'actual' && (
-                                      <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
-                                        <button
-                                          type="button"
-                                          onClick={() => setAbsenceReasonEdit({
-                                            empId: user.emp_id,
-                                            name: user.name,
-                                            reasonCode: 'absence_reason_code' in user ? (user.absence_reason_code || '') : '',
-                                            reasonText: 'absence_reason_text' in user ? (user.absence_reason_text || '') : '',
-                                          })}
-                                          className="px-2 py-1.5 min-h-11 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
-                                        >
-                                          {'absence_reason_code' in user && user.absence_reason_code ? '編輯原因' : '填寫原因'}
-                                        </button>
+                                  <Fragment key={`${rowUser.emp_id}-${displayIndex}`}>
+                                    <tr className="even:bg-gray-100">
+                                      <td className="px-3 sm:px-4 py-2 font-mono text-xs whitespace-nowrap">{displayIndex}</td>
+                                      <td className="px-3 sm:px-4 py-2 font-mono text-xs whitespace-nowrap">{rowUser.emp_id}</td>
+                                      <td className="px-3 sm:px-4 py-2 font-bold whitespace-nowrap">{rowUser.name}</td>
+                                      <td className="px-3 sm:px-4 py-2 text-gray-600 whitespace-nowrap">{rowUser.dept_name}</td>
+                                      <td className="px-3 sm:px-4 py-2 text-gray-500 text-xs whitespace-nowrap">
+                                        {rowUser.kind === 'actual' && 'checkin_time' in rowUser && rowUser.checkin_time
+                                          ? parseBackendDateTime(rowUser.checkin_time)?.toLocaleString('zh-TW', { hour12: false })
+                                          : (absenceLabel
+                                              ? `${absenceLabel}${absenceText ? `：${absenceText}` : ''}`
+                                              : '-')}
                                       </td>
+                                      <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
+                                        {rowUser.kind === 'actual' ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => { void toggleHistory(rowUser.emp_id); }}
+                                            className="px-2 py-1.5 min-h-11 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer inline-flex items-center gap-0.5"
+                                          >
+                                            {historyOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                            歷程
+                                          </button>
+                                        ) : (
+                                          <span className="text-gray-300 text-xs">—</span>
+                                        )}
+                                      </td>
+                                      {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && rowUser.kind !== 'actual' && (
+                                        <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
+                                          <button
+                                            type="button"
+                                            onClick={() => setAbsenceReasonEdit({
+                                              empId: rowUser.emp_id,
+                                              name: rowUser.name,
+                                              reasonCode: 'absence_reason_code' in rowUser ? (rowUser.absence_reason_code || '') : '',
+                                              reasonText: 'absence_reason_text' in rowUser ? (rowUser.absence_reason_text || '') : '',
+                                            })}
+                                            className="px-2 py-1.5 min-h-11 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
+                                          >
+                                            {'absence_reason_code' in rowUser && rowUser.absence_reason_code ? '編輯原因' : '填寫原因'}
+                                          </button>
+                                        </td>
+                                      )}
+                                      {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && rowUser.kind === 'actual' && (
+                                        <td className="px-3 sm:px-4 py-2 whitespace-nowrap" />
+                                      )}
+                                    </tr>
+                                    {historyOpen && (
+                                      <tr className="bg-indigo-50/40">
+                                        <td colSpan={colSpan} className="px-3 sm:px-4 py-3">
+                                          {loadingHistoryEmpId === rowUser.emp_id ? (
+                                            <div className="flex items-center gap-2 text-xs text-indigo-600">
+                                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                              載入歷程…
+                                            </div>
+                                          ) : (historyEventsMap[rowUser.emp_id]?.length ?? 0) === 0 ? (
+                                            <p className="text-xs text-gray-400">尚無報到歷程</p>
+                                          ) : (
+                                            <ul className="space-y-1.5">
+                                              {(historyEventsMap[rowUser.emp_id] || []).map((ev) => (
+                                                <li key={ev.id} className="text-xs text-gray-700 flex flex-wrap gap-x-3 gap-y-0.5">
+                                                  <span className="font-mono text-gray-500">
+                                                    {ev.event_time
+                                                      ? parseBackendDateTime(ev.event_time)?.toLocaleString('zh-TW', { hour12: false })
+                                                      : '—'}
+                                                  </span>
+                                                  <span className="font-bold text-indigo-700">{ev.source}/{ev.event_type}</span>
+                                                  <span className="text-gray-600">{ev.result}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          )}
+                                        </td>
+                                      </tr>
                                     )}
-                                  </tr>
+                                  </Fragment>
                                 );
                               })
                             )}
@@ -820,6 +1104,242 @@ const AttendanceOverviewPage = ({ user }: { user: User }) => {
             }
           }}
         />
+      )}
+
+      {/* 多場訓練合併報到 — 選取 Modal */}
+      {batchSelectOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-indigo-100 flex items-center justify-between bg-linear-to-r from-indigo-50 to-purple-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-indigo-600" />
+                多場訓練合併報到
+              </h3>
+              <button type="button" onClick={() => setBatchSelectOpen(false)} className="p-2 min-h-11 min-w-11 inline-flex items-center justify-center hover:bg-white/50 rounded-xl cursor-pointer" aria-label="關閉">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">訓練日期</label>
+                <input
+                  type="date"
+                  value={batchSelectDate}
+                  onChange={(e) => {
+                    setBatchSelectDate(e.target.value);
+                    setBatchSelectedIds([]);
+                  }}
+                  className="w-full px-3 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">標籤（選填）</label>
+                <input
+                  type="text"
+                  value={batchLabel}
+                  onChange={(e) => setBatchLabel(e.target.value)}
+                  placeholder="例如：上午合併報到"
+                  className="w-full px-3 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
+                />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-700 mb-2">
+                  勾選進行中計畫（至少 2 場）
+                  {batchSelectedIds.length > 0 && (
+                    <span className="text-indigo-600 font-bold ml-2">已選 {batchSelectedIds.length}</span>
+                  )}
+                </p>
+                {batchSelectLoading ? (
+                  <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>
+                ) : batchSelectPlans.length === 0 ? (
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 px-4 py-6 text-center text-sm text-gray-500">
+                    此日期尚無進行中的訓練計畫
+                  </div>
+                ) : (
+                  <ul className="border border-gray-200 rounded-xl divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                    {batchSelectPlans.map((p) => {
+                      const checked = batchSelectedIds.includes(p.id);
+                      return (
+                        <li key={p.id}>
+                          <label className="flex items-center gap-3 px-3 py-3 hover:bg-indigo-50/40 cursor-pointer min-h-11">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setBatchSelectedIds((prev) =>
+                                  checked ? prev.filter((id) => id !== p.id) : [...prev, p.id],
+                                );
+                              }}
+                              className="w-4 h-4 accent-indigo-600 shrink-0"
+                            />
+                            <span className="text-sm font-bold text-gray-900 flex-1 min-w-0 truncate">{p.title}</span>
+                            <span className="text-xs text-gray-400 font-mono shrink-0">{p.training_date}</span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-100 flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setBatchSelectOpen(false)}
+                className="px-4 py-2.5 text-gray-600 font-bold rounded-xl hover:bg-gray-100 cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={creatingBatch || batchSelectedIds.length < 2}
+                onClick={() => { void handleCreateBatch(); }}
+                className="px-4 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-2"
+              >
+                {creatingBatch ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {creatingBatch ? '建立中…' : '確認合併報到'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 合併報到大 Modal */}
+      {batchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-indigo-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-linear-to-r from-indigo-50 to-purple-50">
+              <h3 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-2 min-w-0">
+                <QrCode className="w-5 h-5 text-indigo-600 shrink-0" />
+                <span className="truncate">{batchModal.label || '合併報到'}</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 ${
+                  batchModal.status === 'closed'
+                    ? 'bg-gray-200 text-gray-600'
+                    : 'bg-green-100 text-green-700'
+                }`}>
+                  {batchModal.status === 'closed' ? '已關閉' : batchModal.status === 'reopened' ? '已重開' : '進行中'}
+                </span>
+              </h3>
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                {batchModal.status === 'closed' ? (
+                  <button
+                    type="button"
+                    disabled={batchStatusUpdating}
+                    onClick={() => { void handleBatchStatusChange('reopened'); }}
+                    className="px-3 py-1.5 min-h-11 text-xs font-bold bg-white text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 disabled:opacity-50 cursor-pointer"
+                  >
+                    重開
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={batchStatusUpdating}
+                    onClick={() => { void handleBatchStatusChange('closed'); }}
+                    className="px-3 py-1.5 min-h-11 text-xs font-bold bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 cursor-pointer"
+                  >
+                    關閉合併報到
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={batchStatsLoading}
+                  onClick={() => { void refreshBatchStats(batchModal.id); }}
+                  className="px-3 py-1.5 min-h-11 text-xs font-bold bg-white text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 disabled:opacity-50 cursor-pointer inline-flex items-center gap-1"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${batchStatsLoading ? 'animate-spin' : ''}`} />
+                  更新
+                </button>
+                <button type="button" onClick={closeBatchModal} className="p-2 min-h-11 min-w-11 inline-flex items-center justify-center hover:bg-white/50 rounded-xl cursor-pointer" aria-label="關閉">
+                  <X className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
+            </div>
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+              <div className="flex flex-col lg:flex-row gap-6">
+                <div className="lg:w-72 shrink-0 flex flex-col items-center gap-3">
+                  {batchModal.status === 'closed' ? (
+                    <div className="w-56 h-56 rounded-xl bg-gray-100 border border-gray-200 flex flex-col items-center justify-center gap-2 opacity-60">
+                      {batchModal.qrcode_url ? (
+                        <img src={batchModal.qrcode_url} alt="合併報到 QRcode" className="w-44 h-44 grayscale opacity-50" />
+                      ) : (
+                        <QrCode className="w-20 h-20 text-gray-300" />
+                      )}
+                      <p className="text-sm font-bold text-gray-500">此合併報到已關閉</p>
+                    </div>
+                  ) : batchModal.qrcode_url ? (
+                    <img
+                      src={batchModal.qrcode_url}
+                      alt="合併報到 QRcode"
+                      className="w-56 h-56 shrink-0 rounded-xl bg-white p-2 border border-indigo-100"
+                    />
+                  ) : (
+                    <div className="w-56 h-56 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                    </div>
+                  )}
+                  <p className="text-sm font-black text-gray-900 text-center">{batchModal.label}</p>
+                  {batchModal.checkin_url && (
+                    <div className="flex items-center gap-2 text-xs w-full">
+                      <span className="font-mono text-gray-600 bg-indigo-50 px-2 py-1.5 rounded-lg border border-indigo-100 flex-1 truncate">
+                        {batchModal.checkin_url}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!batchModal.checkin_url) return;
+                          void navigator.clipboard.writeText(batchModal.checkin_url).then(() => {
+                            setCopiedBatchUrl(true);
+                            setTimeout(() => setCopiedBatchUrl(false), 2000);
+                          });
+                        }}
+                        className="p-1.5 min-h-11 min-w-11 inline-flex items-center justify-center bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition-colors cursor-pointer shrink-0"
+                        title="複製連結"
+                      >
+                        {copiedBatchUrl ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-bold text-gray-700 mb-3">各場報到統計</h4>
+                  {!batchStats ? (
+                    <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>
+                  ) : (
+                    <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                      <table className="w-full min-w-[28rem] text-sm">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            <th className="px-3 py-2.5 text-left font-bold text-gray-700 whitespace-nowrap">訓練計畫</th>
+                            <th className="px-3 py-2.5 text-right font-bold text-gray-700 whitespace-nowrap">應到</th>
+                            <th className="px-3 py-2.5 text-right font-bold text-gray-700 whitespace-nowrap">實到</th>
+                            <th className="px-3 py-2.5 text-right font-bold text-gray-700 whitespace-nowrap">未到</th>
+                            <th className="px-3 py-2.5 text-right font-bold text-gray-700 whitespace-nowrap">出席率</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {batchStats.plans.map((ps) => (
+                            <tr key={ps.plan_id} className="even:bg-gray-50">
+                              <td className="px-3 py-2.5 font-bold text-gray-900">{ps.title}</td>
+                              <td className="px-3 py-2.5 text-right font-mono">{ps.expected_count}</td>
+                              <td className="px-3 py-2.5 text-right font-mono text-green-600">{ps.actual_count}</td>
+                              <td className="px-3 py-2.5 text-right font-mono text-orange-600">{ps.absent_count}</td>
+                              <td className="px-3 py-2.5 text-right font-bold text-indigo-600">{ps.attendance_rate.toFixed(1)}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-100 bg-gray-50">
+              <button type="button" onClick={closeBatchModal} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 cursor-pointer">
+                關閉
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

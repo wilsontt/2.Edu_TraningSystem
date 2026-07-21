@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2, Clock, ArrowLeft } from 'lucide-react';
+import { AxiosError } from 'axios';
 import api from '../../api';
 import { parseBackendDateTime } from '../../utils/date';
 
@@ -11,13 +12,35 @@ type CheckInResult = {
   has_exam?: boolean;
 };
 
+type BatchPlanCheckinResult = {
+  plan_id: number;
+  plan_title: string;
+  result: string;
+  checkin_time?: string | null;
+};
+
+type BatchCheckInResult = {
+  success: boolean;
+  batch_id: string;
+  batch_label: string;
+  succeeded: BatchPlanCheckinResult[];
+  skipped: BatchPlanCheckinResult[];
+};
+
+const SKIPPED_RESULT_LABELS: Record<string, string> = {
+  skipped_not_target: '非本計畫對象',
+  already_checked: '已報到過',
+  plan_not_applicable: '計畫未開放／已過期',
+};
+
 /** 模組級 Promise：Strict Mode 雙掛載共用同一請求，避免雙寫與第二掛載空手返回。 */
-const checkinPromises = new Map<string, Promise<CheckInResult>>();
+const checkinPromises = new Map<string, Promise<CheckInResult | BatchCheckInResult>>();
 
 const CheckInPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const planId = searchParams.get('plan_id');
+  const batchId = searchParams.get('batch_id');
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,12 +50,57 @@ const CheckInPage = () => {
   } | null>(null);
   const [planTitle, setPlanTitle] = useState<string>('');
   const [hasExam, setHasExam] = useState(false);
+  const [batchResult, setBatchResult] = useState<BatchCheckInResult | null>(null);
   const autoStartedRef = useRef(false);
 
   const applyExamMeta = (data: { question_count?: number; has_exam?: boolean }) => {
     const count = typeof data.question_count === 'number' ? data.question_count : 0;
     setHasExam(data.has_exam === true || count > 0);
   };
+
+  const handleBatchCheckIn = useCallback(async (): Promise<boolean> => {
+    if (!batchId) return false;
+
+    const promiseKey = `batch:${batchId}`;
+    const run = async (): Promise<BatchCheckInResult> => {
+      const res = await api.post<BatchCheckInResult>(`/exam/attendance/batches/${batchId}/checkin`);
+      return res.data;
+    };
+
+    let promise = checkinPromises.get(promiseKey) as Promise<BatchCheckInResult> | undefined;
+    if (!promise) {
+      promise = run().finally(() => {
+        checkinPromises.delete(promiseKey);
+      });
+      checkinPromises.set(promiseKey, promise);
+    }
+
+    try {
+      setCheckingIn(true);
+      setError(null);
+      const result = await promise;
+      setBatchResult(result);
+      setPlanTitle(result.batch_label || '合併報到');
+      setHasExam(false);
+      const firstSuccess = result.succeeded[0];
+      setAttendanceStatus({
+        is_checked_in: true,
+        checkin_time: firstSuccess?.checkin_time || undefined,
+      });
+      return true;
+    } catch (err: unknown) {
+      console.error('Failed to batch check in', err);
+      const detail =
+        err instanceof AxiosError
+          ? (typeof err.response?.data?.detail === 'string' ? err.response.data.detail : '')
+          : '';
+      setError(detail || '合併報到失敗，請稍後再試');
+      setAttendanceStatus({ is_checked_in: false });
+      return false;
+    } finally {
+      setCheckingIn(false);
+    }
+  }, [batchId]);
 
   const handleCheckIn = useCallback(async (): Promise<boolean> => {
     if (!planId) return false;
@@ -47,7 +115,7 @@ const CheckInPage = () => {
       };
     };
 
-    let promise = checkinPromises.get(planId);
+    let promise = checkinPromises.get(planId) as Promise<CheckInResult> | undefined;
     if (!promise) {
       promise = run().finally(() => {
         checkinPromises.delete(planId);
@@ -96,8 +164,23 @@ const CheckInPage = () => {
     autoStartedRef.current = false;
 
     const init = async () => {
+      if (batchId) {
+        try {
+          setLoading(true);
+          setError(null);
+          setBatchResult(null);
+          if (!autoStartedRef.current) {
+            autoStartedRef.current = true;
+            await handleBatchCheckIn();
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+        return;
+      }
+
       if (!planId) {
-        setError('缺少訓練計畫 ID');
+        setError('缺少訓練計畫 ID 或合併報到批次');
         setLoading(false);
         return;
       }
@@ -137,7 +220,7 @@ const CheckInPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [planId, handleCheckIn]);
+  }, [planId, batchId, handleCheckIn, handleBatchCheckIn]);
 
   if (loading) {
     return (
@@ -151,7 +234,77 @@ const CheckInPage = () => {
     );
   }
 
-  if (attendanceStatus?.is_checked_in) {
+  if (batchId && attendanceStatus?.is_checked_in && batchResult) {
+    const checkinTime = attendanceStatus.checkin_time
+      ? parseBackendDateTime(attendanceStatus.checkin_time)?.toLocaleString('zh-TW', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })
+      : '';
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-8 h-8 text-green-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">合併報到完成</h2>
+          <p className="text-gray-800 mb-2 font-bold text-lg">
+            {batchResult.batch_label || planTitle || '合併報到'}
+          </p>
+          {checkinTime && (
+            <p className="text-sm text-gray-400 mb-4">報到時間：{checkinTime}</p>
+          )}
+
+          {batchResult.succeeded.length > 0 && (
+            <div className="text-left mb-4">
+              <p className="text-sm font-bold text-green-700 mb-2">成功報到</p>
+              <ul className="space-y-1.5 bg-green-50 border border-green-100 rounded-xl p-3">
+                {batchResult.succeeded.map((s) => (
+                  <li key={s.plan_id} className="text-sm text-gray-800 font-medium">
+                    {s.plan_title}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {batchResult.skipped.length > 0 && (
+            <div className="text-left mb-6">
+              <p className="text-sm font-bold text-amber-700 mb-2">略過</p>
+              <ul className="space-y-1.5 bg-amber-50 border border-amber-100 rounded-xl p-3">
+                {batchResult.skipped.map((s) => (
+                  <li key={s.plan_id} className="text-sm text-gray-700">
+                    <span className="font-medium">{s.plan_title}</span>
+                    <span className="text-amber-700 ml-2">
+                      {SKIPPED_RESULT_LABELS[s.result] || s.result}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {batchResult.succeeded.length === 0 && batchResult.skipped.length > 0 && (
+            <p className="text-sm text-gray-500 mb-6">本次沒有新的報到成功紀錄。</p>
+          )}
+
+          <button
+            onClick={() => navigate('/')}
+            className="w-full py-3 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300 transition-colors"
+          >
+            返回首頁
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!batchId && attendanceStatus?.is_checked_in) {
     const checkinTime = attendanceStatus.checkin_time
       ? parseBackendDateTime(attendanceStatus.checkin_time)?.toLocaleString('zh-TW', {
           year: 'numeric',
@@ -210,7 +363,9 @@ const CheckInPage = () => {
           <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Clock className="w-8 h-8 text-blue-600" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">訓練課程報到</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            {batchId ? '合併報到' : '訓練課程報到'}
+          </h2>
           {planTitle && (
             <p className="text-gray-600 mb-4 font-bold">{planTitle}</p>
           )}
@@ -226,30 +381,52 @@ const CheckInPage = () => {
         )}
 
         <div className="space-y-4">
-          <button
-            onClick={() => { void handleCheckIn(); }}
-            disabled={checkingIn || !planId}
-            className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-xl shadow-blue-200 hover:shadow-blue-300 transition-all duration-300 flex items-center justify-center gap-3 disabled:bg-blue-300 disabled:shadow-none"
-          >
-            {checkingIn ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>報到中...</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle className="w-5 h-5" />
-                <span>確認報到</span>
-              </>
-            )}
-          </button>
+          {!batchId && (
+            <button
+              onClick={() => { void handleCheckIn(); }}
+              disabled={checkingIn || !planId}
+              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-xl shadow-blue-200 hover:shadow-blue-300 transition-all duration-300 flex items-center justify-center gap-3 disabled:bg-blue-300 disabled:shadow-none"
+            >
+              {checkingIn ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>報到中...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-5 h-5" />
+                  <span>確認報到</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {batchId && !error && (
+            <button
+              onClick={() => { void handleBatchCheckIn(); }}
+              disabled={checkingIn}
+              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-xl shadow-blue-200 hover:shadow-blue-300 transition-all duration-300 flex items-center justify-center gap-3 disabled:bg-blue-300 disabled:shadow-none"
+            >
+              {checkingIn ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>報到中...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-5 h-5" />
+                  <span>確認合併報到</span>
+                </>
+              )}
+            </button>
+          )}
 
           <button
             onClick={() => navigate('/')}
             className="w-full py-3 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300 transition-colors flex items-center justify-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            返回考試中心
+            {batchId ? '返回首頁' : '返回考試中心'}
           </button>
         </div>
       </div>

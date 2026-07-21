@@ -270,6 +270,36 @@ SELECT name FROM sqlite_master WHERE type='index' AND name='uq_attendance_emp_pl
 | **根因** | 缺 UNIQUE；前端自動報到（含 Strict Mode）雙請求寫入兩列 |
 | **解法** | 執行本節遷移；後端 checkin 已改冪等 |
 
+#### 合併報到批次與報到歷程（2026-07-21）
+
+新增 `attendance_checkin_batches`、`attendance_checkin_batch_plans`、`attendance_checkin_events`（append-only 歷程；不覆蓋 `attendance_records.checkin_time`）。
+
+```bash
+cp data/education_training.db data/education_training.db.bak-$(date +%Y%m%d)
+cd backend
+.venv/bin/python3 migrations/add_attendance_checkin_batch_and_events.py
+```
+
+ds1 Docker：
+
+```bash
+docker compose exec training-backend python migrations/add_attendance_checkin_batch_and_events.py
+```
+
+驗證：
+
+```sql
+SELECT name FROM sqlite_master WHERE type='table'
+  AND name IN (
+    'attendance_checkin_batches',
+    'attendance_checkin_batch_plans',
+    'attendance_checkin_events'
+  );
+-- 預期：3 列
+```
+
+對應 PLAN：[`20260720_合併報到批次與報到歷程_PLAN.md`](../../02-棕地專案/plans/20260720_合併報到批次與報到歷程_PLAN.md)。
+
 #### 報到紀錄歷史補齊（2026-07-03）
 
 報到功能（T10）上線前已交卷、卻無 `attendance_records` 的舊資料，須以**第一次考試時間**補登報到列。  
