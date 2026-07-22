@@ -1429,8 +1429,8 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                     </div>
                   )}
                   {batchModal.status === 'closed' && (
-                    <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">
-                      此合併報到已關閉，員工掃描 QR 將無法報到。
+                    <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-center text-2xl font-bold text-orange-800">
+                      <span className="block">此合併報到已關閉，請洽教育訓練相關負責人</span>
                     </div>
                   )}
                 </div>
