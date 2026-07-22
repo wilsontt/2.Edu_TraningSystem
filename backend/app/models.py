@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy import Column, Integer, String, Text, Boolean, Date, DateTime, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from .database import Base
@@ -209,6 +210,13 @@ class QuestionBank(Base):
     level = Column(String(20), nullable=True)
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    dept_id = Column(Integer, ForeignKey("departments.id"), nullable=True)  # 開課單位（owner）；NULL＝不受 owner 限制
+
+    department = relationship("Department")
+
+    @property
+    def dept_name(self) -> Optional[str]:
+        return self.department.name if self.department else None
 
 
 class ExamRecord(Base):
@@ -273,6 +281,9 @@ class ExamDetail(Base):
 class AttendanceRecord(Base):
     """報到紀錄：員工於訓練開始前的報到資訊"""
     __tablename__ = "attendance_records"
+    __table_args__ = (
+        UniqueConstraint("emp_id", "plan_id", name="uq_attendance_emp_plan"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     emp_id = Column(String, ForeignKey("users.emp_id"))
     plan_id = Column(Integer, ForeignKey("training_plans.id"))
@@ -293,6 +304,49 @@ class AttendanceAbsenceReason(Base):
     reason_text = Column(String(500), nullable=True) # 詳細描述
     recorded_by = Column(String, ForeignKey("users.emp_id"), nullable=False)
     recorded_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class AttendanceCheckinBatch(Base):
+    """合併報到批次：一次 QR 對應多個訓練計畫（依序多場）。"""
+    __tablename__ = "attendance_checkin_batches"
+    id = Column(String(36), primary_key=True)  # UUID
+    label = Column(String, nullable=False)
+    training_date = Column(Date, nullable=False)
+    status = Column(String, nullable=False, default="open")  # open / closed / reopened
+    created_by = Column(String, ForeignKey("users.emp_id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    closed_at = Column(DateTime, nullable=True)
+    closed_by = Column(String, ForeignKey("users.emp_id"), nullable=True)
+    reopened_at = Column(DateTime, nullable=True)
+    reopened_by = Column(String, ForeignKey("users.emp_id"), nullable=True)
+
+    plans = relationship(
+        "TrainingPlan",
+        secondary="attendance_checkin_batch_plans",
+        lazy="joined",
+    )
+
+
+class AttendanceCheckinBatchPlan(Base):
+    """合併報到批次 ↔ 訓練計畫。"""
+    __tablename__ = "attendance_checkin_batch_plans"
+    batch_id = Column(String(36), ForeignKey("attendance_checkin_batches.id"), primary_key=True)
+    plan_id = Column(Integer, ForeignKey("training_plans.id"), primary_key=True)
+
+
+class AttendanceCheckinEvent(Base):
+    """報到歷程事件（append-only；不覆蓋 attendance_records.checkin_time）。"""
+    __tablename__ = "attendance_checkin_events"
+    id = Column(Integer, primary_key=True, index=True)
+    emp_id = Column(String, ForeignKey("users.emp_id"), nullable=False, index=True)
+    plan_id = Column(Integer, ForeignKey("training_plans.id"), nullable=False, index=True)
+    event_time = Column(DateTime, default=datetime.datetime.utcnow)
+    event_type = Column(String, nullable=False)  # batch_checkin / single_checkin / exam_center
+    batch_id = Column(String(36), ForeignKey("attendance_checkin_batches.id"), nullable=True)
+    source = Column(String, nullable=False)  # qr_batch / qr_single / exam_center_button
+    result = Column(String, nullable=False)  # success / already_checked / skipped_not_target / batch_closed
+    ip_address = Column(String, nullable=True)
+
 
 class LoginToken(Base):
     """QRcode 登入 Token：用於生成限時有效的登入 QRcode"""
@@ -369,10 +423,12 @@ class TeachingMaterialSet(Base):
     uploaded_by = Column(String, nullable=False)     # emp_id
     uploaded_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
     is_active = Column(Boolean, default=True, index=True)
+    dept_id = Column(Integer, ForeignKey("departments.id"), nullable=True)  # 開課單位（owner）；NULL＝不受 owner 限制
 
     material_type = relationship("MaterialType")
     files = relationship("TeachingMaterialFile", back_populates="material_set")
     set_plans = relationship("TeachingMaterialSetPlan", back_populates="material_set")
+    department = relationship("Department")
 
 
 class TeachingMaterialFile(Base):

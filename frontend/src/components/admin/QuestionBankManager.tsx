@@ -3,6 +3,8 @@ import { Search, Trash2, Loader2, Lightbulb, ChevronUp, ChevronDown, Edit } from
 import api from '../../api';
 import QuestionEditorModal from './QuestionEditorModal';
 import Pagination from '../common/Pagination';
+import type { User } from '../../types';
+import { canModifyOwnedResource } from '../../utils/authGuards';
 
 interface QuestionBankItem {
     id: number;
@@ -13,9 +15,20 @@ interface QuestionBankItem {
     tags: string; // JSON string
     hint?: string; // 提示內容（可選）
     created_at: string;
+    dept_id: number | null;
+    dept_name: string | null;
 }
 
-const QuestionBankManager = () => {
+interface DepartmentOption {
+    id: number;
+    name: string;
+}
+
+interface QuestionBankManagerProps {
+    user: User;
+}
+
+const QuestionBankManager = ({ user }: QuestionBankManagerProps) => {
     const [questions, setQuestions] = useState<QuestionBankItem[]>([]);
     const [loading, setLoading] = useState(false);
     
@@ -29,7 +42,13 @@ const QuestionBankManager = () => {
     const [keyword, setKeyword] = useState('');
     const [questionType, setQuestionType] = useState('all');
     const [tagFilter, setTagFilter] = useState('');
-    
+    const [deptFilter, setDeptFilter] = useState('');
+    const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+
+    useEffect(() => {
+        api.get('/auth/departments').then((res) => setDepartments(res.data)).catch(() => {});
+    }, []);
+
     // 提示展開狀態
     const [expandedHints, setExpandedHints] = useState<Record<number, boolean>>({});
     
@@ -48,6 +67,7 @@ const QuestionBankManager = () => {
             if (keyword) params.append('keyword', keyword);
             if (questionType && questionType !== 'all') params.append('question_type', questionType);
             if (tagFilter) params.append('tags', tagFilter);
+            if (deptFilter) params.append('dept_id', deptFilter);
 
             const res = await api.get(`/admin/question-bank/?${params.toString()}`);
             setQuestions(res.data.items);
@@ -66,7 +86,7 @@ const QuestionBankManager = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, pageSize, keyword, questionType, tagFilter]);
+    }, [page, pageSize, keyword, questionType, tagFilter, deptFilter]);
 
     useEffect(() => {
         fetchQuestions();
@@ -146,13 +166,23 @@ const QuestionBankManager = () => {
                         <option value="multiple">多選題</option>
                         <option value="true_false">是非題</option>
                     </select>
-                    <input 
+                    <input
                         type="text"
                         placeholder="標籤篩選"
                         className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none w-32 transition-all"
                         value={tagFilter}
                         onChange={(e) => setTagFilter(e.target.value)}
                     />
+                    <select
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer transition-all"
+                        value={deptFilter}
+                        onChange={(e) => { setDeptFilter(e.target.value); setPage(1); }}
+                    >
+                        <option value="">所有開課單位</option>
+                        {departments.map((d) => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                    </select>
                     <button type="submit" className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 hover:shadow-md hover:shadow-indigo-200 active:scale-95 transition-all cursor-pointer">
                         <Search className="w-4 h-4" />
                     </button>
@@ -164,7 +194,9 @@ const QuestionBankManager = () => {
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
-                        onClick={() => setSelectedIds(new Set(questions.map((q) => q.id)))}
+                        onClick={() => setSelectedIds(new Set(
+                            questions.filter((q) => canModifyOwnedResource(user, q.dept_id)).map((q) => q.id)
+                        ))}
                         className="px-2 py-1 text-xs font-bold rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50 cursor-pointer"
                     >
                         全選
@@ -197,16 +229,17 @@ const QuestionBankManager = () => {
                             <th className="px-6 py-3 text-xs font-black text-indigo-600 uppercase w-24">題型</th>
                             <th className="px-6 py-3 text-xs font-black text-indigo-600 uppercase">題目內容</th>
                             <th className="px-6 py-3 text-xs font-black text-indigo-600 uppercase w-48">標籤</th>
+                            <th className="px-6 py-3 text-xs font-black text-indigo-600 uppercase w-28">開課單位</th>
                             <th className="px-6 py-3 text-xs font-black text-indigo-600 uppercase w-24 text-right">操作</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                         {loading ? (
-                            <tr><td colSpan={6} className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600"/></td></tr>
+                            <tr><td colSpan={7} className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-600"/></td></tr>
                         ) : fetchError ? (
-                            <tr><td colSpan={6} className="p-8 text-center"><span className="text-red-600 font-bold">{fetchError}</span></td></tr>
+                            <tr><td colSpan={7} className="p-8 text-center"><span className="text-red-600 font-bold">{fetchError}</span></td></tr>
                         ) : questions.length === 0 ? (
-                            <tr><td colSpan={6} className="p-8 text-center text-gray-400 italic font-bold">查無資料</td></tr>
+                            <tr><td colSpan={7} className="p-8 text-center text-gray-400 italic font-bold">查無資料</td></tr>
                         ) : (
                             questions.map((q, idx) => (
                                 <tr key={q.id} className="group transition-all duration-200 border-b border-gray-50 last:border-0 even:bg-gray-100 hover:bg-indigo-50/80">
@@ -214,13 +247,14 @@ const QuestionBankManager = () => {
                                         <input
                                             type="checkbox"
                                             checked={selectedIds.has(q.id)}
+                                            disabled={!canModifyOwnedResource(user, q.dept_id)}
                                             onChange={(e) => {
                                                 const next = new Set(selectedIds);
                                                 if (e.target.checked) next.add(q.id);
                                                 else next.delete(q.id);
                                                 setSelectedIds(next);
                                             }}
-                                            className="w-4 h-4"
+                                            className="w-4 h-4 disabled:opacity-30 disabled:cursor-not-allowed"
                                         />
                                     </td>
                                     <td className="px-6 py-3 text-xs font-mono text-gray-400">
@@ -270,19 +304,24 @@ const QuestionBankManager = () => {
                                     <td className="px-6 py-3">
                                         {renderTags(q.tags)}
                                     </td>
+                                    <td className="px-6 py-3 text-xs font-bold text-gray-600">
+                                        {q.dept_name || <span className="text-gray-300">-</span>}
+                                    </td>
                                     <td className="px-6 py-3 text-right">
                                         <div className="flex justify-end gap-1">
-                                            <button 
+                                            <button
                                                 onClick={() => setEditingQuestion(q)}
-                                                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all hover:scale-110 cursor-pointer"
-                                                title="編輯題目"
+                                                disabled={!canModifyOwnedResource(user, q.dept_id)}
+                                                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all hover:scale-110 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:bg-transparent"
+                                                title={canModifyOwnedResource(user, q.dept_id) ? '編輯題目' : '僅開課單位可編輯'}
                                             >
                                                 <Edit className="w-4 h-4" />
                                             </button>
-                                            <button 
+                                            <button
                                                 onClick={() => handleDelete(q.id)}
-                                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all hover:scale-110 cursor-pointer"
-                                                title="刪除題目"
+                                                disabled={!canModifyOwnedResource(user, q.dept_id)}
+                                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all hover:scale-110 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:bg-transparent"
+                                                title={canModifyOwnedResource(user, q.dept_id) ? '刪除題目' : '僅開課單位可刪除'}
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>

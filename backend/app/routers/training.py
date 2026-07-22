@@ -20,7 +20,7 @@ from reportlab.lib.pagesizes import A4
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission, check_any_permission
-from ..access_scope import get_scope_emp_ids, intersect_emp_ids
+from ..access_scope import get_scope_emp_ids, intersect_emp_ids, can_modify_owned_resource
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -222,6 +222,9 @@ def update_training_plan(
     if not db_plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
 
+    if not can_modify_owned_resource(current_user, db_plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可編輯此訓練計畫")
+
     # update fields
     # 檢查開始日期是否變更，且是否已有考試紀錄
     if db_plan.training_date != plan_update.training_date:
@@ -344,7 +347,11 @@ def delete_training_plan(
     attendance_count = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.plan_id == plan_id).count()
     if attendance_count > 0:
         raise HTTPException(status_code=400, detail=f"該計畫有 {attendance_count} 筆報到記錄，無法刪除")
-    
+
+    # Owner 檢查：僅開課單位（或超管／系統管理角色）可刪除
+    if not can_modify_owned_resource(current_user, db_plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可刪除此訓練計畫")
+
     try:
         db.delete(db_plan)
         db.commit()
@@ -364,6 +371,9 @@ def archive_training_plan(
     db_plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not db_plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+
+    if not can_modify_owned_resource(current_user, db_plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可封存此訓練計畫")
     
     if db_plan.is_archived:
         raise HTTPException(status_code=400, detail="該計畫已經被封存")
@@ -388,6 +398,9 @@ def unarchive_training_plan(
     db_plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not db_plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+
+    if not can_modify_owned_resource(current_user, db_plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可取消封存此訓練計畫")
     
     if not db_plan.is_archived:
         raise HTTPException(status_code=400, detail="該計畫未被封存")
@@ -975,43 +988,310 @@ def generate_checkin_qrcode(
     plan_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user = check_permission("menu:plan")  # Admin 或 menu:plan 權限
+    current_user=check_any_permission(["menu:plan", "menu:attendance-overview"]),
 ):
-    """產生報到 QRcode（用於訓練計畫報到）"""
-    # 檢查計畫是否存在
+    """產生報到 QRcode。
+
+    - 報到總覽（menu:attendance-overview）：不檢 Owner
+    - 僅訓練計畫權限（menu:plan）：需為開課單位或超管
+    """
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
-    
-    # 構建報到 URL（動態 URL，非固定 IP）
-    # 優先使用環境變數 FRONTEND_URL
-    frontend_url = os.getenv("FRONTEND_URL")
-    
-    if frontend_url:
-        base_url = frontend_url.rstrip("/")
-    else:
-        # 其次使用前端明確傳遞的 URL（含 /training 等部署子路徑），避免掃碼後缺少前綴而 404
-        explicit_frontend_url = request.headers.get("x-frontend-url")
-        if explicit_frontend_url:
-            base_url = explicit_frontend_url.rstrip("/")
-        else:
-            # 自動從請求中推斷前端 URL
-            host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
-            scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
-            base_url = f"{scheme}://{host}"
-            if "/api" in base_url:
-                base_url = base_url.split("/api")[0]
-    
-    # 報到 URL：前端路由，用戶掃描後會導向報到頁面
-    # 用戶需要先登入才能報到（如果未登入會導向登入頁面）
+
+    has_overview = _user_has_function_code(current_user, "menu:attendance-overview")
+    role_name = current_user.role.name if current_user.role else ""
+    is_admin = role_name in _ADMIN_ROLE_NAMES
+    if not has_overview and not is_admin:
+        if not can_modify_owned_resource(current_user, plan.dept_id):
+            raise HTTPException(status_code=403, detail="僅開課單位可產生此訓練計畫的報到 QRcode")
+
+    base_url = _resolve_frontend_base_url(request)
     checkin_url = f"{base_url}/checkin?plan_id={plan_id}"
-    
-    # 生成 QRcode 圖片
     qrcode_image = generate_checkin_qrcode_image(checkin_url)
-    
+
     return {
         "plan_id": plan_id,
         "plan_title": plan.title,
         "qrcode_url": qrcode_image,
-        "checkin_url": checkin_url  # 也返回 URL 供複製使用
+        "checkin_url": checkin_url,
     }
+
+
+def _resolve_frontend_base_url(request: Request) -> str:
+    frontend_url = os.getenv("FRONTEND_URL")
+    if frontend_url:
+        return frontend_url.rstrip("/")
+    explicit_frontend_url = request.headers.get("x-frontend-url")
+    if explicit_frontend_url:
+        return explicit_frontend_url.rstrip("/")
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    base_url = f"{scheme}://{host}"
+    if "/api" in base_url:
+        base_url = base_url.split("/api")[0]
+    return base_url
+
+
+def _batch_to_out(
+    batch: models.AttendanceCheckinBatch,
+    *,
+    qrcode_url: Optional[str] = None,
+    checkin_url: Optional[str] = None,
+) -> dict:
+    plans = [
+        {
+            "plan_id": p.id,
+            "title": p.title,
+            "training_date": p.training_date,
+        }
+        for p in (batch.plans or [])
+    ]
+    return {
+        "id": batch.id,
+        "label": batch.label,
+        "training_date": batch.training_date,
+        "status": batch.status,
+        "created_by": batch.created_by,
+        "created_at": batch.created_at,
+        "closed_at": batch.closed_at,
+        "closed_by": batch.closed_by,
+        "reopened_at": batch.reopened_at,
+        "reopened_by": batch.reopened_by,
+        "plans": plans,
+        "qrcode_url": qrcode_url,
+        "checkin_url": checkin_url,
+    }
+
+
+@router.post("/attendance/batches", response_model=schemas.AttendanceBatchOut)
+def create_attendance_batch(
+    body: schemas.AttendanceBatchCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:attendance-overview"),
+):
+    """建立合併報到批次（≥2 場、進行中未封存；不限同一開始日）。
+
+    `training_date` 為場次／報到日（可與各計畫開始日不同）；未傳則用今日。
+    """
+    import uuid
+    import logging
+
+    plan_ids = list(dict.fromkeys(body.plan_ids or []))
+    if len(plan_ids) < 2:
+        raise HTTPException(status_code=400, detail="合併報到至少需勾選 2 場訓練計畫")
+
+    plans = (
+        db.query(models.TrainingPlan)
+        .filter(models.TrainingPlan.id.in_(plan_ids))
+        .all()
+    )
+    if len(plans) != len(plan_ids):
+        raise HTTPException(status_code=404, detail="部分訓練計畫不存在")
+
+    today = date.today()
+    for p in plans:
+        if p.is_archived:
+            raise HTTPException(status_code=400, detail=f"計畫「{p.title}」已封存，不可合併報到")
+        if p.end_date is not None and p.end_date < today:
+            raise HTTPException(status_code=400, detail=f"計畫「{p.title}」已過期，不可合併報到")
+
+    training_date = body.training_date or today
+    label = body.label
+    batch_id = str(uuid.uuid4())
+    batch = models.AttendanceCheckinBatch(
+        id=batch_id,
+        label=label,
+        training_date=training_date,
+        status="open",
+        created_by=current_user.emp_id,
+        created_at=datetime.utcnow(),
+    )
+    db.add(batch)
+    for p in plans:
+        db.add(models.AttendanceCheckinBatchPlan(batch_id=batch_id, plan_id=p.id))
+    db.commit()
+    db.refresh(batch)
+    # reload with plans
+    batch = (
+        db.query(models.AttendanceCheckinBatch)
+        .filter(models.AttendanceCheckinBatch.id == batch_id)
+        .first()
+    )
+
+    base_url = _resolve_frontend_base_url(request)
+    checkin_url = f"{base_url}/checkin?batch_id={batch_id}"
+    qrcode_url = generate_checkin_qrcode_image(checkin_url)
+    logging.getLogger("audit").info(
+        "attendance_batch_created emp_id=%s batch_id=%s plans=%s session_date=%s",
+        current_user.emp_id,
+        batch_id,
+        plan_ids,
+        training_date.isoformat(),
+    )
+    return _batch_to_out(batch, qrcode_url=qrcode_url, checkin_url=checkin_url)
+
+
+@router.get("/attendance/batches/{batch_id}/public-status")
+def get_attendance_batch_public_status(
+    batch_id: str,
+    db: Session = Depends(get_db),
+):
+    """公開端點（不需登入）：僅回傳 batch 的開放狀態，供掃碼後判斷是否已關閉。"""
+    batch = (
+        db.query(models.AttendanceCheckinBatch)
+        .filter(models.AttendanceCheckinBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="合併報到批次不存在")
+    active = batch.status in ("open", "reopened")
+    return {"batch_id": batch.id, "status": batch.status, "active": active}
+
+
+@router.get("/attendance/batches/{batch_id}", response_model=schemas.AttendanceBatchOut)
+def get_attendance_batch(
+    batch_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:attendance-overview"),
+):
+    batch = (
+        db.query(models.AttendanceCheckinBatch)
+        .filter(models.AttendanceCheckinBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="合併報到批次不存在")
+    base_url = _resolve_frontend_base_url(request)
+    checkin_url = f"{base_url}/checkin?batch_id={batch_id}"
+    qrcode_url = generate_checkin_qrcode_image(checkin_url) if batch.status in ("open", "reopened") else None
+    return _batch_to_out(
+        batch,
+        qrcode_url=qrcode_url,
+        checkin_url=checkin_url if batch.status in ("open", "reopened") else None,
+    )
+
+
+@router.get("/attendance/batches/{batch_id}/stats", response_model=schemas.AttendanceBatchStatsOut)
+def get_attendance_batch_stats(
+    batch_id: str,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:attendance-overview"),
+):
+    batch = (
+        db.query(models.AttendanceCheckinBatch)
+        .filter(models.AttendanceCheckinBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="合併報到批次不存在")
+
+    plan_stats = []
+    for plan in batch.plans or []:
+        stats = get_attendance_stats(plan.id, db, current_user)
+        plan_stats.append({
+            "plan_id": plan.id,
+            "title": plan.title,
+            "expected_count": stats["expected_count"],
+            "actual_count": stats["actual_count"],
+            "absent_count": max(0, stats["expected_count"] - stats["actual_count"]),
+            "attendance_rate": stats["attendance_rate"],
+        })
+    return {"batch_id": batch.id, "status": batch.status, "plans": plan_stats}
+
+
+@router.patch("/attendance/batches/{batch_id}/status", response_model=schemas.AttendanceBatchOut)
+def update_attendance_batch_status(
+    batch_id: str,
+    body: schemas.AttendanceBatchStatusUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:attendance-overview"),
+):
+    import logging
+
+    batch = (
+        db.query(models.AttendanceCheckinBatch)
+        .filter(models.AttendanceCheckinBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="合併報到批次不存在")
+
+    new_status = (body.status or "").strip()
+    now = datetime.utcnow()
+    if new_status == "closed":
+        if batch.status == "closed":
+            raise HTTPException(status_code=400, detail="批次已關閉")
+        batch.status = "closed"
+        batch.closed_at = now
+        batch.closed_by = current_user.emp_id
+        logging.getLogger("audit").info(
+            "attendance_batch_closed emp_id=%s batch_id=%s",
+            current_user.emp_id,
+            batch_id,
+        )
+    elif new_status == "reopened":
+        if batch.status != "closed":
+            raise HTTPException(status_code=400, detail="僅已關閉的批次可重開")
+        batch.status = "reopened"
+        batch.reopened_at = now
+        batch.reopened_by = current_user.emp_id
+        logging.getLogger("audit").info(
+            "attendance_batch_reopened emp_id=%s batch_id=%s",
+            current_user.emp_id,
+            batch_id,
+        )
+    else:
+        raise HTTPException(status_code=400, detail="status 僅允許 closed 或 reopened")
+
+    db.commit()
+    db.refresh(batch)
+    base_url = _resolve_frontend_base_url(request)
+    checkin_url = f"{base_url}/checkin?batch_id={batch_id}"
+    active = batch.status in ("open", "reopened")
+    return _batch_to_out(
+        batch,
+        qrcode_url=generate_checkin_qrcode_image(checkin_url) if active else None,
+        checkin_url=checkin_url if active else None,
+    )
+
+
+@router.get("/plans/{plan_id}/attendance/events", response_model=List[schemas.AttendanceCheckinEventOut])
+def list_attendance_events(
+    plan_id: int,
+    emp_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user=check_any_permission(["menu:plan", "menu:attendance-overview"]),
+):
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    q = db.query(models.AttendanceCheckinEvent).filter(
+        models.AttendanceCheckinEvent.plan_id == plan_id
+    )
+    if emp_id:
+        q = q.filter(models.AttendanceCheckinEvent.emp_id == emp_id)
+    events = q.order_by(models.AttendanceCheckinEvent.event_time.asc()).all()
+
+    batch_ids = {ev.batch_id for ev in events if ev.batch_id}
+    label_by_batch_id: dict[str, str] = {}
+    if batch_ids:
+        rows = (
+            db.query(models.AttendanceCheckinBatch.id, models.AttendanceCheckinBatch.label)
+            .filter(models.AttendanceCheckinBatch.id.in_(batch_ids))
+            .all()
+        )
+        label_by_batch_id = {row.id: row.label for row in rows}
+
+    return [
+        schemas.AttendanceCheckinEventOut.model_validate(ev).model_copy(
+            update={
+                "batch_label": label_by_batch_id.get(ev.batch_id) if ev.batch_id else None,
+            }
+        )
+        for ev in events
+    ]
+

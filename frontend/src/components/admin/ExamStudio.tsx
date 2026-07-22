@@ -12,6 +12,8 @@ import QuestionBankManager from './QuestionBankManager';
 import BankImportModal from './BankImportModal';
 import Pagination from '../common/Pagination';
 import TeachingMaterialLibrary from '../teaching/TeachingMaterialLibrary';
+import type { User } from '../../types';
+import { canModifyOwnedResource } from '../../utils/authGuards';
 
 interface TrainingPlan {
   id: number;
@@ -19,7 +21,7 @@ interface TrainingPlan {
   training_date: string;
   end_date?: string | null;
   is_archived?: boolean;
-  dept_id: number;
+  dept_id?: number | null;
   sub_category_id: number;
   sub_category?: {
     name: string;
@@ -46,10 +48,15 @@ interface Question {
     hint?: string;
 }
 
-const ExamStudio = () => {
+interface ExamStudioProps {
+  user: User;
+}
+
+const ExamStudio = ({ user }: ExamStudioProps) => {
     const [plans, setPlans] = useState<TrainingPlan[]>([]);
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
     const [materials, setMaterials] = useState<Material[]>([]);
+    const [materialsNasWarning, setMaterialsNasWarning] = useState<string | null>(null);
     const [questions, setQuestions] = useState<Question[]>([]);
     
     const [isLoadingPlans, setIsLoadingPlans] = useState(true);
@@ -103,10 +110,28 @@ const ExamStudio = () => {
     const fetchMaterials = async (planId: number) => {
         try {
             setIsLoadingMaterials(true);
+            setMaterialsNasWarning(null);
             const res = await api.get(`/admin/exams/materials/${planId}`);
-            setMaterials(res.data);
+            setMaterials(Array.isArray(res.data) ? res.data : []);
+            // 後端 NAS 不可達時回 200 [] + X-NAS-Unavailable: 1
+            const nasDown = String(res.headers?.['x-nas-unavailable'] ?? '') === '1';
+            if (nasDown) {
+                setMaterialsNasWarning('NAS 無法連線，無法列出已上傳考卷檔；題目仍可正常管理。請檢查 SMB／MATERIALS_ROOT 後再上傳或預覽。');
+            }
         } catch (err) {
             console.error(err);
+            setMaterials([]);
+            const apiErr = err as AxiosError<{ detail?: string }>;
+            const detail = apiErr.response?.data?.detail;
+            if (apiErr.response?.status === 503) {
+                setMaterialsNasWarning(
+                    typeof detail === 'string' ? detail : 'NAS 無法連線，無法列出已上傳考卷檔；題目仍可正常管理。'
+                );
+            } else {
+                setMaterialsNasWarning(
+                    typeof detail === 'string' ? detail : '無法載入考卷檔清單，請稍後再試。'
+                );
+            }
         } finally {
             setIsLoadingMaterials(false);
         }
@@ -316,6 +341,14 @@ const ExamStudio = () => {
         return isArchived || isExpired;
     }, [selectedPlan, todayStr]);
 
+    /** 非開課單位僅能讀取考題，不可新增／編輯／刪除 */
+    const isOwnerReadOnly = useMemo(() => {
+        if (!selectedPlan) return false;
+        return !canModifyOwnedResource(user, selectedPlan.dept_id);
+    }, [selectedPlan, user]);
+
+    const isWriteLocked = isSelectedPlanLocked || isOwnerReadOnly;
+
     const selectedPlanLockReason = useMemo(() => {
         if (!selectedPlan) return null;
         if (selectedPlan.is_archived) return '已封存';
@@ -353,13 +386,13 @@ const ExamStudio = () => {
                         返回考卷工坊
                     </button>
                 </div>
-                <QuestionBankManager />
+                <QuestionBankManager user={user} />
             </div>
         );
     }
 
     if (mode === 'materials') {
-        return <TeachingMaterialLibrary onBack={() => setMode('plan')} />;
+        return <TeachingMaterialLibrary user={user} onBack={() => setMode('plan')} />;
     }
 
     return (
@@ -478,7 +511,12 @@ const ExamStudio = () => {
                             </div>
 
                             <div className="p-6 flex-1 overflow-y-auto space-y-8">
-                                {isSelectedPlanLocked && (
+                                {isOwnerReadOnly && (
+                                    <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 font-bold text-sm leading-relaxed">
+                                        僅開課單位或超管可管理此訓練計畫的考題；目前為檢視模式（不可上傳、匯入、編輯或刪除）。
+                                    </div>
+                                )}
+                                {isSelectedPlanLocked && !isOwnerReadOnly && (
                                     <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 font-bold text-sm leading-relaxed">
                                         此訓練計畫目前為「{selectedPlanLockReason}」，為避免歷史資料被更動，已停用「上傳考卷」與「從題庫匯入」功能。<br />
                                         若需變更，請至「訓練計劃管理」解除封存或調整訓練日期後，再回到考卷工坊調整題目。
@@ -492,7 +530,7 @@ const ExamStudio = () => {
                                             isDragOver
                                                 ? 'border-indigo-500 bg-indigo-50 scale-[1.01]'
                                                 : 'border-indigo-200 bg-indigo-50/30 hover:border-indigo-400 hover:bg-indigo-50/50'
-                                        } ${isSelectedPlanLocked ? 'opacity-50 pointer-events-none select-none' : ''}`}
+                                        } ${isWriteLocked ? 'opacity-50 pointer-events-none select-none' : ''}`}
                                         onDrop={onDrop}
                                         onDragOver={onDragOver}
                                         onDragLeave={onDragLeave}
@@ -503,7 +541,7 @@ const ExamStudio = () => {
                                             onChange={(e) => handleFileUpload(e.target.files)}
                                             className="hidden"
                                             id="file-upload"
-                                            disabled={isUploading || isSelectedPlanLocked}
+                                            disabled={isUploading || isWriteLocked}
                                         />
                                         <label htmlFor="file-upload" className={`cursor-pointer flex flex-col items-center gap-2 ${isUploading ? 'opacity-50' : ''}`}>
                                             <div className="w-10 h-10 rounded-full bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shrink-0">
@@ -596,11 +634,17 @@ const ExamStudio = () => {
                                         <FileText className="w-5 h-5 text-indigo-500" />
                                         已匯入考卷檔
                                     </h3>
+                                    {materialsNasWarning && (
+                                        <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-900">
+                                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                            <span>{materialsNasWarning}</span>
+                                        </div>
+                                    )}
                                     {isLoadingMaterials ? (
                                         <div className="text-center py-8 text-gray-400"><Loader2 className="w-5 h-5 animate-spin mx-auto text-indigo-600"/></div>
                                     ) : materials.length === 0 ? (
                                         <div className="text-center py-8 text-gray-400 bg-indigo-50/30 rounded-xl border border-indigo-100 italic">
-                                            尚未上傳任何考卷
+                                            {materialsNasWarning ? '考卷檔清單暫不可用' : '尚未上傳任何考卷'}
                                         </div>
                                     ) : (
                                         <div className="space-y-3">
@@ -637,8 +681,9 @@ const ExamStudio = () => {
                                                             e.stopPropagation();
                                                             handleDeleteFile(file.filename);
                                                         }}
-                                                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 ml-2 cursor-pointer"
-                                                        title="刪除檔案"
+                                                        disabled={isWriteLocked}
+                                                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 ml-2 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                                                        title={isWriteLocked ? (isOwnerReadOnly ? '僅開課單位可刪除' : '已封存／已過期不可刪除') : '刪除檔案'}
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
@@ -673,16 +718,16 @@ const ExamStudio = () => {
                                             <button
                                                 type="button"
                                                 onClick={handleBulkDeleteQuestions}
-                                                disabled={selectedQuestionIds.size === 0 || isSelectedPlanLocked}
+                                                disabled={selectedQuestionIds.size === 0 || isWriteLocked}
                                                 className="text-xs font-bold px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                             >
                                                 批次刪除 ({selectedQuestionIds.size})
                                             </button>
                                             <button
                                                 onClick={() => setShowImportModal(true)}
-                                                disabled={isSelectedPlanLocked}
+                                                disabled={isWriteLocked}
                                                 className={`text-sm font-bold px-3 py-1.5 rounded-lg transition-all duration-200 flex items-center gap-1 border cursor-pointer ${
-                                                    isSelectedPlanLocked
+                                                    isWriteLocked
                                                         ? 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed'
                                                         : 'text-indigo-600 hover:bg-indigo-50 border-indigo-200'
                                                 }`}
@@ -732,15 +777,17 @@ const ExamStudio = () => {
                                                         <div className="flex gap-1 sm:gap-2">
                                                             <button 
                                                                 onClick={() => setEditingQuestion(q)}
-                                                                className="p-1.5 min-h-10 min-w-10 flex items-center justify-center text-gray-500 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all duration-200 cursor-pointer"
-                                                                title="編輯"
+                                                                disabled={isWriteLocked}
+                                                                className="p-1.5 min-h-10 min-w-10 flex items-center justify-center text-gray-500 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all duration-200 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-500"
+                                                                title={isWriteLocked ? (isOwnerReadOnly ? '僅開課單位可編輯' : '已封存／已過期不可編輯') : '編輯'}
                                                             >
                                                                 <Edit className="w-4 h-4" />
                                                             </button>
                                                             <button 
                                                                 onClick={() => handleDeleteQuestion(q.id)}
-                                                                className="p-1.5 min-h-10 min-w-10 flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 cursor-pointer"
-                                                                title="刪除"
+                                                                disabled={isWriteLocked}
+                                                                className="p-1.5 min-h-10 min-w-10 flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-500"
+                                                                title={isWriteLocked ? (isOwnerReadOnly ? '僅開課單位可刪除' : '已封存／已過期不可刪除') : '刪除'}
                                                             >
                                                                 <Trash2 className="w-4 h-4" />
                                                             </button>

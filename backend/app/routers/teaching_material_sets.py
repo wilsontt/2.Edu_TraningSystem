@@ -22,6 +22,7 @@ from ..config import get_settings
 from .auth import check_permission
 from ..services import storage
 from ..services.audit_log import record_file_transfer
+from ..access_scope import can_modify_owned_resource
 from .teaching_materials import (
     _client_ip, _validate_filename, _effective_max_bytes,
     _file_size_limit_exceeded_message, _batch_upload_total_exceeded_message,
@@ -71,6 +72,8 @@ def _set_to_out(db: Session, s: "models.TeachingMaterialSet", include_files: boo
         "file_count": file_count,
         "plan_ids": [p.id for p in plans],
         "plan_titles": [p.title for p in plans],
+        "dept_id": s.dept_id,
+        "dept_name": s.department.name if s.department else None,
     }
     if include_files:
         files = db.query(models.TeachingMaterialFile).filter(
@@ -98,6 +101,7 @@ async def create_set(
     request: Request,
     title: str = Form(...),
     material_type_id: int = Form(...),
+    dept_id: int = Form(...),
     description: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
     plan_ids: Optional[str] = Form(None),
@@ -119,6 +123,10 @@ async def create_set(
     ).first()
     if not mt:
         raise HTTPException(status_code=400, detail="教材類型不存在或已停用")
+
+    dept = db.query(models.Department).filter(models.Department.id == dept_id).first()
+    if not dept:
+        raise HTTPException(status_code=400, detail="開課單位不存在")
 
     plan_id_list = _parse_id_list(plan_ids)
     plans: List[models.TrainingPlan] = []
@@ -170,6 +178,7 @@ async def create_set(
     material_set = models.TeachingMaterialSet(
         title=title, material_type_id=mt.id, description=description, tags=tags_json,
         year=year, uploaded_by=emp_id, uploaded_at=datetime.utcnow(), is_active=True,
+        dept_id=dept.id,
     )
     db.add(material_set)
     db.flush()
@@ -236,11 +245,14 @@ def list_sets(
     material_type_id: Optional[int] = None,
     file_format: Optional[str] = None,
     plan_id: Optional[int] = None,
+    dept_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user=check_permission("menu:exam"),
 ):
     """教材庫套組檢視：一列一套組，keyword 涵蓋標題/簡述/標籤/綁定計畫名稱（教材 PLAN §5.12.4）。"""
     q = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.is_active == True)  # noqa: E712
+    if dept_id is not None:
+        q = q.filter(models.TeachingMaterialSet.dept_id == dept_id)
     if keyword:
         like = f"%{keyword}%"
         plan_match_ids = db.query(models.TeachingMaterialSetPlan.set_id).join(
@@ -301,6 +313,8 @@ def update_set(
     s = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.id == set_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="教材套組不存在")
+    if not can_modify_owned_resource(current_user, s.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可編輯此教材套組")
     data = payload.model_dump(exclude_unset=True)
     if "tags" in data:
         tags_val = data.pop("tags")
@@ -309,6 +323,10 @@ def update_set(
         mt = db.query(models.MaterialType).filter(models.MaterialType.id == data["material_type_id"]).first()
         if not mt:
             raise HTTPException(status_code=400, detail="教材類型不存在")
+    if "dept_id" in data and data["dept_id"] is not None:
+        dept = db.query(models.Department).filter(models.Department.id == data["dept_id"]).first()
+        if not dept:
+            raise HTTPException(status_code=400, detail="開課單位不存在")
     for k, v in data.items():
         setattr(s, k, v)
     db.commit()
@@ -327,6 +345,8 @@ def update_set_plans(
     s = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.id == set_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="教材套組不存在")
+    if not can_modify_owned_resource(current_user, s.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可變更此教材套組的計畫綁定")
     plans = []
     for pid in payload.plan_ids:
         plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == pid).first()
@@ -350,6 +370,8 @@ def delete_set(
     s = db.query(models.TeachingMaterialSet).filter(models.TeachingMaterialSet.id == set_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="教材套組不存在")
+    if not can_modify_owned_resource(current_user, s.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可刪除此教材套組")
     s.is_active = False
     db.commit()
     return {"message": "已停用（軟刪除）"}
@@ -383,6 +405,8 @@ async def add_set_files(
     ).first()
     if not s:
         raise HTTPException(status_code=404, detail="教材套組不存在")
+    if not can_modify_owned_resource(current_user, s.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可新增檔案至此教材套組")
     mt = db.query(models.MaterialType).filter(models.MaterialType.id == s.material_type_id).first()
 
     if not files:
@@ -494,6 +518,8 @@ def remove_set_file(
     ).first()
     if not mf:
         raise HTTPException(status_code=404, detail="檔案不存在")
+    if not can_modify_owned_resource(current_user, mf.material_set.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可刪除此檔案")
     mf.is_active = False
     db.commit()
     return {"message": "已移除（軟刪除）"}
@@ -511,6 +537,7 @@ def list_files(
     material_type_id: Optional[int] = None,
     file_format: Optional[str] = None,
     plan_id: Optional[int] = None,
+    dept_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user=check_permission("menu:exam"),
 ):
@@ -521,6 +548,8 @@ def list_files(
         models.TeachingMaterialFile.is_active == True,  # noqa: E712
         models.TeachingMaterialSet.is_active == True,  # noqa: E712
     )
+    if dept_id is not None:
+        q = q.filter(models.TeachingMaterialSet.dept_id == dept_id)
     if keyword:
         like = f"%{keyword}%"
         plan_match_ids = db.query(models.TeachingMaterialSetPlan.set_id).join(
@@ -556,6 +585,8 @@ def list_files(
             "file_size_bytes": f.file_size_bytes, "uploaded_by": f.uploaded_by,
             "uploaded_at": f.uploaded_at, "is_active": f.is_active,
             "plan_titles": [p.title for p in plans],
+            "dept_id": f.material_set.dept_id,
+            "dept_name": f.material_set.department.name if f.material_set.department else None,
         })
     return {"items": items, "total": total, "page": page, "size": size, "total_pages": (total + size - 1) // size}
 

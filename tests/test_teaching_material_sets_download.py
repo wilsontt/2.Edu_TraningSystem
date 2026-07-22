@@ -2,7 +2,7 @@
 import io
 import zipfile
 
-from app.models import MaterialType, MaterialFileFormat
+from app.models import MaterialType, MaterialFileFormat, Department
 
 
 def _seed_type(db):
@@ -13,10 +13,11 @@ def _seed_type(db):
     return mt
 
 
-def _create_set(client, mt_id, title="套組"):
+def _create_set(client, db, mt_id, title="套組"):
+    dept = db.query(Department).filter(Department.name == "IT部").first()
     resp = client.post(
         "/api/admin/teaching-materials/sets",
-        data={"title": title, "material_type_id": str(mt_id)},
+        data={"title": title, "material_type_id": str(mt_id), "dept_id": str(dept.id)},
         files=[("files", ("a.pdf", io.BytesIO(b"hello-a"), "application/pdf"))],
     )
     assert resp.status_code == 200, resp.text
@@ -25,7 +26,7 @@ def _create_set(client, mt_id, title="套組"):
 
 def test_file_view_matches_set_view_count(client, in_memory_db, mock_nas):
     mt = _seed_type(in_memory_db)
-    _create_set(client, mt.id)
+    _create_set(client, in_memory_db, mt.id)
 
     sets_resp = client.get("/api/admin/teaching-materials/sets").json()
     files_resp = client.get("/api/admin/teaching-materials/files").json()
@@ -36,7 +37,7 @@ def test_file_view_matches_set_view_count(client, in_memory_db, mock_nas):
 
 def test_single_file_download(client, in_memory_db, mock_nas):
     mt = _seed_type(in_memory_db)
-    created = _create_set(client, mt.id)
+    created = _create_set(client, in_memory_db, mt.id)
     file_id = created["files"][0]["id"]
 
     resp = client.get(f"/api/admin/teaching-materials/files/{file_id}/download")
@@ -47,7 +48,7 @@ def test_single_file_download(client, in_memory_db, mock_nas):
 
 def test_batch_download_zip_contains_all_files(client, in_memory_db, mock_nas):
     mt = _seed_type(in_memory_db)
-    created = _create_set(client, mt.id)
+    created = _create_set(client, in_memory_db, mt.id)
     client.post(
         f"/api/admin/teaching-materials/sets/{created['id']}/files",
         files=[("files", ("b.pdf", io.BytesIO(b"hello-b"), "application/pdf"))],

@@ -4,18 +4,23 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Query, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from typing import List, Any, Dict, Optional
 import os
 import json
+import logging
 from datetime import datetime
 
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission
+from ..access_scope import can_modify_owned_resource
 from ..services import storage
 from ..services.audit_log import record_file_transfer
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/exams", tags=["exams"])
 
@@ -42,6 +47,12 @@ def _client_ip(request: Optional[Request]) -> Optional[str]:
     if real:
         return real
     return request.client.host if request.client else None
+
+
+def _require_plan_exam_modify(current_user, plan: models.TrainingPlan) -> None:
+    """僅開課單位（或超管）可變更該計畫考題／考卷 TXT。"""
+    if not can_modify_owned_resource(current_user, plan.dept_id):
+        raise HTTPException(status_code=403, detail="僅開課單位可管理此訓練計畫的考題")
 
 
 def _safe_filename(filename: str) -> str:
@@ -136,6 +147,7 @@ async def upload_material(
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    _require_plan_exam_modify(current_user, plan)
 
     # 2. 讀取並解析內容
     raw = await file.read()
@@ -221,7 +233,8 @@ async def upload_material(
                     tags=json.dumps(tags_list, ensure_ascii=False),
                     hint=q.get("hint"),
                     level=q.get("level"),
-                    created_by=emp_id if emp_id else 'system'
+                    created_by=emp_id if emp_id else 'system',
+                    dept_id=plan.dept_id,
                 )
                 db.add(qb)
 
@@ -275,6 +288,7 @@ async def import_from_preview(
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    _require_plan_exam_modify(current_user, plan)
     imported = 0
     duplicate = 0
     for q in questions:
@@ -317,7 +331,8 @@ async def import_from_preview(
                     tags=json.dumps(tags_list, ensure_ascii=False),
                     hint=q.get("hint"),
                     level=q.get("level"),
-                    created_by=current_user.emp_id if hasattr(current_user, 'emp_id') else 'system'
+                    created_by=current_user.emp_id if hasattr(current_user, 'emp_id') else 'system',
+                    dept_id=plan.dept_id,
                 )
                 db.add(qb)
     db.commit()
@@ -331,6 +346,9 @@ def list_materials(
 ):
     """
     列出該計畫已上傳的考卷 TXT（讀自 NAS exams/）。
+
+    NAS 不可達時改回 **200 + 空陣列**，並帶 header ``X-NAS-Unavailable: 1``，
+    避免考卷工坊選計畫時因 503 中斷題目管理；上傳／預覽／刪除仍回 503。
     """
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
@@ -342,7 +360,12 @@ def list_materials(
         with storage.connection(storage.service_credentials()) as st:
             entries = st.list(rel_dir)
     except storage.StorageUnavailable as e:
-        raise HTTPException(status_code=503, detail=f"NAS 無法連線：{e}")
+        logger.warning("list_materials NAS unavailable plan_id=%s: %s", plan_id, e)
+        return JSONResponse(
+            content=[],
+            headers={"X-NAS-Unavailable": "1"},
+            status_code=200,
+        )
     except storage.StorageError as e:
         raise HTTPException(status_code=500, detail=f"讀取 NAS 失敗：{e}")
 
@@ -408,6 +431,7 @@ def delete_material(
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    _require_plan_exam_modify(current_user, plan)
 
     safe = _safe_filename(filename)
     year = plan.year if plan.year else "unknown"
@@ -458,6 +482,10 @@ def update_question(
     db_q = db.query(models.Question).filter(models.Question.id == question_id).first()
     if not db_q:
         raise HTTPException(status_code=404, detail="題目不存在")
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == db_q.plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    _require_plan_exam_modify(current_user, plan)
         
     if q_update.content is not None:
         db_q.content = q_update.content
@@ -497,6 +525,15 @@ def bulk_delete_questions(
     existing_map = {q.id: q for q in existing_questions}
     missing_ids = [qid for qid in ids if qid not in existing_map]
 
+    plan_ids = {q.plan_id for q in existing_questions if q.plan_id is not None}
+    plans = db.query(models.TrainingPlan).filter(models.TrainingPlan.id.in_(plan_ids)).all() if plan_ids else []
+    plan_by_id = {p.id: p for p in plans}
+    for pid in plan_ids:
+        plan = plan_by_id.get(pid)
+        if not plan:
+            raise HTTPException(status_code=404, detail=f"訓練計畫不存在：{pid}")
+        _require_plan_exam_modify(current_user, plan)
+
     deleted_count = 0
     try:
         for qid in ids:
@@ -528,6 +565,10 @@ def delete_question(
     db_q = db.query(models.Question).filter(models.Question.id == question_id).first()
     if not db_q:
         raise HTTPException(status_code=404, detail="題目不存在")
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == db_q.plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    _require_plan_exam_modify(current_user, plan)
         
     try:
         db.delete(db_q)

@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import api from '../api';
@@ -9,6 +9,7 @@ import {
   Mail, Eye, EyeOff, Send,
 } from 'lucide-react';
 import type { User, CaptchaData, LoginResponse, Department, MustChangePasswordResponse } from '../types';
+import { saveSessionUser } from '../utils/sessionUser';
 
 /**
  * AD 帳號支援三種格式（前端僅基本格式檢查，後端統一標準化）：
@@ -26,6 +27,7 @@ interface LoginPageProps {
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<LoginTab>('employee');
   const [isRegister, setIsRegister] = useState(false);
 
@@ -83,8 +85,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   const handleLoginSuccess = (token: string, user: User) => {
     localStorage.setItem('token', token);
+    saveSessionUser(user);
     onLoginSuccess(user);
-    navigate('/', { replace: true });
+    // 僅允許 /checkin 開頭的相對路徑，避免 open redirect
+    const returnTo = new URLSearchParams(location.search).get('returnTo');
+    navigate(returnTo && returnTo.startsWith('/checkin') ? returnTo : '/', { replace: true });
   };
 
   const switchTab = (tab: LoginTab) => {
@@ -99,7 +104,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const handleEmpLogin = async (e: FormEvent) => {
     e.preventDefault();
     if (!empId || !captchaText) { setEmpError('請輸入員工編號與驗證碼'); return; }
-    if (empId.toLowerCase() !== 'admin' && !/^[0-9]{1,6}$/.test(empId)) {
+    if (!/^[0-9]{1,6}$/.test(empId)) {
       setEmpError('員工編號必須是 1–6 碼的數字');
       return;
     }
@@ -367,30 +372,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     className="block w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium"
                     value={empId}
                     onChange={(e) => {
-                      let value = e.target.value;
-                      if (isRegister) {
-                        value = value.replace(/[^0-9]/g, '').slice(0, 10);
-                      } else {
-                        const lowerValue = value.toLowerCase();
-                        if (lowerValue === 'admin' || lowerValue.startsWith('admin')) {
-                          value = 'admin';
-                        } else if (/^[0-9]*$/.test(value)) {
-                          value = value.slice(0, 6);
-                        } else if (/^[a-zA-Z]*$/.test(value)) {
-                          const lower = value.toLowerCase();
-                          if (lower.startsWith('admin')) {
-                            value = 'admin';
-                          } else if (!'admin'.startsWith(lower)) {
-                            value = '';
-                          }
-                        } else {
-                          value = value.replace(/[^0-9]/g, '').slice(0, 6);
-                        }
-                      }
+                      const value = e.target.value.replace(/[^0-9]/g, '').slice(0, isRegister ? 10 : 6);
                       setEmpId(value);
                     }}
                     maxLength={isRegister ? 10 : 6}
-                    inputMode={isRegister ? 'numeric' : 'text'}
+                    inputMode="numeric"
                   />
                 </div>
               </div>

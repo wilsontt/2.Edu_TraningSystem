@@ -105,6 +105,7 @@ def _auth_response_dict(user: models.User, auth_src: str) -> dict:
         "user": {
             "emp_id": user.emp_id,
             "name": user.name,
+            "dept_id": user.dept_id,
             "dept_name": dept_name,
             "role": role_name,
             "functions": funcs,
@@ -218,17 +219,16 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    emp_id: str = Field(..., min_length=1, max_length=10)
+    emp_id: str = Field(..., min_length=1, max_length=6)
     captcha_id: str
     answer: str
 
     @field_validator("emp_id")
     @classmethod
     def validate_emp_id(cls, v: str) -> str:
-        v_lower = v.lower()
-        if v_lower != "admin" and not re.match(r"^[0-9]{1,10}$", v):
-            raise ValueError("員工編號必須是 1-10 碼的數字")
-        return v_lower if v_lower == "admin" else v
+        if not re.match(r"^[0-9]{1,6}$", v):
+            raise ValueError("員工編號必須是 1–6 碼的數字")
+        return v
 
 
 @router.get("/departments", response_model=List[schemas.Department])
@@ -362,6 +362,7 @@ async def login(req: LoginRequest, request: Request, db: Session = Depends(get_d
         "user": {
             "emp_id": user.emp_id,
             "name": user.name,
+            "dept_id": user.dept_id,
             "dept_name": user.department.name if user.department else "未知",
             "role": role_name,
             "functions": [f.code for f in user.role.functions] if user.role and user.role.functions else [],
@@ -608,6 +609,7 @@ async def get_me(
     return {
         "emp_id": current_user.emp_id,
         "name": current_user.name,
+        "dept_id": current_user.dept_id,
         "dept_name": current_user.department.name,
         "role": current_user.role.name,
         "functions": [f.code for f in current_user.role.functions],

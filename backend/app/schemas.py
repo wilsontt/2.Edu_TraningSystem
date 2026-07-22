@@ -295,7 +295,9 @@ class QuestionBank(QuestionBankBase):
     id: int
     created_by: Optional[str] = None
     created_at: datetime
-    
+    dept_id: Optional[int] = None
+    dept_name: Optional[str] = None
+
     class Config:
         from_attributes = True
 
@@ -325,10 +327,119 @@ class AttendanceRecord(AttendanceRecordBase):
 class AttendanceStatus(BaseModel):
     is_checked_in: bool
     checkin_time: Optional[datetime] = None
+    plan_title: Optional[str] = None  # 供報到頁顯示；員工無 menu:plan 也能取得
+    question_count: int = 0  # 供報到成功頁判斷是否顯示「開始考試」
+    has_exam: bool = False
+
+class CheckInUserBrief(BaseModel):
+    """報到完成頁顯示之報到人摘要。"""
+    emp_id: str
+    name: str
+    dept_name: str
+
 
 class CheckInResponse(BaseModel):
     success: bool
     checkin_time: datetime
+    plan_title: Optional[str] = None
+    question_count: int = 0
+    has_exam: bool = False
+    checked_in_user: Optional[CheckInUserBrief] = None
+
+
+# --- 合併報到批次 / 歷程 ---
+
+class AttendanceBatchCreate(BaseModel):
+    plan_ids: List[int]
+    label: str = Field(..., min_length=2, max_length=50, description="合併報到批次標籤（必填）")
+    training_date: Optional[date] = Field(
+        None,
+        description="場次／報到日（寫入批次；未傳則用今日）。不要求各計畫開始日相同。",
+    )
+
+    @field_validator("label")
+    @classmethod
+    def validate_batch_label(cls, v: str) -> str:
+        trimmed = v.strip()
+        if len(trimmed) < 2:
+            raise ValueError("批次標籤至少 2 個字")
+        if len(trimmed) > 50:
+            raise ValueError("批次標籤最多 50 個字")
+        return trimmed
+
+
+class AttendanceBatchPlanBrief(BaseModel):
+    plan_id: int
+    title: str
+    training_date: date
+
+
+class AttendanceBatchOut(BaseModel):
+    id: str
+    label: str
+    training_date: date
+    status: str
+    created_by: str
+    created_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
+    closed_by: Optional[str] = None
+    reopened_at: Optional[datetime] = None
+    reopened_by: Optional[str] = None
+    plans: List[AttendanceBatchPlanBrief] = []
+    qrcode_url: Optional[str] = None
+    checkin_url: Optional[str] = None
+
+
+class AttendanceBatchStatusUpdate(BaseModel):
+    status: str  # closed | reopened
+
+
+class AttendanceBatchPlanStats(BaseModel):
+    plan_id: int
+    title: str
+    expected_count: int
+    actual_count: int
+    absent_count: int
+    attendance_rate: float
+
+
+class AttendanceBatchStatsOut(BaseModel):
+    batch_id: str
+    status: str
+    plans: List[AttendanceBatchPlanStats]
+
+
+class BatchPlanCheckinResult(BaseModel):
+    plan_id: int
+    plan_title: str
+    result: str
+    checkin_time: Optional[datetime] = None
+
+
+class BatchCheckInResponse(BaseModel):
+    success: bool
+    batch_id: str
+    batch_label: str
+    succeeded: List[BatchPlanCheckinResult] = []
+    skipped: List[BatchPlanCheckinResult] = []
+    checked_in_user: Optional[CheckInUserBrief] = None
+
+
+class AttendanceCheckinEventOut(BaseModel):
+    id: int
+    emp_id: str
+    plan_id: int
+    event_time: Optional[datetime] = None
+    event_type: str
+    batch_id: Optional[str] = None
+    batch_label: Optional[str] = None
+    source: str
+    result: str
+    ip_address: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 
 # --- 報到統計資料結構 ---
 class AttendanceStats(BaseModel):
@@ -571,6 +682,8 @@ class TeachingMaterialSetOut(BaseModel):
     plan_ids: List[int] = []
     plan_titles: List[str] = []
     files: Optional[List[TeachingMaterialSetFileOut]] = None
+    dept_id: Optional[int] = None
+    dept_name: Optional[str] = None
 
 
 class TeachingMaterialSetListOut(BaseModel):
@@ -586,6 +699,7 @@ class TeachingMaterialSetUpdate(BaseModel):
     material_type_id: Optional[int] = None
     description: Optional[str] = None
     tags: Optional[List[str]] = None
+    dept_id: Optional[int] = None
 
 
 class TeachingMaterialSetPlansUpdate(BaseModel):
@@ -608,6 +722,8 @@ class TeachingMaterialFileListItemOut(BaseModel):
     uploaded_at: datetime
     is_active: bool
     plan_titles: List[str] = []
+    dept_id: Optional[int] = None
+    dept_name: Optional[str] = None
 
 
 class TeachingMaterialFileListOut(BaseModel):

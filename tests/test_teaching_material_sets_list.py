@@ -13,8 +13,9 @@ def _seed_type_and_format(db):
     return mt
 
 
-def _create_set(client, mt_id, title, plan_ids=None, filename="a.pdf"):
-    data = {"title": title, "material_type_id": str(mt_id)}
+def _create_set(client, db, mt_id, title, plan_ids=None, filename="a.pdf"):
+    dept = db.query(Department).filter(Department.name == "IT部").first()
+    data = {"title": title, "material_type_id": str(mt_id), "dept_id": str(dept.id)}
     if plan_ids:
         data["plan_ids"] = ",".join(str(p) for p in plan_ids)
     resp = client.post(
@@ -28,7 +29,7 @@ def _create_set(client, mt_id, title, plan_ids=None, filename="a.pdf"):
 
 def test_list_sets_returns_file_count_and_general_when_no_plan(client, in_memory_db, mock_nas):
     mt = _seed_type_and_format(in_memory_db)
-    _create_set(client, mt.id, "通用教材")
+    _create_set(client, in_memory_db, mt.id, "通用教材")
 
     resp = client.get("/api/admin/teaching-materials/sets")
     assert resp.status_code == 200
@@ -45,8 +46,8 @@ def test_search_by_bound_plan_title(client, in_memory_db, mock_nas):
     in_memory_db.add(plan)
     in_memory_db.commit()
 
-    _create_set(client, mt.id, "講義", plan_ids=[plan.id])
-    _create_set(client, mt.id, "無關教材")
+    _create_set(client, in_memory_db, mt.id, "講義", plan_ids=[plan.id])
+    _create_set(client, in_memory_db, mt.id, "無關教材")
 
     resp = client.get("/api/admin/teaching-materials/sets", params={"keyword": "消防安全"})
     assert resp.status_code == 200
@@ -58,7 +59,7 @@ def test_search_by_bound_plan_title(client, in_memory_db, mock_nas):
 
 def test_get_set_detail_includes_files(client, in_memory_db, mock_nas):
     mt = _seed_type_and_format(in_memory_db)
-    created = _create_set(client, mt.id, "詳情測試")
+    created = _create_set(client, in_memory_db, mt.id, "詳情測試")
 
     resp = client.get(f"/api/admin/teaching-materials/sets/{created['id']}")
     assert resp.status_code == 200

@@ -12,10 +12,11 @@ def _seed_type(db):
     return mt
 
 
-def _create_set(client, mt_id, title="通用教材"):
+def _create_set(client, db, mt_id, title="通用教材"):
+    dept = db.query(Department).filter(Department.name == "IT部").first()
     resp = client.post(
         "/api/admin/teaching-materials/sets",
-        data={"title": title, "material_type_id": str(mt_id)},
+        data={"title": title, "material_type_id": str(mt_id), "dept_id": str(dept.id)},
         files=[("files", ("a.pdf", io.BytesIO(b"x"), "application/pdf"))],
     )
     assert resp.status_code == 200, resp.text
@@ -32,7 +33,7 @@ def _make_plans(db, names):
 
 def test_update_metadata(client, in_memory_db, mock_nas):
     mt = _seed_type(in_memory_db)
-    created = _create_set(client, mt.id)
+    created = _create_set(client, in_memory_db, mt.id)
 
     resp = client.put(
         f"/api/admin/teaching-materials/sets/{created['id']}",
@@ -44,7 +45,7 @@ def test_update_metadata(client, in_memory_db, mock_nas):
 
 def test_bind_then_unbind_plan_toggles_general_flag(client, in_memory_db, mock_nas):
     mt = _seed_type(in_memory_db)
-    created = _create_set(client, mt.id)
+    created = _create_set(client, in_memory_db, mt.id)
     plan_a, plan_b = _make_plans(in_memory_db, ["計畫A", "計畫B"])
 
     # S6：通用套組綁定計畫 A → 顯示計畫 A 名稱
@@ -72,7 +73,7 @@ def test_bind_then_unbind_plan_toggles_general_flag(client, in_memory_db, mock_n
 
 def test_delete_set_soft_deletes(client, in_memory_db, mock_nas):
     mt = _seed_type(in_memory_db)
-    created = _create_set(client, mt.id)
+    created = _create_set(client, in_memory_db, mt.id)
 
     resp = client.delete(f"/api/admin/teaching-materials/sets/{created['id']}")
     assert resp.status_code == 200

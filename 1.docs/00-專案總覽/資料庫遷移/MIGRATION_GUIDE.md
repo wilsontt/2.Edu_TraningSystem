@@ -236,6 +236,70 @@ docker compose exec training-backend python migrations/add_teaching_material_set
 | **根因** | 後端已切套組 API，但 DB 尚未執行本遷移（缺三表或未搬 Wave1 資料） |
 | **解法** | 備份後執行本節腳本；確認上表 COUNT 合理後重啟後端 |
 
+#### 報到紀錄 UNIQUE(emp_id, plan_id)（2026-07-18）
+
+實際 DB 可能缺文件所述的 `UNIQUE(emp_id, plan_id)`，導致自動報到競態寫入重複列（報到統計同一人出現兩次）。
+
+```bash
+# 1. 備份
+cp data/education_training.db data/education_training.db.bak-$(date +%Y%m%d)
+
+# 2. 執行（可重複跑：先刪重複保留最小 id，再建立唯一索引）
+cd backend
+.venv/bin/python3 migrations/add_attendance_emp_plan_unique.py
+```
+
+驗證：
+
+```sql
+SELECT emp_id, plan_id, COUNT(*) c
+FROM attendance_records
+GROUP BY emp_id, plan_id
+HAVING c > 1;
+-- 預期：0 列
+
+SELECT name FROM sqlite_master WHERE type='index' AND name='uq_attendance_emp_plan';
+-- 預期：有一列
+```
+
+##### 症狀：報到統計同一員工出現兩筆、實到人數多算
+
+| 項目 | 說明 |
+|------|------|
+| **現象** | 應到清單／實到清單同一 `emp_id` 兩列，時間幾乎相同 |
+| **根因** | 缺 UNIQUE；前端自動報到（含 Strict Mode）雙請求寫入兩列 |
+| **解法** | 執行本節遷移；後端 checkin 已改冪等 |
+
+#### 合併報到批次與報到歷程（2026-07-21）
+
+新增 `attendance_checkin_batches`、`attendance_checkin_batch_plans`、`attendance_checkin_events`（append-only 歷程；不覆蓋 `attendance_records.checkin_time`）。
+
+```bash
+cp data/education_training.db data/education_training.db.bak-$(date +%Y%m%d)
+cd backend
+.venv/bin/python3 migrations/add_attendance_checkin_batch_and_events.py
+```
+
+ds1 Docker：
+
+```bash
+docker compose exec training-backend python migrations/add_attendance_checkin_batch_and_events.py
+```
+
+驗證：
+
+```sql
+SELECT name FROM sqlite_master WHERE type='table'
+  AND name IN (
+    'attendance_checkin_batches',
+    'attendance_checkin_batch_plans',
+    'attendance_checkin_events'
+  );
+-- 預期：3 列
+```
+
+對應 PLAN：[`20260720_合併報到批次與報到歷程_PLAN.md`](../../02-棕地專案/plans/20260720_合併報到批次與報到歷程_PLAN.md)。
+
 #### 報到紀錄歷史補齊（2026-07-03）
 
 報到功能（T10）上線前已交卷、卻無 `attendance_records` 的舊資料，須以**第一次考試時間**補登報到列。  
@@ -362,6 +426,46 @@ PRAGMA table_info(exam_retake_authorizations);  -- 應含 consumed_history_id
 **程式**：`exam_center._now_utc_naive()`；`start_exam`／`submit_exam`／報到／授權重考皆使用此 helper。回歸測試：`tests/test_exam_time_semantics.py`。
 
 **既有資料**：2026-07-03～修正日前若以 `_now_taipei_naive()` 寫入的列，DB 內為「台北牆上時間卻無時區標記」，畫面可能仍偏移約 8 小時；修正後**新產生**的紀錄會正確。若需校正歷史列，請另開資料修復（將該時段誤標時間換算為 UTC 後更新），**非**本節 migration 範圍。
+
+#### 開課單位擁有權（2026-07-17）
+
+新增 `question_bank.dept_id`、`teaching_material_sets.dept_id`（皆 nullable，NULL＝不受 owner 限制，既有資料免回填）。搭配 `access_scope.can_modify_owned_resource()`：僅開課單位或超管／系統管理角色可**編輯／刪除／封存**訓練計畫、歷史題庫題目、教材套組／檔案、**考卷工坊所選計畫之考題**（考題依 `TrainingPlan.dept_id` 判斷；計畫另含產生報到 QR）。非開課單位僅能檢視／下載。
+對應：`backend/migrations/add_owner_dept_fields.py`；PLAN／TASKS：[`20260717_報到-訓練計畫-教材-題庫_新增需求`](../../02-棕地專案/plans/20260717_報到-訓練計畫-教材-題庫_新增需求_PLAN.md)。
+
+**本機開發**：
+
+```bash
+cp data/education_training.db data/education_training.db.bak-$(date +%Y%m%d)
+cd backend
+.venv/bin/python3 migrations/add_owner_dept_fields.py
+```
+
+成功應看到：`[question_bank] 新增欄位：dept_id`、`[teaching_material_sets] 新增欄位：dept_id`（重複執行會顯示「欄位已存在（跳過）」）。
+
+**ds1 Docker**：
+
+```bash
+cd /opt/apps/enterprise-portal/deploy
+cp -a "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/education_training.db" \
+      "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/education_training.db.bak.$(date +%Y%m%d_%H%M%S)"
+docker compose exec training-backend python migrations/add_owner_dept_fields.py
+```
+
+驗證：
+
+```sql
+PRAGMA table_info(question_bank);            -- 應含 dept_id
+PRAGMA table_info(teaching_material_sets);   -- 應含 dept_id
+```
+
+##### 症狀：歷史題庫／考卷工坊題庫維護顯示 HTTP 500（本機正常、ds1 Docker 異常）
+
+| 項目 | 說明 |
+|------|------|
+| **現象** | 部署新映像後，`GET /api/admin/question-bank/` 回 500；前端題庫維護頁顯示「HTTP 500」。本機開發環境可能已跑過遷移故正常 |
+| **根因** | 後端 model／schema 已使用 `question_bank.dept_id`，但正式／測試 DB **尚未執行** `add_owner_dept_fields.py`（典型 SQLAlchemy：`no such column: question_bank.dept_id`） |
+| **解法** | 依上方「ds1 Docker」備份後執行遷移；成功後重開題庫頁即可。**只換映像不跑遷移必現此症** |
+| **一併建議** | 同批部署請一併執行 `add_attendance_emp_plan_unique.py`（見「報到 UNIQUE」小節） |
 
 #### ds1 Docker：遷移後設定 AD 環境變數（必做，否則「AD 管理」顯示未啟用）
 

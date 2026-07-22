@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from . import models
 
-from .constants.auth import is_super_admin_role
+from .constants.auth import is_super_admin_role, is_management_role
 
 DataScope = Literal["all", "department", "self"]
 
@@ -193,3 +193,22 @@ def intersect_emp_ids(candidate_emp_ids: Iterable[str], allowed_emp_ids: Optiona
     if allowed_emp_ids is None:
         return candidate_set
     return candidate_set.intersection(set(allowed_emp_ids))
+
+
+def can_modify_owned_resource(current_user: models.User, resource_dept_id: Optional[int]) -> bool:
+    """
+    Owner（開課單位）寫入權限判斷，適用於訓練計畫／歷史題庫／教材套組／檔案：
+    - resource_dept_id 為 None：既有資料未設定 owner，不受限制，放行
+    - 超管／系統管理角色：一律放行
+    - 否則僅開課單位（current_user.dept_id 與 resource_dept_id 相同）可編輯／刪除／封存等變更
+    """
+    if resource_dept_id is None:
+        return True
+    if is_management_role(current_user):
+        return True
+    return current_user.dept_id == resource_dept_id
+
+
+def can_delete_owned_resource(current_user: models.User, resource_dept_id: Optional[int]) -> bool:
+    """刪除權限別名；與 can_modify_owned_resource 相同判斷。"""
+    return can_modify_owned_resource(current_user, resource_dept_id)

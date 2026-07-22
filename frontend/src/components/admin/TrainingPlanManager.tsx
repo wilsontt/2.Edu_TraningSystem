@@ -9,13 +9,16 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { AxiosError } from 'axios';
-import { Plus, Calendar, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Archive, MoreVertical } from 'lucide-react';
+import { Plus, Calendar, BookOpen, Building2, Search, Loader2, X, AlertCircle, PenTool, Users, BarChart3, CheckCircle, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Archive, MoreVertical, QrCode, Copy, Check } from 'lucide-react';
 import api from '../../api';
 import Pagination from '../common/Pagination';
 import BulkAbsenceReasonModal from '../attendance/BulkAbsenceReasonModal';
 import PlanMaterialsSection from '../teaching/PlanMaterialsSection';
 import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
+import { matchesPlanSearch } from '../../utils/planSearch';
+import type { User } from '../../types';
+import { canModifyOwnedResource } from '../../utils/authGuards';
 
 // ----------------------------------------------------------------
 // 型別定義 (Type Definitions)
@@ -128,7 +131,11 @@ const ABSENCE_REASON_OPTIONS: Array<{ code: string; label: string }> = [
 /**
  * 主要管理元件實作 (Main Management Component)
  */
-const TrainingPlanManager = () => {
+interface TrainingPlanManagerProps {
+  user: User;
+}
+
+const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
   // ----------------------------------------------------------------
   // 狀態管理 (State Management)
   // ----------------------------------------------------------------
@@ -152,6 +159,8 @@ const TrainingPlanManager = () => {
   // 模態視窗狀態
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  /** 非開課單位開啟既有計畫時為檢視模式（不可儲存） */
+  const [isViewOnly, setIsViewOnly] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
@@ -171,6 +180,16 @@ const TrainingPlanManager = () => {
   
   // 操作選單狀態
   const [openActionMenu, setOpenActionMenu] = useState<number | null>(null);
+
+  // 報到 QRcode Modal（上課前／考試前同一連結）
+  const [checkinQRCode, setCheckinQRCode] = useState<{
+    plan_id: number;
+    plan_title: string;
+    qrcode_url: string;
+    checkin_url: string;
+  } | null>(null);
+  const [generatingQRCode, setGeneratingQRCode] = useState(false);
+  const [copiedCheckinUrl, setCopiedCheckinUrl] = useState(false);
 
   // 未報到原因編輯（報到統計 Modal 內）
   const [absenceReasonEdit, setAbsenceReasonEdit] = useState<{
@@ -379,9 +398,10 @@ const TrainingPlanManager = () => {
 
   const openModal = (plan?: TrainingPlan) => {
     if (plan) {
-      // 編輯模式
+      // 編輯／檢視模式
       setIsEditing(true);
       setEditId(plan.id);
+      setIsViewOnly(!canModifyOwnedResource(user, plan.dept_id));
       
       // 尋找主分類 - 改進邏輯
       let mainCatId = '';
@@ -405,7 +425,7 @@ const TrainingPlanManager = () => {
         }
       }
       
-      // 如果還是找不到，記錄警告但不阻止編輯
+      // 如果還是找不到，記錄警告但不阻止開啟
       if (!mainCatId && plan.sub_category_id) {
         console.warn(`無法找到計劃 ${plan.id} (${plan.title}) 的主分類，sub_category_id: ${plan.sub_category_id}`);
       }
@@ -428,6 +448,7 @@ const TrainingPlanManager = () => {
       // 新增模式
       setIsEditing(false);
       setEditId(null);
+      setIsViewOnly(false);
       setFormData({
         title: '',
         main_category_id: '',
@@ -450,6 +471,7 @@ const TrainingPlanManager = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewOnly) return;
     if (!formData.title || !formData.sub_category_id || !formData.dept_id || !formData.training_date) {
       setErrorMessage('請填寫所有必填欄位');
       return;
@@ -541,6 +563,37 @@ const TrainingPlanManager = () => {
       }
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  /** 訓練計畫管理：產生報到 QRcode（上課前／考試前同一連結） */
+  const handleGenerateCheckinQRCode = async (plan: TrainingPlan) => {
+    if (!canModifyOwnedResource(user, plan.dept_id)) {
+      alert('僅開課單位或超管可產生報到 QRcode');
+      return;
+    }
+    setGeneratingQRCode(true);
+    setCopiedCheckinUrl(false);
+    setCheckinQRCode(null);
+    try {
+      const res = await api.post(
+        `/training/plans/${plan.id}/checkin-qrcode/generate`,
+        {},
+        {
+          headers: {
+            'X-Frontend-URL': `${window.location.origin}${import.meta.env.BASE_URL || '/'}`.replace(/\/$/, ''),
+          },
+        },
+      );
+      setCheckinQRCode(res.data);
+    } catch (err: unknown) {
+      if (err instanceof AxiosError) {
+        alert(err.response?.data?.detail || '產生報到 QRcode 失敗');
+      } else {
+        alert('產生報到 QRcode 失敗');
+      }
+    } finally {
+      setGeneratingQRCode(false);
     }
   };
 
@@ -636,9 +689,18 @@ const TrainingPlanManager = () => {
   };
 
   const filteredPlans = useMemo(() => {
-    const result = plans.filter(plan => 
-      plan.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      plan.year.includes(searchTerm)
+    const result = plans.filter((plan) =>
+      matchesPlanSearch(
+        {
+          title: plan.title,
+          year: plan.year,
+          training_date: plan.training_date,
+          end_date: plan.end_date,
+          deptName: getDeptName(plan.dept_id),
+          categoryName: plan.sub_category?.name,
+        },
+        searchTerm,
+      ),
     );
 
     if (sortField) {
@@ -935,7 +997,7 @@ const TrainingPlanManager = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="搜尋計畫名稱或年份..."
+              placeholder="搜尋名稱、年份、訓練日期、單位或分類..."
               className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all duration-200 font-bold"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -1057,7 +1119,7 @@ const TrainingPlanManager = () => {
                         <button 
                           onClick={() => openModal(plan)}
                           className="p-2 min-h-11 min-w-11 flex items-center justify-center text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200 cursor-pointer"
-                          title="編輯計畫"
+                          title={canModifyOwnedResource(user, plan.dept_id) ? '編輯計畫' : '檢視計畫（僅開課單位可編輯）'}
                         >
                           <PenTool className="w-4 h-4" />
                         </button>
@@ -1088,17 +1150,36 @@ const TrainingPlanManager = () => {
                                 className="fixed inset-0 z-90" 
                                 onClick={() => setOpenActionMenu(null)}
                               />
-                              <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border-2 border-gray-300 z-100 py-1">
+                              <div className="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-xl border-2 border-gray-300 z-100 py-1">
                                 {!plan.is_archived && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      if (!canModifyOwnedResource(user, plan.dept_id)) return;
+                                      setOpenActionMenu(null);
+                                      void handleGenerateCheckinQRCode(plan);
+                                    }}
+                                    disabled={!canModifyOwnedResource(user, plan.dept_id) || generatingQRCode}
+                                    className="w-full px-4 py-2 text-left text-sm font-bold text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                    title={canModifyOwnedResource(user, plan.dept_id) ? '產生報到 QRcode（上課前／考試前同一組）' : '僅開課單位可產生報到 QRcode'}
+                                  >
+                                    <QrCode className="w-4 h-4" />
+                                    產生 QRcode
+                                  </button>
+                                )}
+                                {!plan.is_archived && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (!canModifyOwnedResource(user, plan.dept_id)) return;
                                       setOpenActionMenu(null);
                                       if (window.confirm(`確定要封存「${plan.title}」嗎？\n\n封存後，該計畫將不會顯示在「正在進行中」和「已過期」列表中。`)) {
                                         handleArchivePlan(plan.id);
                                       }
                                     }}
-                                    className="w-full px-4 py-2 text-left text-sm font-bold text-purple-600 hover:bg-purple-50 flex items-center gap-2"
+                                    disabled={!canModifyOwnedResource(user, plan.dept_id)}
+                                    className="w-full px-4 py-2 text-left text-sm font-bold text-purple-600 hover:bg-purple-50 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                    title={canModifyOwnedResource(user, plan.dept_id) ? undefined : '僅開課單位可封存'}
                                   >
                                     <Archive className="w-4 h-4" />
                                     封存計畫
@@ -1108,12 +1189,15 @@ const TrainingPlanManager = () => {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      if (!canModifyOwnedResource(user, plan.dept_id)) return;
                                       setOpenActionMenu(null);
                                       if (window.confirm(`確定要取消封存「${plan.title}」嗎？\n\n取消封存後，該計畫將根據其狀態顯示在對應的列表中。`)) {
                                         handleUnarchivePlan(plan.id);
                                       }
                                     }}
-                                    className="w-full px-4 py-2 text-left text-sm font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2"
+                                    disabled={!canModifyOwnedResource(user, plan.dept_id)}
+                                    className="w-full px-4 py-2 text-left text-sm font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                    title={canModifyOwnedResource(user, plan.dept_id) ? undefined : '僅開課單位可取消封存'}
                                   >
                                     <Archive className="w-4 h-4" />
                                     取消封存
@@ -1125,7 +1209,9 @@ const TrainingPlanManager = () => {
                                     setOpenActionMenu(null);
                                     setDeleteTarget(plan);
                                   }}
-                                  className="w-full px-4 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                  disabled={!canModifyOwnedResource(user, plan.dept_id)}
+                                  className="w-full px-4 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                  title={canModifyOwnedResource(user, plan.dept_id) ? undefined : '僅開課單位可刪除'}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                   刪除計畫
@@ -1168,7 +1254,7 @@ const TrainingPlanManager = () => {
             <div className={`p-6 border-b flex items-center justify-between ${isEditing ? 'border-indigo-100 bg-linear-to-r from-indigo-50 to-purple-50' : 'border-green-100 bg-linear-to-r from-green-50 to-emerald-50'}`}>
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 {isEditing ? <PenTool className="w-5 h-5 text-indigo-600" /> : <Plus className="w-5 h-5 text-green-600" />}
-                {isEditing ? '編輯訓練計畫' : '新增訓練計畫'}
+                {isEditing ? (isViewOnly ? '檢視訓練計畫' : '編輯訓練計畫') : '新增訓練計畫'}
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/50 rounded-xl transition-all duration-200 cursor-pointer">
                 <X className="w-5 h-5 text-gray-400" />
@@ -1176,6 +1262,12 @@ const TrainingPlanManager = () => {
             </div>
             {/* 訓練計劃 設定卡片 */}
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
+              {isViewOnly && (
+                <p className="text-sm font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+                  僅開課單位或超管可編輯；目前為檢視模式。
+                </p>
+              )}
+              <fieldset disabled={isViewOnly} className="min-w-0 border-0 p-0 m-0 disabled:opacity-90">
               <div className={isEditing && editId ? 'grid grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-4 items-start' : 'space-y-4'}>
               <div className="space-y-4">
               {/* 計劃與時程卡片 */}
@@ -1537,27 +1629,36 @@ const TrainingPlanManager = () => {
               {isEditing && editId && (
                 <div className="xl:sticky xl:top-2">
                   <div className="bg-indigo-50/40 border-2 border-indigo-100 rounded-2xl p-4">
-                    <PlanMaterialsSection planId={editId} archived={activeTab === 'archived'} />
+                    <PlanMaterialsSection
+                      planId={editId}
+                      deptId={formData.dept_id ? Number(formData.dept_id) : null}
+                      user={user}
+                      archived={activeTab === 'archived'}
+                      readOnly={isViewOnly}
+                    />
                   </div>
                 </div>
               )}
               </div>
+              </fieldset>
 
               {/* ... (footer buttons) ... */}
               {/* 按鈕卡片 */}
               <div className="flex gap-3 pt-2 border-t border-gray-100">
+                {!isViewOnly && (
                 <button
                   type="submit"
                   className={`flex-1 py-3 text-white rounded-xl font-bold transition-all duration-200 shadow-lg active:scale-95 cursor-pointer ${isEditing ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300' : 'bg-green-500 hover:bg-green-600 shadow-green-200 hover:shadow-green-300'}`}
                 >
                   {isEditing ? '儲存變更' : '確認新增'}
                 </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-6 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200 cursor-pointer"
+                  className={`${isViewOnly ? 'flex-1' : 'px-6'} py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200 cursor-pointer`}
                 >
-                  取消
+                  {isViewOnly ? '關閉' : '取消'}
                 </button>
               </div>
             </form>
@@ -2066,6 +2167,70 @@ const TrainingPlanManager = () => {
                 {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
                 確認刪除
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 報到 QRcode Modal */}
+      {(generatingQRCode || checkinQRCode) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col">
+            <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-linear-to-r from-indigo-50 to-purple-50">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-indigo-600" />
+                報到 QRcode
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setCheckinQRCode(null);
+                  setGeneratingQRCode(false);
+                  setCopiedCheckinUrl(false);
+                }}
+                className="p-2 min-h-11 min-w-11 inline-flex items-center justify-center hover:bg-white/50 rounded-xl cursor-pointer"
+                aria-label="關閉"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <div className="p-6 flex flex-col items-center gap-4">
+              {generatingQRCode ? (
+                <div className="flex items-center gap-2 text-gray-500 py-12">
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <span>產生中…</span>
+                </div>
+              ) : checkinQRCode ? (
+                <>
+                  <p className="text-base font-bold text-gray-900 text-center">{checkinQRCode.plan_title}</p>
+                  <img
+                    src={checkinQRCode.qrcode_url}
+                    alt="報到 QRcode"
+                    className="w-52 h-52 rounded-lg bg-white p-2 border border-indigo-100"
+                  />
+                  <p className="text-xs text-gray-600 text-center">
+                    上課前與考試時可使用同一組 QRcode；未登入將先導向登入頁，登入後自動完成報到。
+                  </p>
+                  <div className="flex items-center gap-2 text-xs w-full">
+                    <span className="font-mono text-gray-600 bg-gray-50 px-2 py-1.5 rounded border border-indigo-100 flex-1 truncate">
+                      {checkinQRCode.checkin_url}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(checkinQRCode.checkin_url).then(() => {
+                          setCopiedCheckinUrl(true);
+                          setTimeout(() => setCopiedCheckinUrl(false), 2000);
+                        });
+                      }}
+                      className="p-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded transition-colors cursor-pointer shrink-0"
+                      title="複製連結"
+                    >
+                      {copiedCheckinUrl ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
         </div>

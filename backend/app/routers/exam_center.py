@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Body, Request as F
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, case, true
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from pydantic import BaseModel, Field
@@ -19,6 +20,13 @@ from .. import models, schemas
 from ..database import get_db
 from .auth import get_current_user
 from ..access_scope import get_scope_emp_ids, get_role_scope_type, is_active_user_status
+from ..services.attendance_checkin import (
+    append_checkin_event,
+    checkin_user_brief,
+    client_ip_from_request,
+    now_utc_naive,
+    user_in_plan_targets,
+)
 
 def _training_plan_status_filter_expr_exam(status: str):
     """與 GET /training/plans、報表 overview 之 plan_status 語意一致（含 all）。"""
@@ -1590,6 +1598,16 @@ def get_exam_history_detail(
 
 # --- 報到功能 API ---
 
+def _plan_question_count(db: Session, plan_id: int) -> int:
+    """回傳該訓練計畫有效考題數（供報到頁判斷是否顯示「開始考試」）。"""
+    return (
+        db.query(func.count(models.Question.id))
+        .filter(models.Question.plan_id == plan_id)
+        .scalar()
+        or 0
+    )
+
+
 @router.get("/plan/{plan_id}/attendance/status", response_model=schemas.AttendanceStatus)
 def get_attendance_status(
     plan_id: int,
@@ -1597,20 +1615,33 @@ def get_attendance_status(
     current_user: models.User = Depends(get_current_user)
 ):
     """檢查當前用戶是否已報到該計畫"""
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+
     attendance = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.emp_id == current_user.emp_id,
         models.AttendanceRecord.plan_id == plan_id
     ).first()
 
+    question_count = _plan_question_count(db, plan_id)
+    has_exam = question_count > 0
+
     if attendance:
         return {
             "is_checked_in": True,
-            "checkin_time": attendance.checkin_time
+            "checkin_time": attendance.checkin_time,
+            "plan_title": plan.title,
+            "question_count": question_count,
+            "has_exam": has_exam,
         }
 
     return {
         "is_checked_in": False,
-        "checkin_time": None
+        "checkin_time": None,
+        "plan_title": plan.title,
+        "question_count": question_count,
+        "has_exam": has_exam,
     }
 
 @router.post("/plan/{plan_id}/attendance/checkin", response_model=schemas.CheckInResponse)
@@ -1620,68 +1651,250 @@ def check_in_attendance(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """執行報到動作"""
-    # 1. 檢查計畫是否存在
+    """執行報到動作（冪等：已報到則回傳既有紀錄，不重複建立；並 append 歷程事件）。"""
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
-    
-    # 2. 檢查是否已報到（避免重複報到）
+
+    question_count = _plan_question_count(db, plan_id)
+    has_exam = question_count > 0
+    client_ip = client_ip_from_request(request)
+    event_time = now_utc_naive()
+    user_brief = checkin_user_brief(current_user)
+
     existing = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.emp_id == current_user.emp_id,
         models.AttendanceRecord.plan_id == plan_id
     ).first()
-    
+
     if existing:
-        raise HTTPException(status_code=400, detail="您已經報到過此訓練計畫")
-    
-    # 3. 檢查計畫是否在有效期間內
+        append_checkin_event(
+            db,
+            emp_id=current_user.emp_id,
+            plan_id=plan_id,
+            event_type="single_checkin",
+            source="qr_single",
+            result="already_checked",
+            ip_address=client_ip,
+            event_time=event_time,
+        )
+        db.commit()
+        return {
+            "success": True,
+            "checkin_time": existing.checkin_time,
+            "plan_title": plan.title,
+            "question_count": question_count,
+            "has_exam": has_exam,
+            "checked_in_user": user_brief,
+        }
+
     today = date.today()
     if today < plan.training_date:
         raise HTTPException(status_code=400, detail="訓練計畫尚未開始")
     if plan.end_date and today > plan.end_date:
         raise HTTPException(status_code=400, detail="訓練計畫已結束")
-    
-    # 4. 檢查用戶是否在受課對象中
-    # 受課對象 = 受課單位全員（implicit）∪ 個人受課對象（explicit）；兩者皆未設定視為全公司。
-    # 與 my_exams 應考名單解析一致，避免跨單位「個人受課對象」被誤擋。
-    has_targets = bool(plan.target_departments) or bool(plan.target_users)
-    if has_targets:
-        in_dept = current_user.dept_id is not None and any(
-            dept.id == current_user.dept_id for dept in plan.target_departments
-        )
-        in_users = any(u.emp_id == current_user.emp_id for u in plan.target_users)
-        if not (in_dept or in_users):
-            raise HTTPException(status_code=403, detail="您不在本訓練計畫的受課對象中")
-    
-    # 5. 獲取客戶端 IP 地址
-    client_ip = None
-    if request:
-        # 嘗試從多個 header 中獲取 IP（考慮代理情況）
-        if "x-forwarded-for" in request.headers:
-            client_ip = request.headers["x-forwarded-for"].split(",")[0].strip()
-        elif "x-real-ip" in request.headers:
-            client_ip = request.headers["x-real-ip"]
-        else:
-            client_ip = request.client.host if request.client else None
-    
-    # 6. 建立報到記錄
+
+    if not user_in_plan_targets(current_user, plan):
+        raise HTTPException(status_code=403, detail="您不在本訓練計畫的受課對象中")
+
     attendance = models.AttendanceRecord(
         emp_id=current_user.emp_id,
         plan_id=plan_id,
-        checkin_time=_now_utc_naive(),
-        ip_address=client_ip
+        checkin_time=event_time,
+        ip_address=client_ip,
     )
-    
     db.add(attendance)
+    append_checkin_event(
+        db,
+        emp_id=current_user.emp_id,
+        plan_id=plan_id,
+        event_type="single_checkin",
+        source="qr_single",
+        result="success",
+        ip_address=client_ip,
+        event_time=event_time,
+    )
     try:
         db.commit()
         db.refresh(attendance)
+    except IntegrityError:
+        db.rollback()
+        raced = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.emp_id == current_user.emp_id,
+            models.AttendanceRecord.plan_id == plan_id
+        ).first()
+        if raced:
+            append_checkin_event(
+                db,
+                emp_id=current_user.emp_id,
+                plan_id=plan_id,
+                event_type="single_checkin",
+                source="qr_single",
+                result="already_checked",
+                ip_address=client_ip,
+                event_time=event_time,
+            )
+            db.commit()
+            return {
+                "success": True,
+                "checkin_time": raced.checkin_time,
+                "plan_title": plan.title,
+                "question_count": question_count,
+                "has_exam": has_exam,
+                "checked_in_user": user_brief,
+            }
+        raise HTTPException(status_code=500, detail="報到失敗：寫入衝突")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"報到失敗：{str(e)}")
-    
+
     return {
         "success": True,
-        "checkin_time": attendance.checkin_time
+        "checkin_time": attendance.checkin_time,
+        "plan_title": plan.title,
+        "question_count": question_count,
+        "has_exam": has_exam,
+        "checked_in_user": user_brief,
+    }
+
+
+@router.post("/attendance/batches/{batch_id}/checkin", response_model=schemas.BatchCheckInResponse)
+def check_in_attendance_batch(
+    batch_id: str,
+    request: FastAPIRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """合併批次報到：對 batch 內各計畫逐一寫入（部分成功）；批次已關閉則整批失敗。"""
+    batch = (
+        db.query(models.AttendanceCheckinBatch)
+        .filter(models.AttendanceCheckinBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="合併報到批次不存在")
+
+    if batch.status not in ("open", "reopened"):
+        raise HTTPException(
+            status_code=400,
+            detail="此合併報到已結束，請洽承辦人或使用各計畫補報 QR",
+        )
+
+    plans = list(batch.plans or [])
+    if not plans:
+        raise HTTPException(status_code=400, detail="此批次未綁定任何訓練計畫")
+
+    client_ip = client_ip_from_request(request)
+    event_time = now_utc_naive()
+    user_brief = checkin_user_brief(current_user)
+    succeeded: list[dict] = []
+    skipped: list[dict] = []
+
+    for plan in plans:
+        if not user_in_plan_targets(current_user, plan):
+            append_checkin_event(
+                db,
+                emp_id=current_user.emp_id,
+                plan_id=plan.id,
+                event_type="batch_checkin",
+                source="qr_batch",
+                result="skipped_not_target",
+                batch_id=batch.id,
+                ip_address=client_ip,
+                event_time=event_time,
+            )
+            skipped.append({
+                "plan_id": plan.id,
+                "plan_title": plan.title,
+                "result": "skipped_not_target",
+                "checkin_time": None,
+            })
+            continue
+
+        existing = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.emp_id == current_user.emp_id,
+            models.AttendanceRecord.plan_id == plan.id,
+        ).first()
+        if existing:
+            append_checkin_event(
+                db,
+                emp_id=current_user.emp_id,
+                plan_id=plan.id,
+                event_type="batch_checkin",
+                source="qr_batch",
+                result="already_checked",
+                batch_id=batch.id,
+                ip_address=client_ip,
+                event_time=event_time,
+            )
+            skipped.append({
+                "plan_id": plan.id,
+                "plan_title": plan.title,
+                "result": "already_checked",
+                "checkin_time": existing.checkin_time,
+            })
+            continue
+
+        today = date.today()
+        if today < plan.training_date or (plan.end_date and today > plan.end_date) or plan.is_archived:
+            append_checkin_event(
+                db,
+                emp_id=current_user.emp_id,
+                plan_id=plan.id,
+                event_type="batch_checkin",
+                source="qr_batch",
+                result="plan_not_applicable",
+                batch_id=batch.id,
+                ip_address=client_ip,
+                event_time=event_time,
+            )
+            skipped.append({
+                "plan_id": plan.id,
+                "plan_title": plan.title,
+                "result": "plan_not_applicable",
+                "checkin_time": None,
+            })
+            continue
+
+        attendance = models.AttendanceRecord(
+            emp_id=current_user.emp_id,
+            plan_id=plan.id,
+            checkin_time=event_time,
+            ip_address=client_ip,
+        )
+        db.add(attendance)
+        append_checkin_event(
+            db,
+            emp_id=current_user.emp_id,
+            plan_id=plan.id,
+            event_type="batch_checkin",
+            source="qr_batch",
+            result="success",
+            batch_id=batch.id,
+            ip_address=client_ip,
+            event_time=event_time,
+        )
+        succeeded.append({
+            "plan_id": plan.id,
+            "plan_title": plan.title,
+            "result": "success",
+            "checkin_time": event_time,
+        })
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="合併報到寫入衝突，請重試")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"合併報到失敗：{str(e)}")
+
+    return {
+        "success": True,
+        "batch_id": batch.id,
+        "batch_label": batch.label,
+        "succeeded": succeeded,
+        "skipped": skipped,
+        "checked_in_user": user_brief,
     }
