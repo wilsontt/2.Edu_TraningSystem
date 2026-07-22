@@ -778,6 +778,16 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
     );
   }, [currentAttendanceList, attendanceListSearchTerm]);
 
+  /** 一鍵填寫：僅未到／請假卡片，且須為搜尋後名單（與報到總覽一致） */
+  const bulkAbsenceUsersFromStats = useMemo(() => {
+    if (selectedAttendanceFilter !== 'absent' && selectedAttendanceFilter !== 'leave') return [];
+    return filteredAttendanceList.map((u) => ({
+      emp_id: u.emp_id,
+      name: u.name,
+      dept_name: u.dept_name,
+    }));
+  }, [selectedAttendanceFilter, filteredAttendanceList]);
+
   const attendanceListTotalPages = Math.max(1, Math.ceil(filteredAttendanceList.length / attendanceListPageSize));
   const attendanceListStartIndex = (attendanceListPage - 1) * attendanceListPageSize;
   const paginatedAttendanceList = useMemo(
@@ -1870,8 +1880,9 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
                           <div className="mb-3 flex justify-end">
                             <button
                               type="button"
+                              disabled={bulkAbsenceUsersFromStats.length === 0}
                               onClick={() => setBulkAbsenceReasonOpen(true)}
-                              className="px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 cursor-pointer"
+                              className="px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer"
                             >
                               一鍵填寫多人請假原因
                             </button>
@@ -2074,11 +2085,7 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
 
       {bulkAbsenceReasonOpen && selectedPlanId && attendanceStats[selectedPlanId] && (
         <BulkAbsenceReasonModal
-          users={
-            selectedAttendanceFilter === 'leave'
-              ? attendanceStats[selectedPlanId].not_checked_in_users.filter((u) => !!u.absence_reason_code)
-              : attendanceStats[selectedPlanId].not_checked_in_users.filter((u) => !u.absence_reason_code)
-          }
+          users={bulkAbsenceUsersFromStats}
           busy={savingAbsenceReason}
           onClose={() => setBulkAbsenceReasonOpen(false)}
           onSubmit={async (payload) => {
