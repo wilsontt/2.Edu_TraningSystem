@@ -68,10 +68,15 @@ const PlanMaterialsSection = ({ planId, deptId, user, archived = false, readOnly
     useEffect(() => { fetchMaterialTypes().then(setTypes).catch(() => {}); }, []);
     useEffect(() => { fetchPlanOptions().then(setPlanOptions).catch(() => {}); }, []);
     useEffect(() => { fetchDepartments().then(setDepartments).catch(() => {}); }, []);
-    useEffect(() => { fetchSetsForPlan(); }, [fetchSetsForPlan]);
+    useEffect(() => {
+        fetchSets({ page: 1, size: 100, plan_id: planId })
+            .then(res => Promise.all(res.items.map(s => fetchSetDetail(s.id))))
+            .then(setSets)
+            .catch(err => console.error('載入教材失敗', err));
+    }, [planId]);
 
     useEffect(() => {
-        if (editingSetId == null) { setEditingSet(null); return; }
+        if (editingSetId == null) return;
         fetchSetDetail(editingSetId).then(setEditingSet).catch(() => setEditingSet(null));
     }, [editingSetId]);
 
@@ -128,6 +133,7 @@ const PlanMaterialsSection = ({ planId, deptId, user, archived = false, readOnly
                         disabled={editingSetId != null}
                         onClick={() => {
                             setEditingSetId(null);
+                            setEditingSet(null);
                             setUploadOpen(true);
                         }}
                         className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed cursor-pointer"
@@ -143,7 +149,7 @@ const PlanMaterialsSection = ({ planId, deptId, user, archived = false, readOnly
                     set={editingSet} types={types} allowedExts={allowedExts} materialAccept={materialAccept}
                     departments={departments} user={user}
                     planOptions={planOptions} lockedPlanId={planId} planLayout="stack"
-                    onUpdated={refreshAfterEdit} onClose={() => setEditingSetId(null)}
+                    onUpdated={refreshAfterEdit} onClose={() => { setEditingSetId(null); setEditingSet(null); }}
                     requireNas={nas.requireNas} beginTransfer={nas.beginTransfer} onUploadProgress={nas.onProgress}
                     endTransferSuccess={nas.endTransferSuccess} endTransferError={nas.endTransferError}
                     closeTransfer={nas.closeTransfer} isCancel={nas.isCancel}

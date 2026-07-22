@@ -46,7 +46,7 @@ const BulkAbsenceReasonModal: React.FC<BulkAbsenceReasonModalProps> = ({ users, 
     (reasonCode === 'other' && !reasonText.trim());
 
   return (
-    <div className="fixed inset-0 z-65 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
         <div className="p-4 border-b border-purple-100 bg-purple-50/60">
           <h3 className="text-lg font-black text-gray-900">批次填寫請假原因</h3>
@@ -54,7 +54,7 @@ const BulkAbsenceReasonModal: React.FC<BulkAbsenceReasonModalProps> = ({ users, 
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500 font-bold">
-              請勾選要更新的人員（可全選/不全選）
+              請勾選要更新的人員（可全選/不全選；名單為目前篩選／搜尋結果）
             </p>
             <button
               type="button"
@@ -69,6 +69,7 @@ const BulkAbsenceReasonModal: React.FC<BulkAbsenceReasonModalProps> = ({ users, 
             <table className="w-full text-sm">
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
+                  <th className="px-3 py-2 text-left text-xs font-bold text-gray-600">項次</th>
                   <th className="px-3 py-2 text-left text-xs font-bold text-gray-600">勾選</th>
                   <th className="px-3 py-2 text-left text-xs font-bold text-gray-600">員工編號</th>
                   <th className="px-3 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
@@ -78,6 +79,7 @@ const BulkAbsenceReasonModal: React.FC<BulkAbsenceReasonModalProps> = ({ users, 
               <tbody className="divide-y divide-gray-100">
                 {users.map((u, idx) => (
                   <tr key={u.emp_id} className={idx % 2 === 1 ? 'bg-gray-100' : ''}>
+                    <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{idx + 1}</td>
                     <td className="px-3 py-2">
                       <input
                         type="checkbox"
@@ -93,7 +95,7 @@ const BulkAbsenceReasonModal: React.FC<BulkAbsenceReasonModalProps> = ({ users, 
                 ))}
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-3 py-4 text-center text-gray-400 text-xs">
+                    <td colSpan={5} className="px-3 py-4 text-center text-gray-400 text-xs">
                       沒有可更新的人員
                     </td>
                   </tr>

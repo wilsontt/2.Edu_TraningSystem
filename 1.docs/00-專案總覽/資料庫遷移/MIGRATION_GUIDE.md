@@ -300,6 +300,36 @@ SELECT name FROM sqlite_master WHERE type='table'
 
 對應 PLAN：[`20260720_合併報到批次與報到歷程_PLAN.md`](../../02-棕地專案/plans/20260720_合併報到批次與報到歷程_PLAN.md)。
 
+#### 合併報到未到原因與歷程時間軸（2026-07-22）
+
+新增 `attendance_batch_absence_reasons`；擴充 `attendance_checkin_events`（`reason_code`／`reason_text`／`operator_emp_id`）。
+
+```bash
+cp data/education_training.db data/education_training.db.bak-$(date +%Y%m%d)
+cd backend
+.venv/bin/python3 migrations/add_attendance_batch_absence_and_event_reason.py
+```
+
+ds1 Docker：
+
+```bash
+docker compose exec training-backend python migrations/add_attendance_batch_absence_and_event_reason.py
+```
+
+驗證：
+
+```sql
+SELECT name FROM sqlite_master WHERE type='table'
+  AND name = 'attendance_batch_absence_reasons';
+-- 預期：1 列
+
+PRAGMA table_info(attendance_checkin_events);
+-- 預期含 reason_code、reason_text、operator_emp_id
+```
+
+對應 PLAN：[`20260722_合併報到未到原因與歷程時間軸_PLAN.md`](../../02-棕地專案/plans/20260722_合併報到未到原因與歷程時間軸_PLAN.md)。
+分支：`feature/20260722-batch-absence-timeline`。
+
 #### 報到紀錄歷史補齊（2026-07-03）
 
 報到功能（T10）上線前已交卷、卻無 `attendance_records` 的舊資料，須以**第一次考試時間**補登報到列。  

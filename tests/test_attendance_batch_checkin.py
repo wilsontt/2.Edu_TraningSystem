@@ -207,8 +207,10 @@ def test_batch_checkin_and_close(client, in_memory_db):
         assert events_api.status_code == 200
         event_rows = events_api.json()
         assert len(event_rows) >= 1
-        assert event_rows[0]["batch_label"] == "上午合併"
-        assert event_rows[0]["result"] == "success"
+        # 歷程新→舊：最新列可能為 already_checked；至少一筆 success 且標籤正確
+        assert all(r.get("batch_label") == "上午合併" for r in event_rows if r.get("batch_id"))
+        assert any(r["result"] == "success" for r in event_rows)
+        assert event_rows[0]["result"] in ("success", "already_checked")
 
         reopened = client.patch(
             f"/api/training/attendance/batches/{batch_id}/status",

@@ -9,7 +9,6 @@ import { parseFilenameFromContentDisposition } from '../../hooks/useBatchPrint';
 import { parseBackendDateTime } from '../../utils/date';
 import { matchesPlanSearch, matchesBatchCandidateFilter } from '../../utils/planSearch';
 import { formatAttendanceCheckinEventLabel } from '../../utils/attendanceCheckinEventLabel';
-import type { User } from '../../types';
 
 interface PlanSummary {
   id: number;
@@ -22,6 +21,13 @@ interface PlanSummary {
   is_archived?: boolean;
 }
 
+interface ParticipatedBatchBrief {
+  id: string;
+  label: string;
+  training_date: string;
+  status: string;
+}
+
 interface AttendanceStats {
   plan_id: number;
   expected_count: number;
@@ -29,14 +35,23 @@ interface AttendanceStats {
   attendance_rate: number;
   leave_count?: number;
   absent_without_reason_count?: number;
-  checked_in_users: Array<{ emp_id: string; name: string; dept_name: string; checkin_time: string }>;
+  checked_in_users: Array<{
+    emp_id: string;
+    name: string;
+    dept_name: string;
+    checkin_time: string;
+    latest_event_time?: string | null;
+  }>;
   not_checked_in_users: Array<{
     emp_id: string;
     name: string;
     dept_name: string;
     absence_reason_code?: string;
     absence_reason_text?: string;
+    latest_event_time?: string | null;
+    is_plan_override?: boolean;
   }>;
+  participated_batches?: ParticipatedBatchBrief[];
 }
 
 interface AttendanceCheckinEvent {
@@ -50,6 +65,10 @@ interface AttendanceCheckinEvent {
   source: string;
   result: string;
   ip_address: string | null;
+  reason_code?: string | null;
+  reason_text?: string | null;
+  operator_emp_id?: string | null;
+  display_label?: string | null;
 }
 
 interface AttendanceBatchPlanBrief {
@@ -88,6 +107,30 @@ interface AttendanceBatchStatsOut {
   status: string;
   plans: AttendanceBatchPlanStats[];
 }
+
+interface AttendanceBatchListItem {
+  id: string;
+  label: string;
+  training_date: string;
+  status: string;
+  created_at: string | null;
+  closed_at: string | null;
+  plans: AttendanceBatchPlanBrief[];
+  plan_count: number;
+  absent_count_total?: number | null;
+}
+
+type BatchAbsentUser = {
+  emp_id: string;
+  name: string;
+  dept_name: string;
+};
+
+const BATCH_STATUS_LABELS: Record<string, string> = {
+  open: '進行中',
+  closed: '已關閉',
+  reopened: '已重開',
+};
 
 const frontendBaseUrl = () =>
   `${window.location.origin}${import.meta.env.BASE_URL || '/'}`.replace(/\/$/, '');
@@ -139,7 +182,7 @@ const getCardClass = (isActive: boolean, palette: 'indigo' | 'green' | 'orange' 
 /**
  * 報到總覽：狀態篩選（正在進行中／已過期／已封存／全部）＋搜尋，表格含操作欄可查看報到統計。
  */
-const AttendanceOverviewPage = (_props: { user: User }) => {
+const AttendanceOverviewPage = () => {
   const [planStatusFilter, setPlanStatusFilter] = useState<PlanStatusFilter>('active');
   const [searchTerm, setSearchTerm] = useState('');
   const [plans, setPlans] = useState<PlanSummary[]>([]);
@@ -162,7 +205,11 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
   const [selectedAttendanceFilter, setSelectedAttendanceFilter] = useState<'expected' | 'actual' | 'absent' | 'leave'>('expected');
   const [listSearchTerm, setListSearchTerm] = useState('');
   const [listPage, setListPage] = useState(1);
-  const [listPageSize, setListPageSize] = useState(10);
+  const [listPageSize, setListPageSize] = useState(5);
+
+  // 報到總覽上半訓練清單分頁（>5 顯示）
+  const [plansPage, setPlansPage] = useState(1);
+  const [plansPageSize, setPlansPageSize] = useState(5);
 
   // 報到 QRcode 狀態：內嵌於「報到統計」Modal 內，可與報到狀況同時檢視
   const [qrPanelOpen, setQrPanelOpen] = useState(false);
@@ -200,6 +247,39 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
   const [batchStatusUpdating, setBatchStatusUpdating] = useState(false);
   const [copiedBatchUrl, setCopiedBatchUrl] = useState(false);
 
+  /** 從合併 Modal 鑽入單計畫時隱藏 QR 鈕，且子 Modal z-index 較高 */
+  const [openedFromBatch, setOpenedFromBatch] = useState(false);
+  /** 計畫不在目前總覽列表時（例如從合併入口開），用 snapshot 顯示標題 */
+  const [modalPlanSnapshot, setModalPlanSnapshot] = useState<PlanSummary | null>(null);
+
+  // 合併報到紀錄（G1）
+  const [batchRecords, setBatchRecords] = useState<AttendanceBatchListItem[]>([]);
+  const [batchRecordsLoading, setBatchRecordsLoading] = useState(false);
+  const [batchRecordDate, setBatchRecordDate] = useState('');
+  const [batchRecordKeyword, setBatchRecordKeyword] = useState('');
+  /** 預設「進行中」（open）；可改為全部或其他狀態 */
+  const [batchRecordStatus, setBatchRecordStatus] = useState('open');
+  const [batchRecordsPage, setBatchRecordsPage] = useState(1);
+  const [batchRecordsPageSize, setBatchRecordsPageSize] = useState(5);
+
+  // 合併 Modal 未到人員／批次填原因（G2）
+  const [batchAbsentUsers, setBatchAbsentUsers] = useState<BatchAbsentUser[]>([]);
+  const [batchAbsentLoading, setBatchAbsentLoading] = useState(false);
+  const [batchAbsentSearchTerm, setBatchAbsentSearchTerm] = useState('');
+  /** 合併 Modal 內表格 client 分頁（預設每頁 5；>5 顯示） */
+  const [batchPlansPage, setBatchPlansPage] = useState(1);
+  const [batchPlansPageSize, setBatchPlansPageSize] = useState(5);
+  const [batchAbsentPage, setBatchAbsentPage] = useState(1);
+  const [batchAbsentPageSize, setBatchAbsentPageSize] = useState(5);
+  const [batchBulkAbsenceOpen, setBatchBulkAbsenceOpen] = useState(false);
+  const [batchAbsenceEdit, setBatchAbsenceEdit] = useState<{
+    empId: string;
+    name: string;
+    reasonCode: string;
+    reasonText: string;
+  } | null>(null);
+  const [savingBatchAbsence, setSavingBatchAbsence] = useState(false);
+
   /** 重新查詢目前開啟計畫的報到統計（供人員報到後手動刷新） */
   const refreshModalStats = async () => {
     if (!modalPlanId) return;
@@ -208,6 +288,8 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
       const res = await api.get<AttendanceStats>(`/training/plans/${modalPlanId}/attendance/stats`);
       setModalStats(res.data);
       setStatsMap((prev) => ({ ...prev, [modalPlanId]: res.data }));
+      setHistoryEventsMap({});
+      setExpandedHistoryEmpId(null);
     } catch {
       alert('更新失敗，請稍後再試');
     } finally {
@@ -249,29 +331,112 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
     }
   };
 
-  const refreshBatchStats = useCallback(async (batchId: string) => {
+  const loadBatchAbsentUsers = useCallback(async (planIds: number[]) => {
+    if (planIds.length === 0) {
+      setBatchAbsentUsers([]);
+      return;
+    }
+    setBatchAbsentLoading(true);
+    try {
+      const byEmp = new Map<string, BatchAbsentUser>();
+      for (const planId of planIds) {
+        try {
+          const res = await api.get<AttendanceStats>(`/training/plans/${planId}/attendance/stats`);
+          for (const u of res.data.not_checked_in_users || []) {
+            if (!byEmp.has(u.emp_id)) {
+              byEmp.set(u.emp_id, {
+                emp_id: u.emp_id,
+                name: u.name,
+                dept_name: u.dept_name,
+              });
+            }
+          }
+        } catch {
+          /* skip failed plan */
+        }
+      }
+      setBatchAbsentUsers(Array.from(byEmp.values()));
+    } finally {
+      setBatchAbsentLoading(false);
+    }
+  }, []);
+
+  const refreshBatchStats = useCallback(async (
+    batchId: string,
+    options?: { planIds?: number[]; reloadAbsent?: boolean },
+  ) => {
     setBatchStatsLoading(true);
     try {
       const res = await api.get<AttendanceBatchStatsOut>(`/training/attendance/batches/${batchId}/stats`);
       setBatchStats(res.data);
       setBatchModal((prev) => (prev && prev.id === batchId ? { ...prev, status: res.data.status } : prev));
+      if (options?.reloadAbsent !== false) {
+        const ids = options?.planIds ?? res.data.plans.map((p) => p.plan_id);
+        await loadBatchAbsentUsers(ids);
+      }
     } catch {
       /* keep previous stats on poll failure */
     } finally {
       setBatchStatsLoading(false);
     }
-  }, []);
+  }, [loadBatchAbsentUsers]);
+
+  const loadBatchRecords = useCallback(async () => {
+    setBatchRecordsLoading(true);
+    try {
+      const params: Record<string, string> = {};
+      if (batchRecordDate) params.training_date = batchRecordDate;
+      if (batchRecordKeyword.trim()) params.keyword = batchRecordKeyword.trim();
+      if (batchRecordStatus) params.status = batchRecordStatus;
+      const res = await api.get<AttendanceBatchListItem[]>('/training/attendance/batches', { params });
+      setBatchRecords(res.data || []);
+    } catch {
+      setBatchRecords([]);
+    } finally {
+      setBatchRecordsLoading(false);
+    }
+  }, [batchRecordDate, batchRecordKeyword, batchRecordStatus]);
+
+  useEffect(() => {
+    void loadBatchRecords();
+  }, [loadBatchRecords]);
 
   const openBatchModal = useCallback(async (batch: AttendanceBatchOut) => {
     setBatchModal(batch);
     setBatchStats(null);
+    setBatchAbsentUsers([]);
     setCopiedBatchUrl(false);
-    await refreshBatchStats(batch.id);
+    await refreshBatchStats(batch.id, {
+      planIds: batch.plans.map((p) => p.plan_id),
+      reloadAbsent: true,
+    });
   }, [refreshBatchStats]);
+
+  const openBatchRecord = useCallback(async (item: AttendanceBatchListItem) => {
+    try {
+      const res = await api.get<AttendanceBatchOut>(`/training/attendance/batches/${item.id}`, {
+        headers: { 'X-Frontend-URL': frontendBaseUrl() },
+      });
+      await openBatchModal(res.data);
+    } catch (err: unknown) {
+      if (err instanceof AxiosError) {
+        alert(err.response?.data?.detail || '開啟合併報到紀錄失敗');
+      } else {
+        alert('開啟合併報到紀錄失敗');
+      }
+    }
+  }, [openBatchModal]);
 
   const closeBatchModal = () => {
     setBatchModal(null);
     setBatchStats(null);
+    setBatchAbsentUsers([]);
+    setBatchAbsentSearchTerm('');
+    setBatchBulkAbsenceOpen(false);
+    setBatchAbsenceEdit(null);
+    setBatchPlansPage(1);
+    setBatchAbsentPage(1);
+    void loadBatchRecords();
   };
 
   const loadBatchActivePlans = useCallback(async () => {
@@ -343,7 +508,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
     const active = batchModal.status === 'open' || batchModal.status === 'reopened';
     if (!active) return;
     const timer = window.setInterval(() => {
-      void refreshBatchStats(batchModal.id);
+      void refreshBatchStats(batchModal.id, { reloadAbsent: false });
     }, 15000);
     return () => window.clearInterval(timer);
   }, [batchModal, refreshBatchStats]);
@@ -377,6 +542,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
       );
       setBatchSelectOpen(false);
       await openBatchModal(res.data);
+      void loadBatchRecords();
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
         alert(err.response?.data?.detail || '建立合併報到失敗');
@@ -514,6 +680,36 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
     );
   }, [plans, searchTerm]);
 
+  const plansTotalPages = Math.max(1, Math.ceil(filteredPlans.length / plansPageSize));
+  const plansStartIndex = (plansPage - 1) * plansPageSize;
+  const paginatedPlans = useMemo(
+    () => filteredPlans.slice(plansStartIndex, plansStartIndex + plansPageSize),
+    [filteredPlans, plansStartIndex, plansPageSize],
+  );
+
+  useEffect(() => {
+    setPlansPage(1);
+  }, [planStatusFilter, searchTerm, plansPageSize]);
+
+  useEffect(() => {
+    if (plansPage > plansTotalPages) setPlansPage(plansTotalPages);
+  }, [plansPage, plansTotalPages]);
+
+  const batchRecordsTotalPages = Math.max(1, Math.ceil(batchRecords.length / batchRecordsPageSize));
+  const batchRecordsStartIndex = (batchRecordsPage - 1) * batchRecordsPageSize;
+  const paginatedBatchRecords = useMemo(
+    () => batchRecords.slice(batchRecordsStartIndex, batchRecordsStartIndex + batchRecordsPageSize),
+    [batchRecords, batchRecordsStartIndex, batchRecordsPageSize],
+  );
+
+  useEffect(() => {
+    setBatchRecordsPage(1);
+  }, [batchRecordDate, batchRecordKeyword, batchRecordStatus, batchRecordsPageSize, batchRecords.length]);
+
+  useEffect(() => {
+    if (batchRecordsPage > batchRecordsTotalPages) setBatchRecordsPage(batchRecordsTotalPages);
+  }, [batchRecordsPage, batchRecordsTotalPages]);
+
   useEffect(() => {
     if (plans.length === 0) {
       setStatsMap({});
@@ -543,28 +739,51 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
     void fetchAllStats();
   }, [plans]);
 
-  const openAttendanceModal = async (planId: number) => {
+  const openAttendanceModal = async (
+    planId: number,
+    options?: { openedFromBatch?: boolean; planSnapshot?: PlanSummary },
+  ) => {
+    const fromBatch = Boolean(options?.openedFromBatch);
+    setOpenedFromBatch(fromBatch);
+    if (fromBatch) {
+      setQrPanelOpen(false);
+      setCheckinQRCode(null);
+    }
+    const snapshot =
+      options?.planSnapshot
+      ?? plans.find((p) => p.id === planId)
+      ?? null;
+    setModalPlanSnapshot(snapshot);
     setModalPlanId(planId);
     setExpandedHistoryEmpId(null);
     setHistoryEventsMap({});
     setLoadingHistoryEmpId(null);
-    const stats = statsMap[planId];
-    if (stats) {
-      setModalStats(stats);
+    setSelectedAttendanceFilter('expected');
+    setListSearchTerm('');
+    setListPage(1);
+    // 從合併鑽入一律重抓，避免用到過期的 statsMap
+    if (fromBatch || !statsMap[planId]) {
+      setModalStats(null);
+      try {
+        const res = await api.get<AttendanceStats>(`/training/plans/${planId}/attendance/stats`);
+        setModalStats(res.data);
+        setStatsMap((prev) => ({ ...prev, [planId]: res.data }));
+      } catch {
+        setModalStats(null);
+      }
       return;
     }
-    setModalStats(null);
-    try {
-      const res = await api.get<AttendanceStats>(`/training/plans/${planId}/attendance/stats`);
-      setModalStats(res.data);
-    } catch {
-      setModalStats(null);
-    }
+    setModalStats(statsMap[planId]);
   };
 
   const closeModal = () => {
+    const shouldRefreshBatch = openedFromBatch && batchModal;
+    const batchId = batchModal?.id;
+    const planIds = batchModal?.plans.map((p) => p.plan_id);
     setModalPlanId(null);
     setModalStats(null);
+    setModalPlanSnapshot(null);
+    setOpenedFromBatch(false);
     setSelectedAttendanceFilter('expected');
     setListSearchTerm('');
     setListPage(1);
@@ -573,12 +792,38 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
     setExpandedHistoryEmpId(null);
     setHistoryEventsMap({});
     setLoadingHistoryEmpId(null);
+    setAbsenceReasonEdit(null);
+    setBulkAbsenceReasonEdit(null);
+    if (shouldRefreshBatch && batchId) {
+      void refreshBatchStats(batchId, { planIds, reloadAbsent: true });
+    }
   };
 
-  const modalPlan = modalPlanId ? plans.find((p) => p.id === modalPlanId) : null;
+  const modalPlan: PlanSummary | null = (() => {
+    if (!modalPlanId) return null;
+    const fromList = plans.find((p) => p.id === modalPlanId);
+    if (fromList) return fromList;
+    if (modalPlanSnapshot && modalPlanSnapshot.id === modalPlanId) return modalPlanSnapshot;
+    const fromBatch = batchModal?.plans.find((p) => p.plan_id === modalPlanId);
+    if (fromBatch) {
+      return {
+        id: fromBatch.plan_id,
+        title: fromBatch.title,
+        training_date: fromBatch.training_date,
+        end_date: null,
+      };
+    }
+    return null;
+  })();
+
   /** 封存計畫僅能檢視統計，不可填寫／編輯未到原因 */
   const absenceReasonReadOnly =
     Boolean(modalPlan?.is_archived) || planStatusFilter === 'archived';
+
+  const formatListEventTime = (iso: string | null | undefined): string => {
+    if (!iso) return '-';
+    return parseBackendDateTime(iso)?.toLocaleString('zh-TW', { hour12: false }) ?? '-';
+  };
 
   type AttendanceListRow =
     | (AttendanceStats['checked_in_users'][number] & { kind: 'actual' })
@@ -630,6 +875,58 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
       setListPage(listTotalPages);
     }
   }, [listPage, listTotalPages]);
+
+  const batchPlansList = useMemo(() => batchStats?.plans ?? [], [batchStats?.plans]);
+  const batchPlansTotalPages = Math.max(1, Math.ceil(batchPlansList.length / batchPlansPageSize));
+  const batchPlansStartIndex = (batchPlansPage - 1) * batchPlansPageSize;
+  const paginatedBatchPlans = useMemo(
+    () => batchPlansList.slice(batchPlansStartIndex, batchPlansStartIndex + batchPlansPageSize),
+    [batchPlansList, batchPlansStartIndex, batchPlansPageSize],
+  );
+
+  const filteredBatchAbsentUsers = useMemo(() => {
+    const keyword = batchAbsentSearchTerm.trim().toLowerCase();
+    if (!keyword) return batchAbsentUsers;
+    return batchAbsentUsers.filter(
+      (u) =>
+        u.emp_id.toLowerCase().includes(keyword) ||
+        u.name.toLowerCase().includes(keyword) ||
+        u.dept_name.toLowerCase().includes(keyword),
+    );
+  }, [batchAbsentUsers, batchAbsentSearchTerm]);
+
+  const batchAbsentTotalPages = Math.max(1, Math.ceil(filteredBatchAbsentUsers.length / batchAbsentPageSize));
+  const batchAbsentStartIndex = (batchAbsentPage - 1) * batchAbsentPageSize;
+  const paginatedBatchAbsentUsers = useMemo(
+    () => filteredBatchAbsentUsers.slice(batchAbsentStartIndex, batchAbsentStartIndex + batchAbsentPageSize),
+    [filteredBatchAbsentUsers, batchAbsentStartIndex, batchAbsentPageSize],
+  );
+
+  useEffect(() => {
+    setBatchPlansPage(1);
+  }, [batchModal?.id, batchPlansPageSize, batchStats?.plans?.length]);
+
+  useEffect(() => {
+    setBatchAbsentPage(1);
+  }, [batchModal?.id, batchAbsentPageSize, batchAbsentUsers.length, batchAbsentSearchTerm]);
+
+  useEffect(() => {
+    if (batchPlansPage > batchPlansTotalPages) setBatchPlansPage(batchPlansTotalPages);
+  }, [batchPlansPage, batchPlansTotalPages]);
+
+  useEffect(() => {
+    if (batchAbsentPage > batchAbsentTotalPages) setBatchAbsentPage(batchAbsentTotalPages);
+  }, [batchAbsentPage, batchAbsentTotalPages]);
+
+  /** 報到統計一鍵填寫：僅未到／請假卡片，且須為搜尋後名單 */
+  const bulkAbsenceUsersFromStats = useMemo(() => {
+    if (selectedAttendanceFilter !== 'absent' && selectedAttendanceFilter !== 'leave') return [];
+    return filteredAttendanceList.map((u) => ({
+      emp_id: u.emp_id,
+      name: u.name,
+      dept_name: u.dept_name,
+    }));
+  }, [selectedAttendanceFilter, filteredAttendanceList]);
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
@@ -708,7 +1005,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
               <thead className="bg-gray-100">
                 <tr>
                   <th className="px-3 sm:px-4 py-3 text-left font-bold text-gray-700 whitespace-nowrap">訓練計畫</th>
-                  <th className="px-3 sm:px-4 py-3 text-left font-bold text-gray-700 whitespace-nowrap">日期</th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-bold text-gray-700 whitespace-nowrap">訓練期間</th>
                   <th className="px-3 sm:px-4 py-3 text-right font-bold text-gray-700 whitespace-nowrap">應到</th>
                   <th className="px-3 sm:px-4 py-3 text-right font-bold text-gray-700 whitespace-nowrap">實到</th>
                   <th className="px-3 sm:px-4 py-3 text-right font-bold text-gray-700 whitespace-nowrap">未到</th>
@@ -717,7 +1014,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredPlans.map((plan) => {
+                {paginatedPlans.map((plan) => {
                   const stats = statsMap[plan.id];
                   const absent = stats
                     ? Math.max(0, stats.expected_count - stats.actual_count)
@@ -725,7 +1022,14 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                   return (
                     <tr key={plan.id} className="even:bg-gray-100 hover:bg-indigo-50/30 transition-colors">
                       <td className="px-3 sm:px-4 py-3 font-bold text-gray-900 whitespace-nowrap">{plan.title}</td>
-                      <td className="px-3 sm:px-4 py-3 text-gray-600 whitespace-nowrap">{plan.training_date}</td>
+                      <td className="px-3 sm:px-4 py-3 text-gray-600 whitespace-nowrap">
+                        <div className="leading-snug">
+                          <div className="font-mono text-sm">{plan.training_date || '—'}</div>
+                          <div className="font-mono text-xs text-gray-400 mt-0.5">
+                            ～ {plan.end_date || '—'}
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-3 sm:px-4 py-3 text-right font-mono whitespace-nowrap">{stats ? stats.expected_count : '-'}</td>
                       <td className="px-3 sm:px-4 py-3 text-right font-mono text-green-600 whitespace-nowrap">{stats ? stats.actual_count : '-'}</td>
                       <td className="px-3 sm:px-4 py-3 text-right font-mono text-orange-600 whitespace-nowrap">{stats ? absent : '-'}</td>
@@ -748,12 +1052,137 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
               </tbody>
             </table>
           </div>
+          {filteredPlans.length > 5 && (
+            <Pagination
+              currentPage={plansPage}
+              totalPages={plansTotalPages}
+              pageSize={plansPageSize}
+              totalItems={filteredPlans.length}
+              onPageChange={setPlansPage}
+              onPageSizeChange={(size) => { setPlansPageSize(size); setPlansPage(1); }}
+            />
+          )}
         </>
       )}
 
+      {/* 合併報到紀錄（G1） */}
+      <section className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+            <Layers className="w-5 h-5 text-indigo-600 shrink-0" />
+            合併報到紀錄
+          </h2>
+          <button
+            type="button"
+            onClick={() => { void loadBatchRecords(); }}
+            className="px-3 py-2 min-h-11 text-xs font-bold bg-white text-indigo-600 border border-indigo-200 rounded-xl hover:bg-indigo-50 cursor-pointer inline-flex items-center gap-1 self-start sm:self-auto"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${batchRecordsLoading ? 'animate-spin' : ''}`} />
+            重新整理
+          </button>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+          <input
+            type="date"
+            value={batchRecordDate}
+            onChange={(e) => setBatchRecordDate(e.target.value)}
+            className="px-3 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
+            title="場次日"
+          />
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="search"
+              placeholder="搜尋標籤關鍵字..."
+              value={batchRecordKeyword}
+              onChange={(e) => setBatchRecordKeyword(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
+            />
+          </div>
+          <select
+            value={batchRecordStatus}
+            onChange={(e) => setBatchRecordStatus(e.target.value)}
+            className="px-3 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer"
+          >
+            <option value="open">進行中</option>
+            <option value="">全部狀態</option>
+            <option value="closed">已關閉</option>
+            <option value="reopened">已重開</option>
+          </select>
+        </div>
+        {batchRecordsLoading ? (
+          <div className="py-10 flex justify-center text-gray-400">
+            <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+          </div>
+        ) : batchRecords.length === 0 ? (
+          <div className="bg-indigo-50/50 rounded-2xl border border-indigo-100 p-6 text-center text-gray-600 text-sm">
+            尚無符合條件的合併報到紀錄。
+          </div>
+        ) : (
+          <>
+          <div className="border border-gray-200 rounded-xl overflow-x-auto">
+            <table className="w-full min-w-[36rem] text-sm">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-3 sm:px-4 py-3 text-left font-bold text-gray-700 whitespace-nowrap">標籤</th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-bold text-gray-700 whitespace-nowrap">場次日</th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-bold text-gray-700 whitespace-nowrap">狀態</th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-bold text-gray-700 whitespace-nowrap">含計畫</th>
+                  <th className="px-3 sm:px-4 py-3 text-right font-bold text-gray-700 whitespace-nowrap">未到</th>
+                  <th className="px-3 sm:px-4 py-3 text-center font-bold text-gray-700 whitespace-nowrap">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {paginatedBatchRecords.map((rec) => (
+                  <tr key={rec.id} className="even:bg-gray-100 hover:bg-indigo-50/30 transition-colors">
+                    <td className="px-3 sm:px-4 py-3 font-bold text-gray-900 whitespace-nowrap">{rec.label}</td>
+                    <td className="px-3 sm:px-4 py-3 text-gray-600 font-mono whitespace-nowrap">{rec.training_date}</td>
+                    <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
+                        rec.status === 'closed'
+                          ? 'bg-gray-200 text-gray-600'
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                        {BATCH_STATUS_LABELS[rec.status] ?? rec.status}
+                      </span>
+                    </td>
+                    <td className="px-3 sm:px-4 py-3 text-gray-700 text-xs max-w-xs">
+                      {(rec.plans || []).map((p) => p.title).join('、') || `共 ${rec.plan_count} 場`}
+                    </td>
+                    <td className="px-3 sm:px-4 py-3 text-right font-mono text-orange-600 whitespace-nowrap">
+                      {rec.absent_count_total ?? '-'}
+                    </td>
+                    <td className="px-3 sm:px-4 py-3 text-center whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => { void openBatchRecord(rec); }}
+                        className="px-3 py-1.5 min-h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        開啟詳情
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {batchRecords.length > 5 && (
+            <Pagination
+              currentPage={batchRecordsPage}
+              totalPages={batchRecordsTotalPages}
+              pageSize={batchRecordsPageSize}
+              totalItems={batchRecords.length}
+              onPageChange={setBatchRecordsPage}
+              onPageSizeChange={(size) => { setBatchRecordsPageSize(size); setBatchRecordsPage(1); }}
+            />
+          )}
+          </>
+        )}
+      </section>
+
       {/* 報到統計 Modal */}
       {modalPlanId && modalPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className={`fixed inset-0 ${openedFromBatch ? 'z-60' : 'z-50'} flex items-center justify-center bg-black/50 backdrop-blur-sm p-4`}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-indigo-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-linear-to-r from-indigo-50 to-purple-50">
               <h3 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-2 min-w-0">
@@ -761,16 +1190,18 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                 <span className="truncate">報到統計 - {modalPlan.title}</span>
               </h3>
               <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => { void handleToggleQrPanel(modalPlan); }}
-                  className={`px-3 py-1.5 min-h-11 text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 ${
-                    qrPanelOpen ? 'bg-indigo-700 text-white' : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50'
-                  }`}
-                >
-                  <QrCode className="w-3.5 h-3.5 shrink-0" />
-                  {qrPanelOpen ? '隱藏 QRcode' : '顯示 QRcode'}
-                </button>
+                {!openedFromBatch && (
+                  <button
+                    type="button"
+                    onClick={() => { void handleToggleQrPanel(modalPlan); }}
+                    className={`px-3 py-1.5 min-h-11 text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 ${
+                      qrPanelOpen ? 'bg-indigo-700 text-white' : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50'
+                    }`}
+                  >
+                    <QrCode className="w-3.5 h-3.5 shrink-0" />
+                    {qrPanelOpen ? '隱藏 QRcode' : '顯示 QRcode'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => { void refreshModalStats(); }}
@@ -802,8 +1233,38 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                       此訓練計畫已封存，僅能檢視報到紀錄與未到名單，無法編輯未到原因。
                     </div>
                   )}
-                  <div className={`flex flex-col ${qrPanelOpen ? 'lg:flex-row lg:items-stretch' : ''} gap-4 mb-6`}>
-                  {qrPanelOpen && (
+                  {(modalStats.participated_batches?.length ?? 0) > 0 && (
+                    <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+                      <span className="font-bold">曾參與合併報到：</span>
+                      {(modalStats.participated_batches || []).map((b, i) => (
+                        <span key={b.id}>
+                          {i > 0 ? '、' : ''}
+                          <button
+                            type="button"
+                            className="font-bold text-indigo-700 underline underline-offset-2 hover:text-indigo-900 cursor-pointer"
+                            onClick={() => {
+                              const target: AttendanceBatchListItem = {
+                                id: b.id,
+                                label: b.label,
+                                training_date: b.training_date,
+                                status: b.status,
+                                created_at: null,
+                                closed_at: null,
+                                plans: [],
+                                plan_count: 0,
+                              };
+                              closeModal();
+                              void openBatchRecord(target);
+                            }}
+                          >
+                            {b.label}
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className={`flex flex-col ${qrPanelOpen && !openedFromBatch ? 'lg:flex-row lg:items-stretch' : ''} gap-4 mb-6`}>
+                  {qrPanelOpen && !openedFromBatch && (
                     <div className="lg:flex-1 min-w-0 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 flex flex-col items-center justify-center gap-3">
                       {generatingQRCode ? (
                         <div className="flex items-center gap-2 text-gray-500 py-8">
@@ -837,38 +1298,38 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                       ) : null}
                     </div>
                   )}
-                  <div className={`grid grid-cols-2 gap-2 ${qrPanelOpen ? 'lg:w-52 shrink-0 content-start' : 'sm:grid-cols-4 gap-4 flex-1'}`}>
+                  <div className={`grid grid-cols-2 gap-2 ${qrPanelOpen && !openedFromBatch ? 'lg:w-52 shrink-0 content-start' : 'sm:grid-cols-4 gap-4 flex-1'}`}>
                     <button
                       type="button"
                       onClick={() => { setSelectedAttendanceFilter('expected'); setListPage(1); }}
-                      className={`${qrPanelOpen ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'expected', 'indigo')}`}
+                      className={`${qrPanelOpen && !openedFromBatch ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'expected', 'indigo')}`}
                     >
-                      <div className={`${qrPanelOpen ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-indigo-600`}>應到人數</div>
-                      <div className={`${qrPanelOpen ? 'text-lg' : 'text-2xl'} font-black text-indigo-800`}>{modalStats.expected_count}</div>
+                      <div className={`${qrPanelOpen && !openedFromBatch ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-indigo-600`}>應到人數</div>
+                      <div className={`${qrPanelOpen && !openedFromBatch ? 'text-lg' : 'text-2xl'} font-black text-indigo-800`}>{modalStats.expected_count}</div>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setSelectedAttendanceFilter('actual'); setListPage(1); }}
-                      className={`${qrPanelOpen ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'actual', 'green')}`}
+                      className={`${qrPanelOpen && !openedFromBatch ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'actual', 'green')}`}
                     >
-                      <div className={`${qrPanelOpen ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-green-600`}>實到人數</div>
-                      <div className={`${qrPanelOpen ? 'text-lg' : 'text-2xl'} font-black text-green-800`}>{modalStats.actual_count}</div>
+                      <div className={`${qrPanelOpen && !openedFromBatch ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-green-600`}>實到人數</div>
+                      <div className={`${qrPanelOpen && !openedFromBatch ? 'text-lg' : 'text-2xl'} font-black text-green-800`}>{modalStats.actual_count}</div>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setSelectedAttendanceFilter('absent'); setListPage(1); }}
-                      className={`${qrPanelOpen ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'absent', 'orange')}`}
+                      className={`${qrPanelOpen && !openedFromBatch ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'absent', 'orange')}`}
                     >
-                      <div className={`${qrPanelOpen ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-orange-600`}>未到人數</div>
-                      <div className={`${qrPanelOpen ? 'text-lg' : 'text-2xl'} font-black text-orange-800`}>{modalStats.absent_without_reason_count ?? Math.max(0, modalStats.expected_count - modalStats.actual_count)}</div>
+                      <div className={`${qrPanelOpen && !openedFromBatch ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-orange-600`}>未到人數</div>
+                      <div className={`${qrPanelOpen && !openedFromBatch ? 'text-lg' : 'text-2xl'} font-black text-orange-800`}>{modalStats.absent_without_reason_count ?? Math.max(0, modalStats.expected_count - modalStats.actual_count)}</div>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setSelectedAttendanceFilter('leave'); setListPage(1); }}
-                      className={`${qrPanelOpen ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'leave', 'purple')}`}
+                      className={`${qrPanelOpen && !openedFromBatch ? 'p-2.5' : 'p-4'} rounded-xl text-left cursor-pointer transition-all ${getCardClass(selectedAttendanceFilter === 'leave', 'purple')}`}
                     >
-                      <div className={`${qrPanelOpen ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-purple-600`}>請假人數</div>
-                      <div className={`${qrPanelOpen ? 'text-lg' : 'text-2xl'} font-black text-purple-800`}>{modalStats.leave_count ?? 0}</div>
+                      <div className={`${qrPanelOpen && !openedFromBatch ? 'text-xs mb-0.5' : 'text-sm mb-1'} font-bold text-purple-600`}>請假人數</div>
+                      <div className={`${qrPanelOpen && !openedFromBatch ? 'text-lg' : 'text-2xl'} font-black text-purple-800`}>{modalStats.leave_count ?? 0}</div>
                     </button>
                   </div>
                   </div>
@@ -885,8 +1346,9 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                         {!absenceReasonReadOnly && (selectedAttendanceFilter === 'absent' || selectedAttendanceFilter === 'leave') && (
                           <button
                             type="button"
+                            disabled={bulkAbsenceUsersFromStats.length === 0}
                             onClick={() => setBulkAbsenceReasonEdit({ reasonCode: '', reasonText: '' })}
-                            className="px-2.5 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer"
                           >
                             一鍵填寫多人請假原因
                           </button>
@@ -944,6 +1406,17 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                                   'absence_reason_text' in rowUser && rowUser.absence_reason_text
                                     ? rowUser.absence_reason_text
                                     : '';
+                                const isPlanOverride =
+                                  'is_plan_override' in rowUser && Boolean(rowUser.is_plan_override);
+                                const latestTime =
+                                  'latest_event_time' in rowUser && rowUser.latest_event_time
+                                    ? rowUser.latest_event_time
+                                    : null;
+                                const checkinTime =
+                                  'checkin_time' in rowUser && rowUser.checkin_time
+                                    ? rowUser.checkin_time
+                                    : null;
+                                const displayTimeIso = latestTime || checkinTime;
                                 const colSpan = !absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' ? 7 : 6;
                                 return (
                                   <Fragment key={`${rowUser.emp_id}-${displayIndex}`}>
@@ -952,26 +1425,33 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                                       <td className="px-3 sm:px-4 py-2 font-mono text-xs whitespace-nowrap">{rowUser.emp_id}</td>
                                       <td className="px-3 sm:px-4 py-2 font-bold whitespace-nowrap">{rowUser.name}</td>
                                       <td className="px-3 sm:px-4 py-2 text-gray-600 whitespace-nowrap">{rowUser.dept_name}</td>
-                                      <td className="px-3 sm:px-4 py-2 text-gray-500 text-xs whitespace-nowrap">
-                                        {rowUser.kind === 'actual' && 'checkin_time' in rowUser && rowUser.checkin_time
-                                          ? parseBackendDateTime(rowUser.checkin_time)?.toLocaleString('zh-TW', { hour12: false })
-                                          : (absenceLabel
-                                              ? `${absenceLabel}${absenceText ? `：${absenceText}` : ''}`
-                                              : '-')}
+                                      <td className="px-3 sm:px-4 py-2 text-gray-500 text-xs">
+                                        {rowUser.kind === 'actual' ? (
+                                          formatListEventTime(displayTimeIso)
+                                        ) : (
+                                          <span className="inline-flex flex-wrap items-center gap-1.5">
+                                            <span className="whitespace-nowrap">
+                                              {absenceLabel
+                                                ? `${absenceLabel}${absenceText ? `：${absenceText}` : ''}`
+                                                : (displayTimeIso ? formatListEventTime(displayTimeIso) : '-')}
+                                            </span>
+                                            {isPlanOverride && (
+                                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 whitespace-nowrap">
+                                                個別覆寫
+                                              </span>
+                                            )}
+                                          </span>
+                                        )}
                                       </td>
                                       <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
-                                        {rowUser.kind === 'actual' ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => { void toggleHistory(rowUser.emp_id); }}
-                                            className="px-2 py-1.5 min-h-11 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer inline-flex items-center gap-0.5"
-                                          >
-                                            {historyOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                                            歷程
-                                          </button>
-                                        ) : (
-                                          <span className="text-gray-300 text-xs">—</span>
-                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => { void toggleHistory(rowUser.emp_id); }}
+                                          className="px-2 py-1.5 min-h-11 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer inline-flex items-center gap-0.5"
+                                        >
+                                          {historyOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                          歷程
+                                        </button>
                                       </td>
                                       {!absenceReasonReadOnly && selectedAttendanceFilter !== 'actual' && rowUser.kind !== 'actual' && (
                                         <td className="px-3 sm:px-4 py-2 whitespace-nowrap">
@@ -1013,7 +1493,8 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                                                       : '—'}
                                                   </span>
                                                   <span className="font-bold text-gray-800">
-                                                    {formatAttendanceCheckinEventLabel(ev)}
+                                                    {ev.display_label?.trim()
+                                                      || formatAttendanceCheckinEventLabel(ev)}
                                                   </span>
                                                 </li>
                                               ))}
@@ -1029,7 +1510,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                           </tbody>
                         </table>
                       </div>
-                      {filteredAttendanceList.length > 0 && (
+                      {filteredAttendanceList.length > 5 && (
                         <Pagination
                           currentPage={listPage}
                           totalPages={listTotalPages}
@@ -1055,7 +1536,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
 
       {/* 未報到原因編輯 Modal */}
       {absenceReasonEdit && modalPlanId && !absenceReasonReadOnly && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="p-4 border-b border-indigo-100 bg-indigo-50/50">
               <h3 className="text-lg font-black text-gray-900">填寫未報到原因 - {absenceReasonEdit.name}</h3>
@@ -1112,6 +1593,11 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                       setModalStats(res.data);
                       setStatsMap(prev => ({ ...prev, [modalPlanId]: res.data }));
                     }
+                    setHistoryEventsMap((prev) => {
+                      const next = { ...prev };
+                      delete next[absenceReasonEdit.empId];
+                      return next;
+                    });
                     setAbsenceReasonEdit(null);
                   } catch (err: unknown) {
                     alert(err && typeof err === 'object' && 'response' in err ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail : '儲存失敗');
@@ -1131,11 +1617,7 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
       {/* 批次未報到原因編輯 Modal */}
       {bulkAbsenceReasonEdit && modalPlanId && modalStats && !absenceReasonReadOnly && (
         <BulkAbsenceReasonModal
-          users={
-            selectedAttendanceFilter === 'leave'
-              ? modalStats.not_checked_in_users.filter((u) => !!u.absence_reason_code)
-              : modalStats.not_checked_in_users.filter((u) => !u.absence_reason_code)
-          }
+          users={bulkAbsenceUsersFromStats}
           busy={savingAbsenceReason}
           onClose={() => setBulkAbsenceReasonEdit(null)}
           onSubmit={async (payload) => {
@@ -1151,6 +1633,8 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                 setModalStats(res.data);
                 setStatsMap(prev => ({ ...prev, [modalPlanId]: res.data }));
               }
+              setHistoryEventsMap({});
+              setExpandedHistoryEmpId(null);
               setBulkAbsenceReasonEdit(null);
             } catch (err: unknown) {
               alert(err && typeof err === 'object' && 'response' in err ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail : '批次儲存失敗');
@@ -1346,7 +1830,12 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                 <button
                   type="button"
                   disabled={batchStatsLoading}
-                  onClick={() => { void refreshBatchStats(batchModal.id); }}
+                  onClick={() => {
+                    void refreshBatchStats(batchModal.id, {
+                      planIds: batchModal.plans.map((p) => p.plan_id),
+                      reloadAbsent: true,
+                    });
+                  }}
                   className="px-3 py-1.5 min-h-11 text-xs font-bold bg-white text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 disabled:opacity-50 cursor-pointer inline-flex items-center gap-1"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${batchStatsLoading ? 'animate-spin' : ''}`} />
@@ -1398,39 +1887,187 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 space-y-6">
+                  <div>
                   <h4 className="text-sm font-bold text-gray-700 mb-3">各場報到統計</h4>
                   {!batchStats ? (
                     <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>
+                  ) : batchPlansList.length === 0 ? (
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-center text-xs text-gray-400">
+                      尚無綁定計畫
+                    </div>
                   ) : (
+                    <>
                     <div className="border border-gray-200 rounded-xl overflow-x-auto">
-                      <table className="w-full min-w-[28rem] text-sm">
+                      <table className="w-full min-w-[40rem] text-sm">
                         <thead className="bg-gray-100">
                           <tr>
                             <th className="px-3 py-2.5 text-left font-bold text-gray-700 whitespace-nowrap">訓練計畫</th>
+                            <th className="px-3 py-2.5 text-left font-bold text-gray-700 whitespace-nowrap">日期</th>
                             <th className="px-3 py-2.5 text-right font-bold text-gray-700 whitespace-nowrap">應到</th>
                             <th className="px-3 py-2.5 text-right font-bold text-gray-700 whitespace-nowrap">實到</th>
                             <th className="px-3 py-2.5 text-right font-bold text-gray-700 whitespace-nowrap">未到</th>
                             <th className="px-3 py-2.5 text-right font-bold text-gray-700 whitespace-nowrap">出席率</th>
+                            <th className="px-3 py-2.5 text-center font-bold text-gray-700 whitespace-nowrap">操作</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {batchStats.plans.map((ps) => (
-                            <tr key={ps.plan_id} className="even:bg-gray-50">
-                              <td className="px-3 py-2.5 font-bold text-gray-900">{ps.title}</td>
-                              <td className="px-3 py-2.5 text-right font-mono">{ps.expected_count}</td>
-                              <td className="px-3 py-2.5 text-right font-mono text-green-600">{ps.actual_count}</td>
-                              <td className="px-3 py-2.5 text-right font-mono text-orange-600">{ps.absent_count}</td>
-                              <td className="px-3 py-2.5 text-right font-bold text-indigo-600">{ps.attendance_rate.toFixed(1)}%</td>
-                            </tr>
-                          ))}
+                          {paginatedBatchPlans.map((ps) => {
+                            const planDate =
+                              batchModal.plans.find((p) => p.plan_id === ps.plan_id)?.training_date
+                              ?? plans.find((p) => p.id === ps.plan_id)?.training_date
+                              ?? '-';
+                            return (
+                              <tr key={ps.plan_id} className="even:bg-gray-50 hover:bg-indigo-50/30 transition-colors">
+                                <td className="px-3 py-2.5 font-bold text-gray-900 whitespace-nowrap">{ps.title}</td>
+                                <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{planDate}</td>
+                                <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">{ps.expected_count}</td>
+                                <td className="px-3 py-2.5 text-right font-mono text-green-600 whitespace-nowrap">{ps.actual_count}</td>
+                                <td className="px-3 py-2.5 text-right font-mono text-orange-600 whitespace-nowrap">{ps.absent_count}</td>
+                                <td className="px-3 py-2.5 text-right font-bold text-indigo-600 whitespace-nowrap">{ps.attendance_rate.toFixed(1)}%</td>
+                                <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void openAttendanceModal(ps.plan_id, {
+                                        openedFromBatch: true,
+                                        planSnapshot: {
+                                          id: ps.plan_id,
+                                          title: ps.title,
+                                          training_date: planDate === '-' ? '' : planDate,
+                                          end_date: null,
+                                        },
+                                      });
+                                    }}
+                                    className="px-3 py-1.5 min-h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                                  >
+                                    <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+                                    報到統計
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
+                    {batchPlansList.length > 5 && (
+                      <Pagination
+                        currentPage={batchPlansPage}
+                        totalPages={batchPlansTotalPages}
+                        pageSize={batchPlansPageSize}
+                        totalItems={batchPlansList.length}
+                        onPageChange={setBatchPlansPage}
+                        onPageSizeChange={(size) => { setBatchPlansPageSize(size); setBatchPlansPage(1); }}
+                      />
+                    )}
+                    </>
                   )}
+                  </div>
+
+                  <div>
+                    <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+                      <h4 className="text-sm font-bold text-gray-700">
+                        未到人員（可一次填寫原因）
+                        {!batchAbsentLoading && (
+                          <span className="text-gray-400 font-bold ml-2">
+                            {batchAbsentUsers.length}
+                            {batchAbsentSearchTerm.trim()
+                              ? `（符合 ${filteredBatchAbsentUsers.length} 位）`
+                              : ''}
+                          </span>
+                        )}
+                      </h4>
+                      <button
+                        type="button"
+                        disabled={filteredBatchAbsentUsers.length === 0 || batchAbsentLoading}
+                        onClick={() => setBatchBulkAbsenceOpen(true)}
+                        className="px-2.5 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        一鍵填寫多人請假原因
+                      </button>
+                    </div>
+                    <div className="relative mb-3">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="search"
+                        placeholder="搜尋員工編號、姓名或部門..."
+                        value={batchAbsentSearchTerm}
+                        onChange={(e) => setBatchAbsentSearchTerm(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all duration-200"
+                      />
+                    </div>
+                    {batchAbsentLoading ? (
+                      <div className="py-6 flex justify-center">
+                        <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                      </div>
+                    ) : batchAbsentUsers.length === 0 ? (
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-center text-xs text-gray-400">
+                        目前沒有未到人員
+                      </div>
+                    ) : filteredBatchAbsentUsers.length === 0 ? (
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 text-center text-xs text-gray-400">
+                        查無符合條件的人員
+                      </div>
+                    ) : (
+                      <>
+                      <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                        <table className="w-full min-w-[28rem] text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-bold text-gray-600">項次</th>
+                              <th className="px-3 py-2 text-left text-xs font-bold text-gray-600">員工編號</th>
+                              <th className="px-3 py-2 text-left text-xs font-bold text-gray-600">姓名</th>
+                              <th className="px-3 py-2 text-left text-xs font-bold text-gray-600">部門</th>
+                              <th className="px-3 py-2 text-left text-xs font-bold text-gray-600">操作</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {paginatedBatchAbsentUsers.map((u, idx) => (
+                              <tr key={u.emp_id} className={idx % 2 === 1 ? 'bg-gray-100' : ''}>
+                                <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{batchAbsentStartIndex + idx + 1}</td>
+                                <td className="px-3 py-2 font-mono text-xs">{u.emp_id}</td>
+                                <td className="px-3 py-2 font-bold">{u.name}</td>
+                                <td className="px-3 py-2 text-gray-600">{u.dept_name}</td>
+                                <td className="px-3 py-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setBatchAbsenceEdit({
+                                      empId: u.emp_id,
+                                      name: u.name,
+                                      reasonCode: '',
+                                      reasonText: '',
+                                    })}
+                                    className="px-2 py-1.5 min-h-11 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
+                                  >
+                                    填寫原因
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {filteredBatchAbsentUsers.length > 5 && (
+                        <Pagination
+                          currentPage={batchAbsentPage}
+                          totalPages={batchAbsentTotalPages}
+                          pageSize={batchAbsentPageSize}
+                          totalItems={filteredBatchAbsentUsers.length}
+                          onPageChange={setBatchAbsentPage}
+                          onPageSizeChange={(size) => { setBatchAbsentPageSize(size); setBatchAbsentPage(1); }}
+                        />
+                      )}
+                      </>
+                    )}
+                    <p className="mt-2 text-xs text-gray-500">
+                      填寫後會套用至本合併批次內、該員應到且尚未報到的所有計畫；關閉合併報到後仍可填寫。一鍵填寫會套用目前搜尋結果中的人員。
+                    </p>
+                  </div>
+
                   {batchModal.status === 'closed' && (
-                    <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-center text-2xl font-bold text-orange-800">
-                      <span className="block">此合併報到已關閉，請洽教育訓練相關負責人</span>
+                    <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-center text-sm sm:text-base font-bold text-orange-800">
+                      <span className="block">此合併報到已關閉（掃碼不可報到），仍可從此處填寫未到原因或重開。</span>
                     </div>
                   )}
                 </div>
@@ -1443,6 +2080,119 @@ const AttendanceOverviewPage = (_props: { user: User }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 合併批次 — 單人未到原因 */}
+      {batchAbsenceEdit && batchModal && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-4 border-b border-indigo-100 bg-indigo-50/50">
+              <h3 className="text-lg font-black text-gray-900">填寫未到原因（合併） - {batchAbsenceEdit.name}</h3>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-xs text-gray-500 font-bold">
+                將套用至「{batchModal.label}」內該員應到且未報到的所有計畫。
+              </p>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">原因</label>
+                <select
+                  value={batchAbsenceEdit.reasonCode}
+                  onChange={(e) => setBatchAbsenceEdit((prev) => (prev ? { ...prev, reasonCode: e.target.value } : null))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">請選擇</option>
+                  {ABSENCE_REASON_OPTIONS.map((opt) => (
+                    <option key={opt.code} value={opt.code}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              {batchAbsenceEdit.reasonCode === 'other' && (
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">原因說明（必填）</label>
+                  <input
+                    type="text"
+                    value={batchAbsenceEdit.reasonText}
+                    onChange={(e) => setBatchAbsenceEdit((prev) => (prev ? { ...prev, reasonText: e.target.value } : null))}
+                    placeholder="請填寫未到原因"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-100 flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setBatchAbsenceEdit(null)}
+                className="px-4 py-2 text-gray-600 font-bold rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={
+                  savingBatchAbsence
+                  || !batchAbsenceEdit.reasonCode
+                  || (batchAbsenceEdit.reasonCode === 'other' && !batchAbsenceEdit.reasonText.trim())
+                }
+                onClick={async () => {
+                  if (!batchAbsenceEdit || !batchModal) return;
+                  setSavingBatchAbsence(true);
+                  try {
+                    await api.put(`/training/attendance/batches/${batchModal.id}/absence-reason`, {
+                      emp_id: batchAbsenceEdit.empId,
+                      reason_code: batchAbsenceEdit.reasonCode,
+                      reason_text: batchAbsenceEdit.reasonCode === 'other' ? batchAbsenceEdit.reasonText : undefined,
+                    });
+                    setBatchAbsenceEdit(null);
+                    await refreshBatchStats(batchModal.id, {
+                      planIds: batchModal.plans.map((p) => p.plan_id),
+                      reloadAbsent: true,
+                    });
+                  } catch (err: unknown) {
+                    if (err instanceof AxiosError) {
+                      alert(err.response?.data?.detail || '儲存失敗');
+                    } else {
+                      alert('儲存失敗');
+                    }
+                  } finally {
+                    setSavingBatchAbsence(false);
+                  }
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {savingBatchAbsence ? '儲存中…' : '儲存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 合併批次 — 多人未到原因 */}
+      {batchBulkAbsenceOpen && batchModal && (
+        <BulkAbsenceReasonModal
+          users={filteredBatchAbsentUsers}
+          busy={savingBatchAbsence}
+          onClose={() => setBatchBulkAbsenceOpen(false)}
+          onSubmit={async (payload) => {
+            setSavingBatchAbsence(true);
+            try {
+              await api.put(`/training/attendance/batches/${batchModal.id}/absence-reason/bulk`, payload);
+              setBatchBulkAbsenceOpen(false);
+              await refreshBatchStats(batchModal.id, {
+                planIds: batchModal.plans.map((p) => p.plan_id),
+                reloadAbsent: true,
+              });
+            } catch (err: unknown) {
+              if (err instanceof AxiosError) {
+                alert(err.response?.data?.detail || '批次儲存失敗');
+              } else {
+                alert('批次儲存失敗');
+              }
+            } finally {
+              setSavingBatchAbsence(false);
+            }
+          }}
+        />
       )}
 
     </div>

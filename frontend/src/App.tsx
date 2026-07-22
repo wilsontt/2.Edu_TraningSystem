@@ -427,7 +427,7 @@ const App = () => {
                     <Route path="/" element={<ExamDashboard />} />
                     <Route path="/exam/run/:planId" element={<ExamRunner />} />
                     <Route path="/plans" element={user.functions?.includes('menu:plan') || user.role === 'Admin' ? <TrainingPlanManager user={user} /> : <Navigate to="/" />} />
-                    <Route path="/attendance-overview" element={user.functions?.includes('menu:attendance-overview') || user.role === 'Admin' ? <AttendanceOverviewPage user={user} /> : <Navigate to="/" />} />
+                    <Route path="/attendance-overview" element={user.functions?.includes('menu:attendance-overview') || user.role === 'Admin' ? <AttendanceOverviewPage /> : <Navigate to="/" />} />
                     <Route path="/exams" element={user.functions?.includes('menu:exam') || user.role === 'Admin' ? <ExamStudio user={user} /> : <Navigate to="/" />} />
                     {/* 教材庫已移入考卷工坊頁籤內，舊路徑導回考卷工坊 */}
                     <Route path="/teaching-materials" element={<Navigate to="/exams" replace />} />
