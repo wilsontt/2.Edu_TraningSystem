@@ -21,6 +21,17 @@ from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission, check_any_permission
 from ..access_scope import get_scope_emp_ids, intersect_emp_ids, can_modify_owned_resource
+from ..services.attendance_absence import (
+    ABSENCE_REASON_CODES,
+    append_absence_event,
+    collect_plan_target_emp_ids,
+    delete_batch_absence_reason,
+    delete_plan_absence_reason,
+    format_checkin_event_display_label,
+    is_checked_in,
+    upsert_batch_absence_reason,
+    upsert_plan_absence_reason,
+)
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -498,28 +509,83 @@ def get_attendance_stats(
         models.User, models.AttendanceRecord.emp_id == models.User.emp_id
     ).all()
     
+    # 各員最新歷程時間
+    latest_event_rows = (
+        db.query(
+            models.AttendanceCheckinEvent.emp_id,
+            func.max(models.AttendanceCheckinEvent.event_time).label("latest_event_time"),
+        )
+        .filter(models.AttendanceCheckinEvent.plan_id == plan_id)
+        .group_by(models.AttendanceCheckinEvent.emp_id)
+        .all()
+    )
+    latest_event_by_emp = {
+        row.emp_id: row.latest_event_time.isoformat() if row.latest_event_time else None
+        for row in latest_event_rows
+    }
+
+    # 此計畫曾參與的合併批次（給 Modal 提示）
+    participated_batches = []
+    batch_links = (
+        db.query(models.AttendanceCheckinBatch)
+        .join(
+            models.AttendanceCheckinBatchPlan,
+            models.AttendanceCheckinBatchPlan.batch_id == models.AttendanceCheckinBatch.id,
+        )
+        .filter(models.AttendanceCheckinBatchPlan.plan_id == plan_id)
+        .order_by(models.AttendanceCheckinBatch.created_at.desc())
+        .all()
+    )
+    for b in batch_links:
+        participated_batches.append({
+            "id": b.id,
+            "label": b.label,
+            "training_date": b.training_date.isoformat() if b.training_date else None,
+            "status": b.status,
+        })
+
+    # 批次層原因 → 判斷個別覆寫
+    batch_ids = [b.id for b in batch_links]
+    batch_reason_by_emp: dict = {}
+    if batch_ids:
+        for br in (
+            db.query(models.AttendanceBatchAbsenceReason)
+            .filter(models.AttendanceBatchAbsenceReason.batch_id.in_(batch_ids))
+            .all()
+        ):
+            prev = batch_reason_by_emp.get(br.emp_id)
+            if prev is None or (
+                br.recorded_at
+                and prev.get("recorded_at")
+                and br.recorded_at > prev["recorded_at"]
+            ):
+                batch_reason_by_emp[br.emp_id] = {
+                    "reason_code": br.reason_code,
+                    "reason_text": br.reason_text,
+                    "recorded_at": br.recorded_at,
+                }
+
     checked_in_users = []
     checked_in_emp_ids = set()
     for record in checked_in_records:
         user = record.user
+        checkin_iso = record.checkin_time.isoformat() if record.checkin_time else None
+        latest = latest_event_by_emp.get(user.emp_id) or checkin_iso
         checked_in_users.append({
             "emp_id": user.emp_id,
             "name": user.name,
             "dept_name": user.department.name if user.department else "未知",
-            "checkin_time": record.checkin_time.isoformat()
+            "checkin_time": checkin_iso,
+            "latest_event_time": latest,
         })
         checked_in_emp_ids.add(user.emp_id)
-    
-    # 取得未報到用戶列表
-    not_checked_in_users = []
 
-    # 取得所有目標用戶
+    not_checked_in_users = []
     all_target_users = db.query(models.User).filter(
         models.User.emp_id.in_(list(scoped_target_user_ids)),
         models.User.status == "active"
     ).all()
-    
-    # 查詢已填寫的未到原因
+
     absence_reasons = {}
     reason_rows = db.query(models.AttendanceAbsenceReason).filter(
         models.AttendanceAbsenceReason.plan_id == plan_id
@@ -532,16 +598,24 @@ def get_attendance_stats(
             item = {
                 "emp_id": user.emp_id,
                 "name": user.name,
-                "dept_name": user.department.name if user.department else "未知"
+                "dept_name": user.department.name if user.department else "未知",
+                "latest_event_time": latest_event_by_emp.get(user.emp_id),
+                "is_plan_override": False,
             }
             if user.emp_id in absence_reasons:
                 item["absence_reason_code"] = absence_reasons[user.emp_id]["reason_code"]
                 item["absence_reason_text"] = absence_reasons[user.emp_id]["reason_text"]
+                br = batch_reason_by_emp.get(user.emp_id)
+                if br and (
+                    br["reason_code"] != item["absence_reason_code"]
+                    or (br.get("reason_text") or "") != (item.get("absence_reason_text") or "")
+                ):
+                    item["is_plan_override"] = True
             not_checked_in_users.append(item)
 
     leave_count = sum(1 for u in not_checked_in_users if u.get("absence_reason_code"))
     absent_without_reason_count = len(not_checked_in_users) - leave_count
-    
+
     return {
         "plan_id": plan_id,
         "expected_count": expected_count,
@@ -550,7 +624,8 @@ def get_attendance_stats(
         "leave_count": leave_count,
         "absent_without_reason_count": absent_without_reason_count,
         "checked_in_users": checked_in_users,
-        "not_checked_in_users": not_checked_in_users
+        "not_checked_in_users": not_checked_in_users,
+        "participated_batches": participated_batches,
     }
 
 
@@ -591,43 +666,52 @@ def update_absence_reason(
         raise HTTPException(status_code=403, detail="僅部門主管（同部門）、擁有報到總覽權限者、或 Admin、系統管理者可填寫未報到原因")
     if body.reason_code == "other" and not (body.reason_text or "").strip():
         raise HTTPException(status_code=400, detail="選擇「其他」時請填寫原因說明")
-    allowed_codes = {"sick_leave", "business_trip", "official_leave", "other", "cancel_leave"}
-    if body.reason_code not in allowed_codes:
+    if body.reason_code not in ABSENCE_REASON_CODES:
         raise HTTPException(status_code=400, detail="無效的未到原因代碼")
-    if body.reason_code == "cancel_leave":
-        existing = db.query(models.AttendanceAbsenceReason).filter(
-            models.AttendanceAbsenceReason.plan_id == plan_id,
-            models.AttendanceAbsenceReason.emp_id == body.emp_id
-        ).first()
-        if existing:
-            db.delete(existing)
-            try:
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                raise HTTPException(status_code=500, detail=f"取消請假失敗：{str(e)}")
-        refreshed_stats = get_attendance_stats(plan_id=plan_id, db=db, current_user=current_user)
-        return {"success": True, "stats": refreshed_stats}
-    existing = db.query(models.AttendanceAbsenceReason).filter(
-        models.AttendanceAbsenceReason.plan_id == plan_id,
-        models.AttendanceAbsenceReason.emp_id == body.emp_id
-    ).first()
-    if existing:
-        existing.reason_code = body.reason_code
-        existing.reason_text = body.reason_text
-        existing.recorded_by = current_user.emp_id
-        existing.recorded_at = datetime.utcnow()
-    else:
-        new_rec = models.AttendanceAbsenceReason(
-            plan_id=plan_id,
-            emp_id=body.emp_id,
-            reason_code=body.reason_code,
-            reason_text=body.reason_text,
-            recorded_by=current_user.emp_id
-        )
-        db.add(new_rec)
+    if is_checked_in(db, plan_id, body.emp_id):
+        raise HTTPException(status_code=400, detail="已報到人員不可填寫未到原因")
+
+    now = datetime.utcnow()
     try:
-        db.commit()
+        if body.reason_code == "cancel_leave":
+            deleted = delete_plan_absence_reason(db, plan_id, body.emp_id)
+            if deleted:
+                append_absence_event(
+                    db,
+                    plan_id=plan_id,
+                    emp_id=body.emp_id,
+                    operator_emp_id=current_user.emp_id,
+                    reason_code=None,
+                    reason_text=None,
+                    source="plan_absence",
+                    cleared=True,
+                    event_time=now,
+                )
+            db.commit()
+        else:
+            upsert_plan_absence_reason(
+                db,
+                plan_id=plan_id,
+                emp_id=body.emp_id,
+                reason_code=body.reason_code,
+                reason_text=body.reason_text,
+                recorded_by=current_user.emp_id,
+                now=now,
+            )
+            append_absence_event(
+                db,
+                plan_id=plan_id,
+                emp_id=body.emp_id,
+                operator_emp_id=current_user.emp_id,
+                reason_code=body.reason_code,
+                reason_text=body.reason_text,
+                source="plan_absence",
+                is_override=True,
+                event_time=now,
+            )
+            db.commit()
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"儲存未到原因失敗：{str(e)}")
@@ -649,24 +733,18 @@ def update_absence_reason_bulk(
     if plan.is_archived:
         raise HTTPException(status_code=400, detail="已封存的訓練計畫無法編輯未到原因")
 
-    allowed_codes = {"sick_leave", "business_trip", "official_leave", "other", "cancel_leave"}
-    if body.reason_code not in allowed_codes:
+    if body.reason_code not in ABSENCE_REASON_CODES:
         raise HTTPException(status_code=400, detail="無效的未到原因代碼")
     if body.reason_code == "other" and not (body.reason_text or "").strip():
         raise HTTPException(status_code=400, detail="選擇「其他」時請填寫原因說明")
     if not body.emp_ids:
         raise HTTPException(status_code=400, detail="請至少提供一位未報到人員")
 
-    # 取得可編輯範圍內且確實未報到的人員
     valid_emp_ids = []
     for emp_id in set(body.emp_ids):
         if not _can_edit_absence_reason(current_user, emp_id, db):
             continue
-        checked_in = db.query(models.AttendanceRecord.id).filter(
-            models.AttendanceRecord.plan_id == plan_id,
-            models.AttendanceRecord.emp_id == emp_id
-        ).first()
-        if checked_in:
+        if is_checked_in(db, plan_id, emp_id):
             continue
         target_user = db.query(models.User).filter(models.User.emp_id == emp_id).first()
         if not target_user or target_user.status != "active":
@@ -680,26 +758,41 @@ def update_absence_reason_bulk(
         now = datetime.utcnow()
         updated_count = 0
         for emp_id in valid_emp_ids:
-            existing = db.query(models.AttendanceAbsenceReason).filter(
-                models.AttendanceAbsenceReason.plan_id == plan_id,
-                models.AttendanceAbsenceReason.emp_id == emp_id
-            ).first()
             if body.reason_code == "cancel_leave":
-                if existing:
-                    db.delete(existing)
-            elif existing:
-                existing.reason_code = body.reason_code
-                existing.reason_text = body.reason_text
-                existing.recorded_by = current_user.emp_id
-                existing.recorded_at = now
+                deleted = delete_plan_absence_reason(db, plan_id, emp_id)
+                if deleted:
+                    append_absence_event(
+                        db,
+                        plan_id=plan_id,
+                        emp_id=emp_id,
+                        operator_emp_id=current_user.emp_id,
+                        reason_code=None,
+                        reason_text=None,
+                        source="plan_absence",
+                        cleared=True,
+                        event_time=now,
+                    )
             else:
-                db.add(models.AttendanceAbsenceReason(
+                upsert_plan_absence_reason(
+                    db,
                     plan_id=plan_id,
                     emp_id=emp_id,
                     reason_code=body.reason_code,
                     reason_text=body.reason_text,
-                    recorded_by=current_user.emp_id
-                ))
+                    recorded_by=current_user.emp_id,
+                    now=now,
+                )
+                append_absence_event(
+                    db,
+                    plan_id=plan_id,
+                    emp_id=emp_id,
+                    operator_emp_id=current_user.emp_id,
+                    reason_code=body.reason_code,
+                    reason_text=body.reason_text,
+                    source="plan_absence",
+                    is_override=True,
+                    event_time=now,
+                )
             updated_count += 1
         db.commit()
         refreshed_stats = get_attendance_stats(plan_id=plan_id, db=db, current_user=current_user)
@@ -1064,6 +1157,248 @@ def _batch_to_out(
     }
 
 
+def _batch_list_item_dict(
+    batch: models.AttendanceCheckinBatch,
+    absent_count_total: Optional[int] = None,
+) -> dict:
+    plans = [
+        {"plan_id": p.id, "title": p.title, "training_date": p.training_date}
+        for p in (batch.plans or [])
+    ]
+    return {
+        "id": batch.id,
+        "label": batch.label,
+        "training_date": batch.training_date,
+        "status": batch.status,
+        "created_at": batch.created_at,
+        "closed_at": batch.closed_at,
+        "plans": plans,
+        "plan_count": len(plans),
+        "absent_count_total": absent_count_total,
+    }
+
+
+@router.get("/attendance/batches", response_model=List[schemas.AttendanceBatchListItem])
+def list_attendance_batches(
+    training_date: Optional[date] = Query(None),
+    keyword: Optional[str] = Query(None, description="標籤關鍵字"),
+    status: Optional[str] = Query(None, description="open|closed|reopened"),
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:attendance-overview"),
+):
+    """合併報到紀錄列表。"""
+    q = db.query(models.AttendanceCheckinBatch)
+    if training_date is not None:
+        q = q.filter(models.AttendanceCheckinBatch.training_date == training_date)
+    if keyword and keyword.strip():
+        q = q.filter(models.AttendanceCheckinBatch.label.contains(keyword.strip()))
+    if status and status.strip():
+        q = q.filter(models.AttendanceCheckinBatch.status == status.strip())
+    batches = q.order_by(
+        models.AttendanceCheckinBatch.training_date.desc(),
+        models.AttendanceCheckinBatch.created_at.desc(),
+    ).all()
+
+    items = []
+    for b in batches:
+        absent_total = 0
+        for p in (b.plans or []):
+            stats = get_attendance_stats(plan_id=p.id, db=db, current_user=current_user)
+            absent_total += int(stats.get("absent_without_reason_count") or 0) + int(
+                stats.get("leave_count") or 0
+            )
+        items.append(_batch_list_item_dict(b, absent_count_total=absent_total))
+    return items
+
+
+def _apply_batch_absence_for_emp(
+    db: Session,
+    *,
+    batch: models.AttendanceCheckinBatch,
+    emp_id: str,
+    reason_code: str,
+    reason_text: Optional[str],
+    operator: models.User,
+    now: datetime,
+) -> int:
+    """
+    對 batch 內應到且未報到之計畫套用未到原因。
+    回傳實際寫入的 plan 數。
+    """
+    applied = 0
+    if reason_code == "cancel_leave":
+        delete_batch_absence_reason(db, batch.id, emp_id)
+    else:
+        upsert_batch_absence_reason(
+            db,
+            batch_id=batch.id,
+            emp_id=emp_id,
+            reason_code=reason_code,
+            reason_text=reason_text,
+            recorded_by=operator.emp_id,
+            now=now,
+        )
+
+    for plan in batch.plans or []:
+        targets = collect_plan_target_emp_ids(plan, db)
+        if emp_id not in targets:
+            continue
+        if is_checked_in(db, plan.id, emp_id):
+            continue
+        if reason_code == "cancel_leave":
+            deleted = delete_plan_absence_reason(db, plan.id, emp_id)
+            if deleted:
+                append_absence_event(
+                    db,
+                    plan_id=plan.id,
+                    emp_id=emp_id,
+                    operator_emp_id=operator.emp_id,
+                    reason_code=None,
+                    reason_text=None,
+                    source="batch_absence",
+                    batch_id=batch.id,
+                    cleared=True,
+                    event_time=now,
+                )
+                applied += 1
+        else:
+            upsert_plan_absence_reason(
+                db,
+                plan_id=plan.id,
+                emp_id=emp_id,
+                reason_code=reason_code,
+                reason_text=reason_text,
+                recorded_by=operator.emp_id,
+                now=now,
+            )
+            append_absence_event(
+                db,
+                plan_id=plan.id,
+                emp_id=emp_id,
+                operator_emp_id=operator.emp_id,
+                reason_code=reason_code,
+                reason_text=reason_text,
+                source="batch_absence",
+                batch_id=batch.id,
+                event_time=now,
+            )
+            applied += 1
+    return applied
+
+
+@router.put("/attendance/batches/{batch_id}/absence-reason")
+def update_batch_absence_reason(
+    batch_id: str,
+    body: schemas.BatchAbsenceReasonUpdate,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:attendance-overview"),
+):
+    """單人：批次層未到原因套用至 batch 內應到且未報到之計畫（關閉後仍可填）。"""
+    batch = (
+        db.query(models.AttendanceCheckinBatch)
+        .filter(models.AttendanceCheckinBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="合併報到批次不存在")
+    if not _can_edit_absence_reason(current_user, body.emp_id, db):
+        raise HTTPException(status_code=403, detail="無權限填寫此人員未到原因")
+    if body.reason_code not in ABSENCE_REASON_CODES:
+        raise HTTPException(status_code=400, detail="無效的未到原因代碼")
+    if body.reason_code == "other" and not (body.reason_text or "").strip():
+        raise HTTPException(status_code=400, detail="選擇「其他」時請填寫原因說明")
+
+    now = datetime.utcnow()
+    try:
+        applied = _apply_batch_absence_for_emp(
+            db,
+            batch=batch,
+            emp_id=body.emp_id,
+            reason_code=body.reason_code,
+            reason_text=body.reason_text,
+            operator=current_user,
+            now=now,
+        )
+        if applied == 0 and body.reason_code != "cancel_leave":
+            raise HTTPException(
+                status_code=400,
+                detail="沒有可套用的計畫（可能已報到、非應到對象、或無權限）",
+            )
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"批次未到原因寫入失敗：{str(e)}")
+
+    return {
+        "success": True,
+        "batch_id": batch_id,
+        "emp_id": body.emp_id,
+        "applied_plan_count": applied,
+    }
+
+
+@router.put("/attendance/batches/{batch_id}/absence-reason/bulk")
+def update_batch_absence_reason_bulk(
+    batch_id: str,
+    body: schemas.BatchAbsenceReasonBulkUpdate,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:attendance-overview"),
+):
+    """多人：批次層未到原因套用。"""
+    batch = (
+        db.query(models.AttendanceCheckinBatch)
+        .filter(models.AttendanceCheckinBatch.id == batch_id)
+        .first()
+    )
+    if not batch:
+        raise HTTPException(status_code=404, detail="合併報到批次不存在")
+    if body.reason_code not in ABSENCE_REASON_CODES:
+        raise HTTPException(status_code=400, detail="無效的未到原因代碼")
+    if body.reason_code == "other" and not (body.reason_text or "").strip():
+        raise HTTPException(status_code=400, detail="選擇「其他」時請填寫原因說明")
+    if not body.emp_ids:
+        raise HTTPException(status_code=400, detail="請至少提供一位未報到人員")
+
+    now = datetime.utcnow()
+    total_applied = 0
+    updated_emps = []
+    try:
+        for emp_id in set(body.emp_ids):
+            if not _can_edit_absence_reason(current_user, emp_id, db):
+                continue
+            applied = _apply_batch_absence_for_emp(
+                db,
+                batch=batch,
+                emp_id=emp_id,
+                reason_code=body.reason_code,
+                reason_text=body.reason_text,
+                operator=current_user,
+                now=now,
+            )
+            if applied > 0 or body.reason_code == "cancel_leave":
+                updated_emps.append(emp_id)
+                total_applied += applied
+        if not updated_emps:
+            raise HTTPException(status_code=400, detail="沒有可更新的未報到人員")
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"批次未到原因寫入失敗：{str(e)}")
+
+    return {
+        "success": True,
+        "batch_id": batch_id,
+        "updated_emp_ids": updated_emps,
+        "applied_plan_count": total_applied,
+    }
+
+
 @router.post("/attendance/batches", response_model=schemas.AttendanceBatchOut)
 def create_attendance_batch(
     body: schemas.AttendanceBatchCreate,
@@ -1274,7 +1609,10 @@ def list_attendance_events(
     )
     if emp_id:
         q = q.filter(models.AttendanceCheckinEvent.emp_id == emp_id)
-    events = q.order_by(models.AttendanceCheckinEvent.event_time.asc()).all()
+    events = q.order_by(
+        models.AttendanceCheckinEvent.event_time.desc(),
+        models.AttendanceCheckinEvent.id.desc(),
+    ).all()
 
     batch_ids = {ev.batch_id for ev in events if ev.batch_id}
     label_by_batch_id: dict[str, str] = {}
@@ -1286,12 +1624,46 @@ def list_attendance_events(
         )
         label_by_batch_id = {row.id: row.label for row in rows}
 
-    return [
-        schemas.AttendanceCheckinEventOut.model_validate(ev).model_copy(
-            update={
-                "batch_label": label_by_batch_id.get(ev.batch_id) if ev.batch_id else None,
-            }
+    out = []
+    for ev in events:
+        batch_label = label_by_batch_id.get(ev.batch_id) if ev.batch_id else None
+        out.append(
+            schemas.AttendanceCheckinEventOut.model_validate(ev).model_copy(
+                update={
+                    "batch_label": batch_label,
+                    "display_label": format_checkin_event_display_label(
+                        source=ev.source,
+                        event_type=ev.event_type,
+                        result=ev.result,
+                        batch_label=batch_label,
+                        reason_code=ev.reason_code,
+                        reason_text=ev.reason_text,
+                    ),
+                }
+            )
         )
-        for ev in events
-    ]
+    return out
+
+
+@router.get("/plans/{plan_id}/attendance/batches", response_model=List[schemas.AttendanceBatchListItem])
+def list_plan_attendance_batches(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user=check_any_permission(["menu:plan", "menu:attendance-overview"]),
+):
+    """該計畫曾參與的合併報到批次。"""
+    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="訓練計畫不存在")
+    batches = (
+        db.query(models.AttendanceCheckinBatch)
+        .join(
+            models.AttendanceCheckinBatchPlan,
+            models.AttendanceCheckinBatchPlan.batch_id == models.AttendanceCheckinBatch.id,
+        )
+        .filter(models.AttendanceCheckinBatchPlan.plan_id == plan_id)
+        .order_by(models.AttendanceCheckinBatch.created_at.desc())
+        .all()
+    )
+    return [_batch_list_item_dict(b) for b in batches]
 

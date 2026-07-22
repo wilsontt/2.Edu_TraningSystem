@@ -334,6 +334,22 @@ class AttendanceCheckinBatchPlan(Base):
     plan_id = Column(Integer, ForeignKey("training_plans.id"), primary_key=True)
 
 
+class AttendanceBatchAbsenceReason(Base):
+    """批次層未到原因（現況／預設）；套用時同步寫入各 plan 的 attendance_absence_reasons。"""
+    __tablename__ = "attendance_batch_absence_reasons"
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(String(36), ForeignKey("attendance_checkin_batches.id"), nullable=False)
+    emp_id = Column(String, ForeignKey("users.emp_id"), nullable=False)
+    reason_code = Column(String(50), nullable=False)
+    reason_text = Column(String(500), nullable=True)
+    recorded_by = Column(String, ForeignKey("users.emp_id"), nullable=False)
+    recorded_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("batch_id", "emp_id", name="uq_batch_absence_batch_emp"),
+    )
+
+
 class AttendanceCheckinEvent(Base):
     """報到歷程事件（append-only；不覆蓋 attendance_records.checkin_time）。"""
     __tablename__ = "attendance_checkin_events"
@@ -341,11 +357,14 @@ class AttendanceCheckinEvent(Base):
     emp_id = Column(String, ForeignKey("users.emp_id"), nullable=False, index=True)
     plan_id = Column(Integer, ForeignKey("training_plans.id"), nullable=False, index=True)
     event_time = Column(DateTime, default=datetime.datetime.utcnow)
-    event_type = Column(String, nullable=False)  # batch_checkin / single_checkin / exam_center
+    event_type = Column(String, nullable=False)  # batch_checkin / single_checkin / exam_center / absence_reason_*
     batch_id = Column(String(36), ForeignKey("attendance_checkin_batches.id"), nullable=True)
-    source = Column(String, nullable=False)  # qr_batch / qr_single / exam_center_button
-    result = Column(String, nullable=False)  # success / already_checked / skipped_not_target / batch_closed
+    source = Column(String, nullable=False)  # qr_batch / qr_single / exam_center_button / batch_absence / plan_absence
+    result = Column(String, nullable=False)  # success / already_checked / skipped_not_target / batch_closed / updated / cleared
     ip_address = Column(String, nullable=True)
+    reason_code = Column(String(50), nullable=True)
+    reason_text = Column(String(500), nullable=True)
+    operator_emp_id = Column(String, ForeignKey("users.emp_id"), nullable=True)
 
 
 class LoginToken(Base):

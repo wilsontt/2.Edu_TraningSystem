@@ -409,6 +409,33 @@ class AttendanceBatchStatsOut(BaseModel):
     plans: List[AttendanceBatchPlanStats]
 
 
+class AttendanceBatchListItem(BaseModel):
+    """合併報到紀錄列表列。"""
+    id: str
+    label: str
+    training_date: date
+    status: str
+    created_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
+    plans: List[AttendanceBatchPlanBrief] = []
+    plan_count: int = 0
+    absent_count_total: Optional[int] = None
+
+
+class BatchAbsenceReasonUpdate(BaseModel):
+    """批次層未到原因：單人套用至 batch 內應到且未報到之計畫。"""
+    emp_id: str
+    reason_code: str
+    reason_text: Optional[str] = None
+
+
+class BatchAbsenceReasonBulkUpdate(BaseModel):
+    """批次層未到原因：多人套用。"""
+    emp_ids: List[str]
+    reason_code: str
+    reason_text: Optional[str] = None
+
+
 class BatchPlanCheckinResult(BaseModel):
     plan_id: int
     plan_title: str
@@ -436,6 +463,10 @@ class AttendanceCheckinEventOut(BaseModel):
     source: str
     result: str
     ip_address: Optional[str] = None
+    reason_code: Optional[str] = None
+    reason_text: Optional[str] = None
+    operator_emp_id: Optional[str] = None
+    display_label: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -449,8 +480,9 @@ class AttendanceStats(BaseModel):
     attendance_rate: float  # 出席率
     leave_count: int = 0  # 請假人數
     absent_without_reason_count: int = 0  # 未到（未填原因）
-    checked_in_users: List[dict] = []  # 已報到用戶列表
-    not_checked_in_users: List[dict] = []  # 未報到用戶列表
+    checked_in_users: List[dict] = []  # 已報到用戶列表（含 latest_event_time）
+    not_checked_in_users: List[dict] = []  # 未報到用戶列表（含 latest_event_time／is_plan_override）
+    participated_batches: List[dict] = []  # [{id, label, training_date, status}]
 
 class ExpectedAttendanceUpdate(BaseModel):
     expected_attendance: int
