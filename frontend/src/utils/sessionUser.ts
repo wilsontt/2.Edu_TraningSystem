@@ -31,6 +31,15 @@ export function loadSessionUser(): SessionUserSnapshot | null {
   }
 }
 
+/** JWT 失效或登出時清除報到頁用的 session 快取。 */
+export function clearSessionUser(): void {
+  try {
+    sessionStorage.removeItem(SESSION_USER_KEY);
+  } catch {
+    /* private mode / quota */
+  }
+}
+
 export function formatSessionUserSnapshotLabel(user: SessionUserSnapshot): string {
   const dept = (user.dept_name || '').trim() || (user.role === 'Admin' ? 'IT管理員' : '未知部門');
   return `${dept} · ${user.emp_id} · ${user.name}`;

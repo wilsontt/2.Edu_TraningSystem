@@ -1,9 +1,7 @@
-"""考卷工坊 list_materials：NAS 不可達時回 200 空陣列＋標頭，不中斷選計畫。"""
+"""考卷工坊 materials 端點已退役：回 410 Gone。"""
 from datetime import date, timedelta
-from unittest.mock import MagicMock
 
 from app.models import MainCategory, SubCategory, TrainingPlan, Department
-from app.services import storage
 
 
 def _seed_plan(db) -> int:
@@ -30,16 +28,21 @@ def _seed_plan(db) -> int:
     return plan.id
 
 
-def test_list_materials_nas_unavailable_returns_empty_200(client, in_memory_db, monkeypatch):
+def test_list_materials_gone(client, in_memory_db):
     plan_id = _seed_plan(in_memory_db)
-
-    def _boom(_creds):
-        raise storage.StorageUnavailable("NAS offline for test")
-
-    monkeypatch.setattr(storage, "service_credentials", lambda: MagicMock())
-    monkeypatch.setattr(storage, "connection", _boom)
-
     resp = client.get(f"/api/admin/exams/materials/{plan_id}")
-    assert resp.status_code == 200
-    assert resp.json() == []
-    assert resp.headers.get("x-nas-unavailable") == "1"
+    assert resp.status_code == 410
+    assert "退役" in resp.json()["detail"]
+
+
+def test_preview_material_gone(client, in_memory_db):
+    plan_id = _seed_plan(in_memory_db)
+    year = date.today().year
+    resp = client.get(f"/api/admin/exams/materials/preview/{year}/{plan_id}/sample.txt")
+    assert resp.status_code == 410
+
+
+def test_delete_material_gone(client, in_memory_db):
+    plan_id = _seed_plan(in_memory_db)
+    resp = client.delete(f"/api/admin/exams/materials/{plan_id}/sample.txt")
+    assert resp.status_code == 410

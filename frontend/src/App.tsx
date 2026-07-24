@@ -27,7 +27,7 @@ import PersonalScorePage from './components/personal/PersonalScorePage';
 import CheckInPage from './components/exam/CheckInPage';
 import AttendanceOverviewPage from './components/attendance/AttendanceOverviewPage';
 import type { User } from './types';
-import { saveSessionUser } from './utils/sessionUser';
+import { clearSessionUser, saveSessionUser } from './utils/sessionUser';
 import { hasAdminMenu } from './utils/authGuards';
 import ChangePasswordPage from './components/ChangePasswordPage';
 import { useRef } from 'react';
@@ -376,6 +376,7 @@ const App = () => {
           saveSessionUser(res.data);
         } catch {
           localStorage.removeItem('token');
+          clearSessionUser();
           setUser(null);
         }
       }
@@ -385,8 +386,18 @@ const App = () => {
     initSession();
   }, []);
 
+  useEffect(() => {
+    const onSessionExpired = () => {
+      clearSessionUser();
+      setUser(null);
+    };
+    window.addEventListener('auth:session-expired', onSessionExpired);
+    return () => window.removeEventListener('auth:session-expired', onSessionExpired);
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem('token');
+    clearSessionUser();
     setUser(null);
   };
 

@@ -78,7 +78,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],  # 允許所有 HTTP 方法 (GET, POST, PUT, DELETE 等)
     allow_headers=["*"],  # 允許所有自定義標頭 (如 Authorization)
-    expose_headers=["X-NAS-Unavailable"],  # 考卷工坊 list_materials NAS 不可達提示
+    expose_headers=["X-NAS-Unavailable"],  # 遺留；考卷 list_materials 已退役（410）
 )
 
 # ----------------------------------------------------------------

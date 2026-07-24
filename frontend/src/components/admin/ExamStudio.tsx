@@ -1,10 +1,11 @@
 /**
  * 考卷工坊元件 (Exam Studio Component)
- * 負責處理考試題目的生命週期管理，包含 TXT 上傳解析、題目編輯、題庫匯入以及教材存放。
+ * 負責處理考試題目的生命週期管理：TXT 上傳解析匯入、題目編輯、歷史題庫匯入。
+ * TXT 僅為一次性匯入載體，不維護 NAS 考卷檔清單。
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Upload, FileText, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download, Lightbulb, ChevronUp, ChevronDown, X, Library } from 'lucide-react';
+import { Search, Upload, Loader2, BookOpen, ChevronRight, AlertCircle, Check, Trash2, Edit, Archive, Download, Lightbulb, ChevronUp, ChevronDown, X, Library } from 'lucide-react';
 import { AxiosError } from 'axios';
 import api from '../../api';
 import QuestionEditorModal from './QuestionEditorModal';
@@ -31,13 +32,6 @@ interface TrainingPlan {
   };
 }
 
-interface Material {
-    filename: string;
-    path: string;
-    size: number;
-    upload_time?: string;
-}
-
 interface Question {
     id: number;
     content: string;
@@ -55,13 +49,10 @@ interface ExamStudioProps {
 const ExamStudio = ({ user }: ExamStudioProps) => {
     const [plans, setPlans] = useState<TrainingPlan[]>([]);
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
-    const [materials, setMaterials] = useState<Material[]>([]);
-    const [materialsNasWarning, setMaterialsNasWarning] = useState<string | null>(null);
     const [questions, setQuestions] = useState<Question[]>([]);
     
     const [isLoadingPlans, setIsLoadingPlans] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
-    const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
     const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [planStatusFilter, setPlanStatusFilter] = useState<'active' | 'expired' | 'archived' | 'all'>('active');
@@ -86,10 +77,8 @@ const ExamStudio = ({ user }: ExamStudioProps) => {
 
     useEffect(() => {
         if (selectedPlanId) {
-            fetchMaterials(selectedPlanId);
             fetchQuestions(selectedPlanId);
         } else {
-            setMaterials([]);
             setQuestions([]);
         }
     }, [selectedPlanId]);
@@ -107,36 +96,6 @@ const ExamStudio = ({ user }: ExamStudioProps) => {
         }
     };
 
-    const fetchMaterials = async (planId: number) => {
-        try {
-            setIsLoadingMaterials(true);
-            setMaterialsNasWarning(null);
-            const res = await api.get(`/admin/exams/materials/${planId}`);
-            setMaterials(Array.isArray(res.data) ? res.data : []);
-            // 後端 NAS 不可達時回 200 [] + X-NAS-Unavailable: 1
-            const nasDown = String(res.headers?.['x-nas-unavailable'] ?? '') === '1';
-            if (nasDown) {
-                setMaterialsNasWarning('NAS 無法連線，無法列出已上傳考卷檔；題目仍可正常管理。請檢查 SMB／MATERIALS_ROOT 後再上傳或預覽。');
-            }
-        } catch (err) {
-            console.error(err);
-            setMaterials([]);
-            const apiErr = err as AxiosError<{ detail?: string }>;
-            const detail = apiErr.response?.data?.detail;
-            if (apiErr.response?.status === 503) {
-                setMaterialsNasWarning(
-                    typeof detail === 'string' ? detail : 'NAS 無法連線，無法列出已上傳考卷檔；題目仍可正常管理。'
-                );
-            } else {
-                setMaterialsNasWarning(
-                    typeof detail === 'string' ? detail : '無法載入考卷檔清單，請稍後再試。'
-                );
-            }
-        } finally {
-            setIsLoadingMaterials(false);
-        }
-    };
-
     const fetchQuestions = async (planId: number) => {
         try {
             setIsLoadingQuestions(true);
@@ -149,8 +108,6 @@ const ExamStudio = ({ user }: ExamStudioProps) => {
         }
     };
 
-    const [previewContent, setPreviewContent] = useState<string | null>(null);
-    const [previewFileName, setPreviewFileName] = useState<string | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
     /** 上傳預覽：解析後的題目列表，使用者勾選後再匯入 */
     const [uploadPreviewQuestions, setUploadPreviewQuestions] = useState<Array<{ content: string; type?: string; answer?: string; options?: string; points?: number; hint?: string; level?: string }>>([]);
@@ -159,45 +116,6 @@ const ExamStudio = ({ user }: ExamStudioProps) => {
     const [uploadPreviewAddToBank, setUploadPreviewAddToBank] = useState(true);
     const [showUploadPreviewModal, setShowUploadPreviewModal] = useState(false);
     const [isImportingFromPreview, setIsImportingFromPreview] = useState(false);
-
-    // ... 現有的 useEffects ...
-
-    // ... 現有的 fetchPlans ...
-
-    // ... 現有的 fetchMaterials ...
-    
-    // 新增: 取得並顯示預覽
-    const handlePreview = async (filename: string) => {
-        if (!selectedPlan) return;
-        try {
-            // 需要年份作為 API 參數... 計畫物件主要透過 training_date 取得年份
-            // list_materials (後端) 會從 DB 判斷年份
-            // 但預覽 endpoint 需要明確的 year 參數: /materials/preview/{year}/{plan_id}/{filename}
-            // 這裡直接從計畫日期的第一部分取得年份
-            const year = selectedPlan.training_date.split('-')[0] || "unknown";
-            
-            const res = await api.get(`/admin/exams/materials/preview/${year}/${selectedPlan.id}/${filename}`);
-            setPreviewContent(res.data.content);
-            setPreviewFileName(filename);
-        } catch (err) {
-            console.error(err);
-            setUploadError("無法讀取檔案預覽");
-        }
-    };
-
-    // 新增: 刪除檔案
-    const handleDeleteFile = async (filename: string) => {
-        if (!selectedPlanId || !window.confirm(`確定要刪除 "${filename}" 嗎？\n注意：相關題目需要另外清除。`)) return;
-
-        try {
-            await api.delete(`/admin/exams/materials/${selectedPlanId}/${filename}`);
-            fetchMaterials(selectedPlanId);
-            setUploadSuccess(`已刪除 ${filename}`);
-        } catch (err) {
-            console.error(err);
-            setUploadError("刪除失敗");
-        }
-    };
 
     const handleFileUpload = async (files: FileList | null) => {
         if (!files || files.length === 0 || !selectedPlanId) return;
@@ -212,9 +130,7 @@ const ExamStudio = ({ user }: ExamStudioProps) => {
             setUploadSuccess(null);
             const formData = new FormData();
             formData.append('file', file);
-            const res = await api.post('/admin/exams/upload/preview', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            const res = await api.post('/admin/exams/upload/preview', formData);
             setUploadPreviewQuestions(res.data.questions || []);
             setUploadPreviewFileName(res.data.filename || file.name);
             setUploadPreviewSelected(new Set((res.data.questions || []).map((_: unknown, i: number) => i)));
@@ -549,7 +465,7 @@ const ExamStudio = ({ user }: ExamStudioProps) => {
                                             </div>
                                             <div className="text-center">
                                                 <p className="font-bold text-sm text-gray-700">點擊或拖放上傳考卷 (TXT)</p>
-                                                <p className="text-xs text-gray-400 mt-1">系統將自動解析題目並存入資料庫</p>
+                                                <p className="text-xs text-gray-400 mt-1">解析題目後勾選匯入本訓練計畫（可選同步歷史題庫）</p>
                                             </div>
                                             <div className="border-2 shrink-0 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-sm shadow-indigo-200 hover:bg-indigo-700 transition-colors duration-200">
                                                 選擇檔案
@@ -628,77 +544,12 @@ const ExamStudio = ({ user }: ExamStudioProps) => {
                                     </div>
                                 </div>
 
-                                {/* Materials List with Preview */}
-                                <div>
-                                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                        <FileText className="w-5 h-5 text-indigo-500" />
-                                        已匯入考卷檔
-                                    </h3>
-                                    {materialsNasWarning && (
-                                        <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-900">
-                                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                                            <span>{materialsNasWarning}</span>
-                                        </div>
-                                    )}
-                                    {isLoadingMaterials ? (
-                                        <div className="text-center py-8 text-gray-400"><Loader2 className="w-5 h-5 animate-spin mx-auto text-indigo-600"/></div>
-                                    ) : materials.length === 0 ? (
-                                        <div className="text-center py-8 text-gray-400 bg-indigo-50/30 rounded-xl border border-indigo-100 italic">
-                                            {materialsNasWarning ? '考卷檔清單暫不可用' : '尚未上傳任何考卷'}
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {materials.map((file: Material, idx: number) => (
-                                                <div 
-                                                    key={idx} 
-                                                    className="w-full flex items-center justify-between p-4 bg-white border border-indigo-100 rounded-xl hover:shadow-md hover:shadow-indigo-100/50 transition-all duration-200 group cursor-pointer"
-                                                >
-                                                    <button 
-                                                        onClick={() => handlePreview(file.filename)}
-                                                        className="flex-1 flex items-center gap-3 text-left cursor-pointer"
-                                                    >
-                                                        <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-xs uppercase group-hover:bg-orange-100 transition-colors duration-200">
-                                                            TXT
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-bold text-gray-800 group-hover:text-indigo-600 transition-colors duration-200">{file.filename}</div>
-                                                            <div className="text-xs text-gray-400 flex items-center gap-2">
-                                                                <span>{Math.round(file.size / 1024)} KB</span>
-                                                                {file.upload_time && (
-                                                                    <>
-                                                                        <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                                                        <span>{file.upload_time}</span>
-                                                                    </>
-                                                                )}
-                                                                <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                                                <span>點擊預覽</span>
-                                                            </div>
-                                                        </div>
-                                                    </button>
-                                                    
-                                                    <button 
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleDeleteFile(file.filename);
-                                                        }}
-                                                        disabled={isWriteLocked}
-                                                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 ml-2 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
-                                                        title={isWriteLocked ? (isOwnerReadOnly ? '僅開課單位可刪除' : '已封存／已過期不可刪除') : '刪除檔案'}
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
                                 {/* Questions List */}
                                 <div>
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                                             <Check className="w-5 h-5 text-green-500" />
-                                            已匯入題庫 ({questions.length})
+                                            本計畫題目 ({questions.length})
                                         </h3>
                                         <div className="flex items-center gap-2">
                                             <button
@@ -958,26 +809,6 @@ const ExamStudio = ({ user }: ExamStudioProps) => {
                                 {isImportingFromPreview ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                                 加入該訓練計畫（{uploadPreviewSelected.size} 題）
                             </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Preview Modal */}
-            {previewContent && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-                        <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-linear-to-r from-indigo-50 to-purple-50">
-                            <h3 className="font-bold text-lg text-gray-800">{previewFileName}</h3>
-                            <button 
-                                onClick={() => { setPreviewContent(null); setPreviewFileName(null); }}
-                                className="p-2 hover:bg-white/50 rounded-full transition-all duration-200 cursor-pointer"
-                            >
-                                <span className="text-xl">×</span>
-                            </button>
-                        </div>
-                        <div className="p-6 overflow-y-auto bg-gray-50 font-mono text-sm leading-relaxed whitespace-pre-wrap">
-                            {previewContent}
                         </div>
                     </div>
                 </div>

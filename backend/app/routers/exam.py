@@ -1,10 +1,10 @@
 """
 考卷工坊路由 (Exam Router)
-負責處理考卷題目的上傳解析、題庫管理、教材存放以及考卷工坊專用的計畫查詢。
+負責處理考卷題目的上傳解析、題庫管理以及考卷工坊專用的計畫查詢。
+TXT 僅為一次性匯入載體；材料清單／預覽／刪除端點已退役（410）。
 """
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Query, Request
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from typing import List, Any, Dict, Optional
@@ -25,10 +25,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/exams", tags=["exams"])
 
 # ----------------------------------------------------------------
-# 考卷 TXT 儲存（NAS／service 模式）
+# 考卷 TXT（舊 POST /upload 仍可寫 NAS；工坊主流程為 preview + import-from-preview）
+# 舊路徑：{MATERIALS_ROOT}/{year}/{plan_id}/exams/{filename}
+# 工坊 UI 已不列／預覽／刪 NAS 檔；見 20260724 PLAN。
 # ----------------------------------------------------------------
-# 考卷實體 TXT 一律存於 NAS：{MATERIALS_ROOT}/{year}/{plan_id}/exams/{filename}
-# 本地不再保留副本；每次傳輸短連線並寫入稽核（見 NAS PLAN §5.1～5.3、建議事項 PLAN §5.2/§7.1）。
 
 
 def _exam_rel_path(year: str, plan_id: int, filename: str) -> str:
@@ -341,121 +341,38 @@ async def import_from_preview(
 @router.get("/materials/{plan_id}")
 def list_materials(
     plan_id: int,
-    db: Session = Depends(get_db),
     current_user = check_permission("menu:exam")
 ):
-    """
-    列出該計畫已上傳的考卷 TXT（讀自 NAS exams/）。
-
-    NAS 不可達時改回 **200 + 空陣列**，並帶 header ``X-NAS-Unavailable: 1``，
-    避免考卷工坊選計畫時因 503 中斷題目管理；上傳／預覽／刪除仍回 503。
-    """
-    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="訓練計畫不存在")
-
-    year = plan.year if plan.year else "unknown"
-    rel_dir = f"{year}/{plan_id}/exams"
-    try:
-        with storage.connection(storage.service_credentials()) as st:
-            entries = st.list(rel_dir)
-    except storage.StorageUnavailable as e:
-        logger.warning("list_materials NAS unavailable plan_id=%s: %s", plan_id, e)
-        return JSONResponse(
-            content=[],
-            headers={"X-NAS-Unavailable": "1"},
-            status_code=200,
-        )
-    except storage.StorageError as e:
-        raise HTTPException(status_code=500, detail=f"讀取 NAS 失敗：{e}")
-
-    files = []
-    for it in entries:
-        files.append({
-            "filename": it["filename"],
-            "path": _exam_rel_path(year, plan_id, it["filename"]),
-            "size": it["size"],
-            "upload_time": datetime.fromtimestamp(it["mtime"]).strftime('%Y-%m-%d %H:%M'),
-        })
-
-    return files
+    """已退役：考卷工坊不再列出 NAS 考卷 TXT（見 20260724 PLAN）。"""
+    raise HTTPException(
+        status_code=410,
+        detail="考卷 TXT 檔案清單已退役；請於本計畫題目／歷史題庫管理題目",
+    )
 
 @router.get("/materials/preview/{year}/{plan_id}/{filename}")
 def preview_material(
     year: str,
     plan_id: int,
     filename: str,
-    request: Request,
-    db: Session = Depends(get_db),
     current_user = check_permission("menu:exam")
 ):
-    """
-    預覽考卷 TXT 內容（讀自 NAS），並寫入下載稽核。
-    """
-    safe = _safe_filename(filename)
-    rel_path = _exam_rel_path(year, plan_id, safe)
-    emp_id = getattr(current_user, "emp_id", None)
-    client_ip = _client_ip(request)
-    try:
-        with storage.connection(storage.service_credentials()) as st:
-            data = st.open(rel_path)
-    except storage.StorageUnavailable as e:
-        raise HTTPException(status_code=503, detail=f"NAS 無法連線：{e}")
-    except storage.StorageError as e:
-        record_file_transfer(
-            emp_id=emp_id, client_ip=client_ip, action="download", resource_type="exam_txt",
-            status="failed", filename=safe, plan_id=plan_id, nas_username="service",
-            error_message=str(e),
-        )
-        raise HTTPException(status_code=404, detail="檔案不存在或讀取失敗")
-
-    content = data.decode("utf-8", errors="replace")
-    record_file_transfer(
-        emp_id=emp_id, client_ip=client_ip, action="download", resource_type="exam_txt",
-        status="success", filename=safe, plan_id=plan_id, nas_username="service",
-        bytes_=len(data),
+    """已退役：不再提供 NAS 考卷 TXT 預覽。"""
+    raise HTTPException(
+        status_code=410,
+        detail="考卷 TXT 預覽已退役；請於本計畫題目／歷史題庫檢視題目",
     )
-    return {"content": content}
 
 @router.delete("/materials/{plan_id}/{filename}")
 def delete_material(
     plan_id: int,
     filename: str,
-    request: Request,
-    db: Session = Depends(get_db),
     current_user = check_permission("menu:exam")
 ):
-    """
-    刪除 NAS 上的考卷 TXT，並寫入稽核。
-    """
-    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="訓練計畫不存在")
-    _require_plan_exam_modify(current_user, plan)
-
-    safe = _safe_filename(filename)
-    year = plan.year if plan.year else "unknown"
-    rel_path = _exam_rel_path(year, plan_id, safe)
-    emp_id = getattr(current_user, "emp_id", None)
-    client_ip = _client_ip(request)
-    try:
-        with storage.connection(storage.service_credentials()) as st:
-            st.delete(rel_path)
-    except storage.StorageUnavailable as e:
-        raise HTTPException(status_code=503, detail=f"NAS 無法連線：{e}")
-    except storage.StorageError as e:
-        record_file_transfer(
-            emp_id=emp_id, client_ip=client_ip, action="delete", resource_type="exam_txt",
-            status="failed", filename=safe, plan_id=plan_id, nas_username="service",
-            error_message=str(e),
-        )
-        raise HTTPException(status_code=404, detail="檔案不存在或刪除失敗")
-
-    record_file_transfer(
-        emp_id=emp_id, client_ip=client_ip, action="delete", resource_type="exam_txt",
-        status="success", filename=safe, plan_id=plan_id, nas_username="service",
+    """已退役：不再提供 NAS 考卷 TXT 刪除。"""
+    raise HTTPException(
+        status_code=410,
+        detail="考卷 TXT 刪除已退役；請於本計畫題目刪除題目",
     )
-    return {"message": "檔案已刪除"}
 
 @router.get("/questions/{plan_id}", response_model=List[schemas.Question])
 def list_questions(
