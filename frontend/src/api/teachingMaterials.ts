@@ -69,6 +69,30 @@ export const addSetFiles = (
 export const removeSetFile = (setId: number, fileId: number) =>
     api.delete(`${BASE}/sets/${setId}/files/${fileId}`);
 
+export interface BulkDeleteMaterialFilesResult {
+    deleted_count: number;
+    missing_ids: number[];
+    denied_ids: number[];
+}
+
+/** 教材庫勾選檔案批次軟刪除（NAS 實體檔保留）。 */
+export const bulkDeleteFiles = (fileIds: number[]) =>
+    api.delete<BulkDeleteMaterialFilesResult>(`${BASE}/files/bulk-delete`, {
+        data: { file_ids: fileIds },
+    }).then(r => r.data);
+
+export interface BulkDeleteMaterialSetsResult {
+    deleted_count: number;
+    missing_ids: number[];
+    denied_ids: number[];
+}
+
+/** 教材庫套組批次軟刪除（停用整包；NAS 實體檔保留）。 */
+export const bulkDeleteSets = (setIds: number[]) =>
+    api.delete<BulkDeleteMaterialSetsResult>(`${BASE}/sets/bulk-delete`, {
+        data: { set_ids: setIds },
+    }).then(r => r.data);
+
 export const downloadFile = (fileId: number, token: string, opts: TransferOpts = {}) =>
     api.get(`${BASE}/files/${fileId}/download`, {
         params: { nas_session_token: token },

@@ -361,6 +361,52 @@ def update_set_plans(
     return _set_to_out(db, s, include_files=True)
 
 
+@router.delete("/sets/bulk-delete", response_model=schemas.BulkDeleteMaterialSetsResult)
+def bulk_delete_sets(
+    req: schemas.BulkDeleteMaterialSetsRequest,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    """教材庫套組檢視批次軟刪除（停用整包套組；NAS 實體檔保留）。"""
+    ids = list({sid for sid in req.set_ids if isinstance(sid, int)})
+    if not ids:
+        raise HTTPException(status_code=400, detail="set_ids 不可為空")
+
+    existing = (
+        db.query(models.TeachingMaterialSet)
+        .filter(
+            models.TeachingMaterialSet.id.in_(ids),
+            models.TeachingMaterialSet.is_active == True,  # noqa: E712
+        )
+        .all()
+    )
+    existing_map = {s.id: s for s in existing}
+    missing_ids = [sid for sid in ids if sid not in existing_map]
+    denied_ids: List[int] = []
+    deleted_count = 0
+
+    try:
+        for sid in ids:
+            s = existing_map.get(sid)
+            if not s:
+                continue
+            if not can_modify_owned_resource(current_user, s.dept_id):
+                denied_ids.append(sid)
+                continue
+            s.is_active = False
+            deleted_count += 1
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"批次刪除失敗: {str(e)}")
+
+    return {
+        "deleted_count": deleted_count,
+        "missing_ids": missing_ids,
+        "denied_ids": denied_ids,
+    }
+
+
 @router.delete("/sets/{set_id}")
 def delete_set(
     set_id: int,
@@ -523,6 +569,52 @@ def remove_set_file(
     mf.is_active = False
     db.commit()
     return {"message": "已移除（軟刪除）"}
+
+
+@router.delete("/files/bulk-delete", response_model=schemas.BulkDeleteMaterialFilesResult)
+def bulk_delete_files(
+    req: schemas.BulkDeleteMaterialFilesRequest,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:exam"),
+):
+    """教材庫勾選檔案批次軟刪除（實體檔保留於 NAS）。"""
+    ids = list({fid for fid in req.file_ids if isinstance(fid, int)})
+    if not ids:
+        raise HTTPException(status_code=400, detail="file_ids 不可為空")
+
+    existing = (
+        db.query(models.TeachingMaterialFile)
+        .filter(
+            models.TeachingMaterialFile.id.in_(ids),
+            models.TeachingMaterialFile.is_active == True,  # noqa: E712
+        )
+        .all()
+    )
+    existing_map = {f.id: f for f in existing}
+    missing_ids = [fid for fid in ids if fid not in existing_map]
+    denied_ids: List[int] = []
+    deleted_count = 0
+
+    try:
+        for fid in ids:
+            mf = existing_map.get(fid)
+            if not mf:
+                continue
+            if not can_modify_owned_resource(current_user, mf.material_set.dept_id):
+                denied_ids.append(fid)
+                continue
+            mf.is_active = False
+            deleted_count += 1
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"批次刪除失敗: {str(e)}")
+
+    return {
+        "deleted_count": deleted_count,
+        "missing_ids": missing_ids,
+        "denied_ids": denied_ids,
+    }
 
 
 # ----------------------------------------------------------------

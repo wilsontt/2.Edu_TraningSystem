@@ -11,7 +11,7 @@ import MaterialSetUploadPanel from './MaterialSetUploadPanel';
 import MaterialSetEditPanel from './MaterialSetEditPanel';
 import {
     fetchMaterialTypes, fetchPlanOptions, fetchDepartments, fetchSets, fetchFiles, fetchSetDetail,
-    deleteSet, removeSetFile, downloadFile, batchDownloadFiles,
+    deleteSet, removeSetFile, bulkDeleteFiles, bulkDeleteSets, downloadFile, batchDownloadFiles,
 } from '../../api/teachingMaterials';
 import type { MaterialType, MaterialSet, MaterialFileListItem, PlanOption, DepartmentOption } from '../../types/materials';
 import type { User } from '../../types';
@@ -32,7 +32,8 @@ const tagColorClass = (tag: string): string =>
     TAG_PALETTE[tag.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % TAG_PALETTE.length];
 
 type ViewMode = 'set' | 'file';
-type SelectedEntry = { original_filename: string; set_title: string };
+/** 勾選檔案項目；set_id 供跨頁取消套組勾選與批次刪除套組使用。 */
+type SelectedEntry = { original_filename: string; set_title: string; set_id: number };
 
 interface TeachingMaterialLibraryProps {
     user: User;
@@ -61,12 +62,21 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
     const [loading, setLoading] = useState(false);
 
     const [selected, setSelected] = useState<Map<number, SelectedEntry>>(new Map());
+    /** 套組檢視勾選狀態（跨頁保留；key=setId, value=title）。 */
+    const [selectedSets, setSelectedSets] = useState<Map<number, string>>(new Map());
     const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+    const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false);
+    const [batchDeleting, setBatchDeleting] = useState(false);
     const [selectingAll, setSelectingAll] = useState(false);
 
     const [uploadOpen, setUploadOpen] = useState(false);
     const [editingSetId, setEditingSetId] = useState<number | null>(null);
     const [editingSet, setEditingSet] = useState<MaterialSet | null>(null);
+
+    const clearSelection = () => {
+        setSelected(new Map());
+        setSelectedSets(new Map());
+    };
 
     const fetchList = useCallback(async () => {
         setLoading(true);
@@ -104,12 +114,10 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
     }, [editingSetId]);
 
     const onSearch = () => { setPage(1); fetchList(); };
-    const switchView = (v: ViewMode) => { setView(v); setPage(1); setSelected(new Map()); };
+    const switchView = (v: ViewMode) => { setView(v); setPage(1); clearSelection(); };
 
-    const isSetSelected = (s: MaterialSet): boolean => {
-        const files = s.files ?? [];
-        return files.length > 0 && files.every(f => selected.has(f.id));
-    };
+    /** 套組勾選以 selectedSets 為準，翻頁重載列表後仍可正確顯示。 */
+    const isSetSelected = (s: MaterialSet): boolean => selectedSets.has(s.id);
 
     const mergeSetDetailIntoList = (detail: MaterialSet) => {
         setSetItems(prev => prev.map(row =>
@@ -127,18 +135,39 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
         });
     };
 
-    /** 套組檢視下勾選整列：需先取得該套組使用中檔案清單，並寫回列表以便勾選狀態可顯示。 */
+    /** 套組檢視下勾選整列：寫入 selectedSets（跨頁），並同步該套組檔案至 selected（供批次下載）。 */
     const toggleSet = async (s: MaterialSet) => {
+        if (selectedSets.has(s.id)) {
+            setSelectedSets(prev => {
+                const next = new Map(prev);
+                next.delete(s.id);
+                return next;
+            });
+            setSelected(prev => {
+                const next = new Map(prev);
+                for (const [fid, entry] of next) {
+                    if (entry.set_id === s.id) next.delete(fid);
+                }
+                return next;
+            });
+            return;
+        }
+
         const detail = (s.files && s.files.length > 0) ? s : await fetchSetDetail(s.id);
         if (!s.files?.length) mergeSetDetailIntoList(detail);
-        const fileIds = (detail.files ?? []).map(f => f.id);
-        if (fileIds.length === 0) return;
-        const allSelected = fileIds.every(id => selected.has(id));
+        setSelectedSets(prev => {
+            const next = new Map(prev);
+            next.set(s.id, detail.title);
+            return next;
+        });
         setSelected(prev => {
             const next = new Map(prev);
             (detail.files ?? []).forEach(f => {
-                if (allSelected) next.delete(f.id);
-                else next.set(f.id, { original_filename: f.original_filename, set_title: detail.title });
+                next.set(f.id, {
+                    original_filename: f.original_filename,
+                    set_title: detail.title,
+                    set_id: detail.id,
+                });
             });
             return next;
         });
@@ -148,10 +177,10 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
         if (view === 'file') {
             return fileItems.length > 0 && fileItems.every(f => selected.has(f.id));
         }
-        return setItems.length > 0 && setItems.every(s => isSetSelected(s));
+        return setItems.length > 0 && setItems.every(s => selectedSets.has(s.id));
     };
 
-    /** 全選／取消全選「目前頁」的檔案（套組檢視＝該頁各套組內全部使用中檔）。 */
+    /** 全選／取消全選「目前頁」（套組檢視同步 selectedSets）。 */
     const toggleSelectAllCurrentPage = async () => {
         if (view === 'file') {
             const allOn = fileItems.length > 0 && fileItems.every(f => selected.has(f.id));
@@ -159,7 +188,11 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
                 const next = new Map(prev);
                 fileItems.forEach(f => {
                     if (allOn) next.delete(f.id);
-                    else next.set(f.id, { original_filename: f.original_filename, set_title: f.set_title });
+                    else next.set(f.id, {
+                        original_filename: f.original_filename,
+                        set_title: f.set_title,
+                        set_id: f.set_id,
+                    });
                 });
                 return next;
             });
@@ -175,16 +208,25 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
                 const d = details.find(x => x.id === row.id);
                 return d?.files ? { ...row, files: d.files, file_count: d.file_count ?? row.file_count } : row;
             }));
-            const allOn = details.every(d => {
-                const files = d.files ?? [];
-                return files.length > 0 && files.every(f => selected.has(f.id));
+            const allOn = setItems.length > 0 && setItems.every(s => selectedSets.has(s.id));
+            setSelectedSets(prev => {
+                const next = new Map(prev);
+                details.forEach(d => {
+                    if (allOn) next.delete(d.id);
+                    else next.set(d.id, d.title);
+                });
+                return next;
             });
             setSelected(prev => {
                 const next = new Map(prev);
                 details.forEach(d => {
                     (d.files ?? []).forEach(f => {
                         if (allOn) next.delete(f.id);
-                        else next.set(f.id, { original_filename: f.original_filename, set_title: d.title });
+                        else next.set(f.id, {
+                            original_filename: f.original_filename,
+                            set_title: d.title,
+                            set_id: d.id,
+                        });
                     });
                 });
                 return next;
@@ -218,7 +260,7 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
                 const ts = new Date().toISOString().slice(0, 19).replace(/[:T-]/g, '');
                 saveBlob(res.data as Blob, `teaching_materials_${ts}.zip`);
                 nas.endTransferSuccess();
-                setSelected(new Map());
+                clearSelection();
             } catch (err) {
                 if (nas.isCancel(err)) return;
                 const e2 = err as AxiosError;
@@ -227,10 +269,50 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
         });
     };
 
+    const doBatchDelete = async () => {
+        const deletingSets = view === 'set';
+        if (deletingSets && selectedSets.size === 0) return;
+        if (!deletingSets && selected.size === 0) return;
+        setBatchDeleting(true);
+        try {
+            const result = deletingSets
+                ? await bulkDeleteSets(Array.from(selectedSets.keys()))
+                : await bulkDeleteFiles(Array.from(selected.keys()));
+            setBatchDeleteConfirmOpen(false);
+            clearSelection();
+            await fetchList();
+            const unit = deletingSets ? '個套組' : '份檔案';
+            const parts = [`已停用 ${result.deleted_count} ${unit}`];
+            if (result.denied_ids.length > 0) parts.push(`無權限 ${result.denied_ids.length}`);
+            if (result.missing_ids.length > 0) parts.push(`不存在／已停用 ${result.missing_ids.length}`);
+            if (result.denied_ids.length > 0 || result.missing_ids.length > 0) {
+                alert(parts.join('；'));
+            }
+        } catch (err) {
+            const e2 = err as AxiosError<{ detail: string }>;
+            alert(e2.response?.data?.detail || '批次刪除失敗');
+        } finally {
+            setBatchDeleting(false);
+        }
+    };
+
     const handleDeleteSet = async (s: MaterialSet) => {
         if (!confirm(`確定停用套組「${s.title}」？（軟刪除，實體檔保留）`)) return;
         try {
             await deleteSet(s.id);
+            setSelectedSets(prev => {
+                if (!prev.has(s.id)) return prev;
+                const next = new Map(prev);
+                next.delete(s.id);
+                return next;
+            });
+            setSelected(prev => {
+                const next = new Map(prev);
+                for (const [fid, entry] of next) {
+                    if (entry.set_id === s.id) next.delete(fid);
+                }
+                return next;
+            });
             fetchList();
         } catch (err) {
             const e2 = err as AxiosError<{ detail: string }>;
@@ -382,7 +464,11 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
                 return (
                     <button
                         type="button"
-                        onClick={() => toggleFile(f.id, { original_filename: f.original_filename, set_title: f.set_title })}
+                        onClick={() => toggleFile(f.id, {
+                            original_filename: f.original_filename,
+                            set_title: f.set_title,
+                            set_id: f.set_id,
+                        })}
                         className={`p-1 rounded cursor-pointer ${checked ? 'bg-indigo-100 text-indigo-700' : 'text-indigo-600'}`}
                     >
                         {checked
@@ -459,7 +545,7 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
                     </div>
                     <div>
                         <h1 className="text-2xl font-black text-gray-900">教材庫</h1>
-                        <p className="text-gray-500 font-medium text-sm">跨計畫搜尋、勾選與批次下載教材（下載前須 NAS 登入）</p>
+                        <p className="text-gray-500 font-medium text-sm">跨計畫搜尋、勾選與批次下載／刪除教材（下載前須 NAS 登入）</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -541,7 +627,10 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
 
             <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-sm text-gray-500">
-                    共 {total} 筆{selected.size > 0 ? `；已選 ${selected.size} 個檔案` : ''}
+                    共 {total} 筆
+                    {view === 'set' && selectedSets.size > 0 ? `；已選 ${selectedSets.size} 個套組` : ''}
+                    {view === 'file' && selected.size > 0 ? `；已選 ${selected.size} 個檔案` : ''}
+                    {view === 'set' && selectedSets.size > 0 && selected.size > 0 ? `（含 ${selected.size} 個檔案）` : ''}
                     {selectingAll ? '（全選處理中…）' : ''}
                 </span>
                 <div className="flex items-center gap-2">
@@ -556,6 +645,22 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
                     <button type="button" disabled={selected.size === 0} onClick={() => setBatchConfirmOpen(true)}
                         className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer">
                         <PackageOpen className="w-4 h-4" /> 批次下載
+                    </button>
+                    <button
+                        type="button"
+                        disabled={
+                            (view === 'set' ? selectedSets.size === 0 : selected.size === 0)
+                            || rowActionsLocked
+                            || batchDeleting
+                        }
+                        onClick={() => setBatchDeleteConfirmOpen(true)}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white text-sm font-bold rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed cursor-pointer"
+                        title={rowActionsLocked ? '請先取消目前的編輯／新增再操作' : undefined}
+                    >
+                        <Trash2 className="w-4 h-4" />
+                        {view === 'set'
+                            ? `批次刪除 (${selectedSets.size})`
+                            : `批次刪除 (${selected.size})`}
                     </button>
                 </div>
             </div>
@@ -592,6 +697,55 @@ const TeachingMaterialLibrary = ({ user, onBack }: TeachingMaterialLibraryProps)
                         <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
                             <button type="button" onClick={() => setBatchConfirmOpen(false)} className="px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer">取消</button>
                             <button type="button" onClick={() => { setBatchConfirmOpen(false); doBatchDownload(); }} className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 cursor-pointer">下載 ZIP</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {batchDeleteConfirmOpen && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+                        <div className="px-5 py-4 border-b border-red-100 bg-red-50">
+                            <h3 className="font-black text-gray-900">
+                                {view === 'set'
+                                    ? `批次刪除確認（${selectedSets.size} 個套組）`
+                                    : `批次刪除確認（${selected.size} 份）`}
+                            </h3>
+                        </div>
+                        <div className="px-5 py-4 overflow-y-auto space-y-3">
+                            <p className="text-sm text-gray-800">
+                                {view === 'set'
+                                    ? '確定要停用下列教材套組嗎？'
+                                    : '確定要從套組移除下列檔案嗎？'}
+                            </p>
+                            <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
+                                {view === 'set'
+                                    ? Array.from(selectedSets.values()).map((title, i) => (
+                                        <li key={i} className="truncate">{title}</li>
+                                    ))
+                                    : Array.from(selected.values()).map((v, i) => (
+                                        <li key={i} className="truncate">{v.original_filename}（{v.set_title}）</li>
+                                    ))}
+                            </ul>
+                            <p className="text-sm text-gray-600">此為軟刪除：列表不再顯示，NAS 實體檔仍保留。</p>
+                        </div>
+                        <div className="px-5 py-4 border-t border-gray-100 flex flex-col gap-2">
+                            <button
+                                type="button"
+                                disabled={batchDeleting}
+                                onClick={() => void doBatchDelete()}
+                                className="px-3 py-2 text-sm rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 disabled:bg-red-300 cursor-pointer"
+                            >
+                                {batchDeleting ? '處理中…' : (view === 'set' ? '確定停用套組' : '確定移除')}
+                            </button>
+                            <button
+                                type="button"
+                                disabled={batchDeleting}
+                                onClick={() => setBatchDeleteConfirmOpen(false)}
+                                className="px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer"
+                            >
+                                取消
+                            </button>
                         </div>
                     </div>
                 </div>

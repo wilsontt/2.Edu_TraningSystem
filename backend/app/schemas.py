@@ -773,6 +773,28 @@ class SetBatchDownloadRequest(BaseModel):
     nas_session_token: Optional[str] = None
 
 
+class BulkDeleteMaterialFilesRequest(BaseModel):
+    """教材庫檔案批次軟刪除請求"""
+    file_ids: List[int]
+
+
+class BulkDeleteMaterialFilesResult(BaseModel):
+    deleted_count: int
+    missing_ids: List[int]
+    denied_ids: List[int]
+
+
+class BulkDeleteMaterialSetsRequest(BaseModel):
+    """教材庫套組批次軟刪除請求"""
+    set_ids: List[int]
+
+
+class BulkDeleteMaterialSetsResult(BaseModel):
+    deleted_count: int
+    missing_ids: List[int]
+    denied_ids: List[int]
+
+
 # ----------------------------------------------------------------
 # 排程備份相關模型 (Backup Schedule Schemas) — Wave 4
 # ----------------------------------------------------------------
