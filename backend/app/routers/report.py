@@ -1113,7 +1113,7 @@ def get_department_comparison(
             
             results.append({
                 "department_id": r.id,
-                "department_name": r.name,
+                "name": r.name,
                 "avg_score": round(r.avg_score or 0, 1),
                 "pass_rate": round(pass_rate, 1),
                 "completion_rate": round(completion_rate, 1),
