@@ -199,6 +199,18 @@ interface PlanDetailRecord {
   submit_time?: string;
 }
 
+interface PagedDetailResponse<T> {
+  records: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+/** 展開詳情列表分頁選項（後端 page_size 上限 100） */
+const DETAIL_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_DETAIL_PAGE_SIZE = 20;
+
 // 成員成績列表欄寬設定（單位：ch）。後續若需調整欄寬，直接修改此處數值。
 // ※ actions 欄位以 em 計（按鈕寬度相對字型較穩定）
 const MEMBER_TABLE_COL_WIDTHS = {
@@ -245,8 +257,10 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
   const [planStatus, setPlanStatus] = useState<'active' | 'expired' | 'archived'>('active');
   const [expandedDept, setExpandedDept] = useState<number | null>(null);
   const [expandedPlan, setExpandedPlan] = useState<number | null>(null);
-  const [deptDetails, setDeptDetails] = useState<Record<number, { records: DeptDetailRecord[] }>>({});
-  const [planDetails, setPlanDetails] = useState<Record<number, { records: PlanDetailRecord[] }>>({});
+  const [deptDetails, setDeptDetails] = useState<Record<number, PagedDetailResponse<DeptDetailRecord>>>({});
+  const [planDetails, setPlanDetails] = useState<Record<number, PagedDetailResponse<PlanDetailRecord>>>({});
+  const [detailPageSize, setDetailPageSize] = useState(DEFAULT_DETAIL_PAGE_SIZE);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [printKeyword, setPrintKeyword] = useState('');
   const [printSortKey, setPrintSortKey] = useState<
     'emp_id' | 'name' | 'dept_name' | 'plan_title' | 'total_score'
@@ -302,6 +316,62 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
     await exportPrintByStyle();
   };
 
+  const fetchDeptDetails = async (
+    deptId: number,
+    page: number,
+    pageSize: number,
+    status: 'active' | 'expired' | 'archived' = planStatus,
+  ) => {
+    setDetailLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const qs = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+        plan_status: status,
+      });
+      const res = await fetch(
+        `${API_BASE_URL}/admin/reports/department/${deptId}/details?${qs.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) {
+        const data = (await res.json()) as PagedDetailResponse<DeptDetailRecord>;
+        setDeptDetails((prev) => ({ ...prev, [deptId]: data }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch department details', error);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const fetchPlanDetails = async (
+    planId: number,
+    page: number,
+    pageSize: number,
+  ) => {
+    setDetailLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const qs = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+      });
+      const res = await fetch(
+        `${API_BASE_URL}/admin/reports/plan/${planId}/details?${qs.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) {
+        const data = (await res.json()) as PagedDetailResponse<PlanDetailRecord>;
+        setPlanDetails((prev) => ({ ...prev, [planId]: data }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch plan details', error);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const toggleExpandRow = async (itemId: number) => {
     if (!itemId) return;
     if (activeTab === 'department') {
@@ -310,27 +380,7 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
         return;
       }
       setExpandedDept(itemId);
-      if (!deptDetails[itemId]) {
-        try {
-          const token = localStorage.getItem('token');
-          const baseURL = API_BASE_URL;
-          const qs = new URLSearchParams({
-            page: '1',
-            page_size: '10',
-            plan_status: planStatus,
-          });
-          const res = await fetch(
-            `${baseURL}/admin/reports/department/${itemId}/details?${qs.toString()}`,
-            { headers: { 'Authorization': `Bearer ${token}` } }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            setDeptDetails((prev) => ({ ...prev, [itemId]: data }));
-          }
-        } catch (error) {
-          console.error('Failed to fetch department details', error);
-        }
-      }
+      await fetchDeptDetails(itemId, 1, detailPageSize);
       return;
     }
 
@@ -339,21 +389,27 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
       return;
     }
     setExpandedPlan(itemId);
-    if (!planDetails[itemId]) {
-      try {
-        const token = localStorage.getItem('token');
-        const baseURL = API_BASE_URL;
-        const res = await fetch(
-          `${baseURL}/admin/reports/plan/${itemId}/details?page=1&page_size=10`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setPlanDetails((prev) => ({ ...prev, [itemId]: data }));
-        }
-      } catch (error) {
-        console.error('Failed to fetch plan details', error);
-      }
+    await fetchPlanDetails(itemId, 1, detailPageSize);
+  };
+
+  const handleDetailPageChange = async (page: number) => {
+    if (activeTab === 'department' && expandedDept != null) {
+      await fetchDeptDetails(expandedDept, page, detailPageSize);
+      return;
+    }
+    if (activeTab === 'plan' && expandedPlan != null) {
+      await fetchPlanDetails(expandedPlan, page, detailPageSize);
+    }
+  };
+
+  const handleDetailPageSizeChange = async (size: number) => {
+    setDetailPageSize(size);
+    if (activeTab === 'department' && expandedDept != null) {
+      await fetchDeptDetails(expandedDept, 1, size);
+      return;
+    }
+    if (activeTab === 'plan' && expandedPlan != null) {
+      await fetchPlanDetails(expandedPlan, 1, size);
     }
   };
 
@@ -1448,6 +1504,20 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
                                         </tbody>
                                       </table>
                                     </div>
+                                    <Pagination
+                                      currentPage={deptDetails[itemId].page}
+                                      totalPages={Math.max(1, deptDetails[itemId].total_pages)}
+                                      pageSize={deptDetails[itemId].page_size}
+                                      totalItems={deptDetails[itemId].total}
+                                      onPageChange={handleDetailPageChange}
+                                      onPageSizeChange={handleDetailPageSizeChange}
+                                      pageSizeOptions={DETAIL_PAGE_SIZE_OPTIONS}
+                                      itemsLabel="成員成績"
+                                      className="border-0 bg-transparent px-0"
+                                    />
+                                    {detailLoading && (
+                                      <p className="text-xs text-gray-500 mt-1">載入中…</p>
+                                    )}
                                   </div>
                                 )}
                                                 
@@ -1559,6 +1629,20 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
                                         </tbody>
                                       </table>
                                     </div>
+                                    <Pagination
+                                      currentPage={planDetails[itemId].page}
+                                      totalPages={Math.max(1, planDetails[itemId].total_pages)}
+                                      pageSize={planDetails[itemId].page_size}
+                                      totalItems={planDetails[itemId].total}
+                                      onPageChange={handleDetailPageChange}
+                                      onPageSizeChange={handleDetailPageSizeChange}
+                                      pageSizeOptions={DETAIL_PAGE_SIZE_OPTIONS}
+                                      itemsLabel="考生"
+                                      className="border-0 bg-transparent px-0"
+                                    />
+                                    {detailLoading && (
+                                      <p className="text-xs text-gray-500 mt-1">載入中…</p>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -1573,7 +1657,7 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
             </table>
           </div>
           
-          {/* 分頁控制 */}
+          {/* 分頁控制（外層：部門／計畫列表） */}
           {currentStats.length > 0 && (
             <Pagination
               currentPage={statsPage}
@@ -1585,6 +1669,7 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
                 setStatsPageSize(size);
                 setStatsPage(1);
               }}
+              itemsLabel={activeTab === 'department' ? '部門' : '計畫'}
             />
           )}
         </div>
@@ -1831,25 +1916,13 @@ export default function ReportDashboard({ canAuthorizeRetake = false }: { canAut
           onSuccess={async () => {
             const deptId = authorizeTarget.deptId;
             setAuthorizeTarget(null);
-            // 直接重新抓取該部門詳情（與當前 plan_status 一致）
-            try {
-              const token = localStorage.getItem('token');
-              const qs = new URLSearchParams({
-                page: '1',
-                page_size: '10',
-                plan_status: planStatus,
-              });
-              const res = await fetch(
-                `${API_BASE_URL}/admin/reports/department/${deptId}/details?${qs.toString()}`,
-                { headers: { 'Authorization': `Bearer ${token}` } }
-              );
-              if (res.ok) {
-                const data = await res.json();
-                setDeptDetails((prev) => ({ ...prev, [deptId]: data }));
-              }
-            } catch {
-              // silent fail - user can manually refresh
-            }
+            // 直接重新抓取該部門詳情（維持當前分頁與 plan_status）
+            const cached = deptDetails[deptId];
+            await fetchDeptDetails(
+              deptId,
+              cached?.page ?? 1,
+              cached?.page_size ?? detailPageSize,
+            );
           }}
           onClose={() => setAuthorizeTarget(null)}
         />

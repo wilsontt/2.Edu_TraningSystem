@@ -20,6 +20,8 @@ interface PaginationProps {
   showPageSizeSelector?: boolean;
   /** 是否顯示總筆數，預設 true */
   showTotalItems?: boolean;
+  /** 總筆數後綴（例如「計畫」「考生」→「共 2 筆計畫」） */
+  itemsLabel?: string;
   /** 自定義樣式類名 */
   className?: string;
 }
@@ -53,6 +55,7 @@ const Pagination = ({
   pageSizeOptions = [5, 10, 20, 50],
   showPageSizeSelector = true,
   showTotalItems = true,
+  itemsLabel = '',
   className = ''
 }: PaginationProps) => {
   const [pageInput, setPageInput] = useState('');
@@ -114,7 +117,7 @@ const Pagination = ({
         )}
         {showTotalItems && (
           <span className="text-sm text-indigo-600 font-medium">
-            共 {totalItems} 筆
+            共 {totalItems} 筆{itemsLabel}
           </span>
         )}
       </div>
