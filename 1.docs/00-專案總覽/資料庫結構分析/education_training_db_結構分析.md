@@ -50,6 +50,9 @@
 | `material_types` | 教材類型主檔 |
 | `plan_target_departments` | 訓練計畫對象部門（多對多） |
 | `plan_target_users` | 訓練計畫對象人員（多對多） |
+| `plan_exam_exempt_roles` | 訓練計畫免考角色（多對多） |
+| `plan_exam_exempt_departments` | 訓練計畫免考單位（多對多） |
+| `plan_exam_exempt_users` | 訓練計畫免考個人（多對多） |
 | `question_bank` | 共用題庫 |
 | `questions` | 訓練計畫考題 |
 | `role_department_scope_depts` | 角色可查視部門範圍—部門明細 |
@@ -93,6 +96,12 @@ erDiagram
     departments ||--o{ plan_target_departments : "dept_id"
     training_plans ||--o{ plan_target_users : "plan_id"
     users ||--o{ plan_target_users : "emp_id"
+    training_plans ||--o{ plan_exam_exempt_roles : "plan_id"
+    roles ||--o{ plan_exam_exempt_roles : "role_id"
+    training_plans ||--o{ plan_exam_exempt_departments : "plan_id"
+    departments ||--o{ plan_exam_exempt_departments : "dept_id"
+    training_plans ||--o{ plan_exam_exempt_users : "plan_id"
+    users ||--o{ plan_exam_exempt_users : "emp_id"
 
     training_plans ||--o{ questions : "plan_id"
     training_plans ||--o{ exam_records : "plan_id"
@@ -299,6 +308,37 @@ erDiagram
 | emp_id | 受課對象工號 | VARCHAR | 未宣告 | 否 | — | — | → `users.emp_id` |
 
 無複合主鍵宣告；實務上應避免重複 `(plan_id, emp_id)`。
+
+---
+
+#### `plan_exam_exempt_roles` — 計畫免考角色（M:N）
+
+| 欄位 | 中文說明 | 類型 | 長度 | NOT NULL | PK | 預設 | FK / 備註 |
+|------|----------|------|------|----------|----|------|-----------|
+| plan_id | 訓練計畫 ID | INTEGER | — | 是 | 是（複合） | — | → `training_plans.id` |
+| role_id | 免考角色 ID | INTEGER | — | 是 | 是（複合） | — | → `roles.id` |
+
+語意：屬該角色者本計畫免考。新建／更新時後端強制保留 `SUPER_ADMIN_ROLE_NAMES`。
+
+---
+
+#### `plan_exam_exempt_departments` — 計畫免考單位（M:N）
+
+| 欄位 | 中文說明 | 類型 | 長度 | NOT NULL | PK | 預設 | FK / 備註 |
+|------|----------|------|------|----------|----|------|-----------|
+| plan_id | 訓練計畫 ID | INTEGER | — | 是 | 是（複合） | — | → `training_plans.id` |
+| dept_id | 免考單位 ID | INTEGER | — | 是 | 是（複合） | — | → `departments.id` |
+
+---
+
+#### `plan_exam_exempt_users` — 計畫免考個人（M:N）
+
+| 欄位 | 中文說明 | 類型 | 長度 | NOT NULL | PK | 預設 | FK / 備註 |
+|------|----------|------|------|----------|----|------|-----------|
+| plan_id | 訓練計畫 ID | INTEGER | — | 是 | 是（複合） | — | → `training_plans.id` |
+| emp_id | 免考員工編號 | VARCHAR | 未宣告 | 是 | 是（複合） | — | → `users.emp_id` |
+
+與受課 `plan_target_*` 分離；實際需考＝受課母集合 − 免考。僅預設超管免報到。
 
 ---
 
@@ -656,6 +696,12 @@ erDiagram
 | plan_target_departments | dept_id | departments | id |
 | plan_target_users | plan_id | training_plans | id |
 | plan_target_users | emp_id | users | emp_id |
+| plan_exam_exempt_roles | plan_id | training_plans | id |
+| plan_exam_exempt_roles | role_id | roles | id |
+| plan_exam_exempt_departments | plan_id | training_plans | id |
+| plan_exam_exempt_departments | dept_id | departments | id |
+| plan_exam_exempt_users | plan_id | training_plans | id |
+| plan_exam_exempt_users | emp_id | users | emp_id |
 | questions | plan_id | training_plans | id |
 | role_department_scope_depts | role_id | roles | id |
 | role_department_scope_depts | dept_id | departments | id |

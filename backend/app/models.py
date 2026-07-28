@@ -32,6 +32,28 @@ plan_target_users = Table(
     Column("emp_id", String, ForeignKey("users.emp_id")),
 )
 
+# 訓練計畫免考角色／單位／個人（與受課對象分離；命中任一即免考）
+plan_exam_exempt_roles = Table(
+    "plan_exam_exempt_roles",
+    Base.metadata,
+    Column("plan_id", Integer, ForeignKey("training_plans.id"), primary_key=True),
+    Column("role_id", Integer, ForeignKey("roles.id"), primary_key=True),
+)
+
+plan_exam_exempt_departments = Table(
+    "plan_exam_exempt_departments",
+    Base.metadata,
+    Column("plan_id", Integer, ForeignKey("training_plans.id"), primary_key=True),
+    Column("dept_id", Integer, ForeignKey("departments.id"), primary_key=True),
+)
+
+plan_exam_exempt_users = Table(
+    "plan_exam_exempt_users",
+    Base.metadata,
+    Column("plan_id", Integer, ForeignKey("training_plans.id"), primary_key=True),
+    Column("emp_id", String, ForeignKey("users.emp_id"), primary_key=True),
+)
+
 # ----------------------------------------------------------------
 # 組織架構模型 (Organization Models)
 # ----------------------------------------------------------------
@@ -172,6 +194,9 @@ class TrainingPlan(Base):
     location = relationship("Department", back_populates="training_plans")
     target_departments = relationship("Department", secondary=plan_target_departments, backref="target_plans")
     target_users = relationship("User", secondary=plan_target_users, backref="target_plans")
+    exam_exempt_roles = relationship("Role", secondary=plan_exam_exempt_roles)
+    exam_exempt_departments = relationship("Department", secondary=plan_exam_exempt_departments)
+    exam_exempt_users = relationship("User", secondary=plan_exam_exempt_users)
     questions = relationship("Question", back_populates="training_plan")
     exam_records = relationship("ExamRecord", back_populates="training_plan")
     attendance_records = relationship("AttendanceRecord", back_populates="training_plan")

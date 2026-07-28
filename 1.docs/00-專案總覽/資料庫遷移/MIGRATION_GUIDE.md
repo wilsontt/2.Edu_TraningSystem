@@ -330,6 +330,39 @@ PRAGMA table_info(attendance_checkin_events);
 對應 PLAN：[`20260722_合併報到未到原因與歷程時間軸_PLAN.md`](../../02-棕地專案/plans/20260722_合併報到未到原因與歷程時間軸_PLAN.md)。
 分支：`feature/20260722-batch-absence-timeline`。
 
+#### 訓練計畫免考三層級（2026-07-28）
+
+新增 `plan_exam_exempt_roles`／`plan_exam_exempt_departments`／`plan_exam_exempt_users`，並為既有計畫 backfill 超管免考角色。
+
+```bash
+cp data/education_training.db data/education_training.db.bak-$(date +%Y%m%d)
+cd backend
+.venv/bin/python3 migrations/add_plan_exam_exemption.py
+```
+
+ds1 Docker：
+
+```bash
+docker compose exec training-backend python migrations/add_plan_exam_exemption.py
+```
+
+驗證：
+
+```sql
+SELECT name FROM sqlite_master WHERE type='table'
+  AND name IN (
+    'plan_exam_exempt_roles',
+    'plan_exam_exempt_departments',
+    'plan_exam_exempt_users'
+  );
+-- 預期：3 列
+
+SELECT COUNT(*) FROM plan_exam_exempt_roles;
+-- 預期：≥ 現有計畫數 × 存在之超管角色數
+```
+
+對應：[PLAN](../../02-棕地專案/plans/20260728_訓練計畫免考三層級_PLAN.md)、[技術設計](../../02-棕地專案/plans/20260728_訓練計畫免考三層級_技術設計.md)。
+
 #### 報到紀錄歷史補齊（2026-07-03）
 
 報到功能（T10）上線前已交卷、卻無 `attendance_records` 的舊資料，須以**第一次考試時間**補登報到列。  

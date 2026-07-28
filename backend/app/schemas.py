@@ -91,10 +91,22 @@ class TrainingPlanBase(BaseModel):
     time_limit: int = 0
     passing_score: int = 60
 
+class ExamExemptRoleBrief(BaseModel):
+    """免考角色摘要（不含 user_count 等管理欄位）。"""
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
+
 class TrainingPlanCreate(TrainingPlanBase):
     target_dept_ids: List[int] = [] # 新增受課單位 IDs
     target_user_ids: List[str] = [] # 新增個人受課對象 IDs
     expected_attendance: Optional[int] = None  # 應到人數（可選）
+    exam_exempt_role_ids: List[int] = []  # 免考角色（後端會強制 union 超管）
+    exam_exempt_dept_ids: List[int] = []  # 免考單位
+    exam_exempt_user_ids: List[str] = []  # 免考個人
 
 class TrainingPlan(TrainingPlanBase):
     id: int
@@ -102,6 +114,9 @@ class TrainingPlan(TrainingPlanBase):
     sub_category: Optional['SubCategory'] = None  # 子分類詳情
     target_departments: List['Department'] = [] # 回傳受課單位詳情
     target_users: List['User'] = [] # 回傳個人受課對象詳情
+    exam_exempt_roles: List[ExamExemptRoleBrief] = []
+    exam_exempt_departments: List['Department'] = []
+    exam_exempt_users: List['User'] = []
     expected_attendance: Optional[int] = None  # 應到人數
     is_archived: bool = False  # 是否已封存
     

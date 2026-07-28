@@ -32,6 +32,10 @@ from ..services.attendance_absence import (
     upsert_batch_absence_reason,
     upsert_plan_absence_reason,
 )
+from ..services.exam_exemption import (
+    apply_exam_exemptions,
+    resolve_checkin_expected_emp_ids,
+)
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -153,6 +157,19 @@ def get_training_form_users(
     ]
 
 
+@router.get("/form-options/roles", response_model=List[schemas.ExamExemptRoleBrief])
+def get_training_form_roles(
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:plan"),
+):
+    """訓練計畫免考設定：角色清單（無需 menu:admin:role）。"""
+    return (
+        db.query(models.Role)
+        .order_by(models.Role.name.asc())
+        .all()
+    )
+
+
 # ----------------------------------------------------------------
 # 訓練計畫管理 (Training Plan Management)
 # ----------------------------------------------------------------
@@ -210,6 +227,17 @@ def create_training_plan(
             models.User.status == "active",
         ).all()
         db_plan.target_users = target_users
+
+    try:
+        apply_exam_exemptions(
+            db,
+            db_plan,
+            role_ids=plan.exam_exempt_role_ids,
+            dept_ids=plan.exam_exempt_dept_ids,
+            user_ids=plan.exam_exempt_user_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     
     db.add(db_plan)
     try:
@@ -272,6 +300,17 @@ def update_training_plan(
             models.User.status == "active",
         ).all()
         db_plan.target_users = target_users
+
+    try:
+        apply_exam_exemptions(
+            db,
+            db_plan,
+            role_ids=plan_update.exam_exempt_role_ids,
+            dept_ids=plan_update.exam_exempt_dept_ids,
+            user_ids=plan_update.exam_exempt_user_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     
     try:
         db.commit()
@@ -453,21 +492,8 @@ def get_attendance_stats(
     # menu:plan 視為全域；其餘依 Hybrid scope（None=all）
     visible_emp_ids = _resolve_visible_emp_ids_for_attendance(db, current_user)
 
-    # 收集該計畫應到名單（部門 + 個人受課對象）
-    all_target_user_ids = set()
-    if plan.target_departments:
-        dept_ids = [dept.id for dept in plan.target_departments]
-        dept_users = db.query(models.User).filter(
-            models.User.dept_id.in_(dept_ids),
-            models.User.status == "active",
-            models.User.is_trainee == True,
-        ).all()
-        for user in dept_users:
-            all_target_user_ids.add(user.emp_id)
-    if plan.target_users:
-        for user in plan.target_users:
-            if user.status == "active" and user.is_trainee:
-                all_target_user_ids.add(user.emp_id)
+    # 收集該計畫應到名單（報到口徑：母集合 − 超管）
+    all_target_user_ids = resolve_checkin_expected_emp_ids(plan, db)
 
     # 套用可視範圍
     scoped_target_user_ids = intersect_emp_ids(all_target_user_ids, visible_emp_ids)
@@ -1011,47 +1037,12 @@ def calculate_expected_attendance(
     db: Session = Depends(get_db),
     current_user = check_permission("menu:plan")
 ):
-    """根據受課對象部門和個人自動計算應到人數"""
+    """根據受課對象自動計算應到人數（報到口徑：排除預設超管）。"""
     plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
-    
-    calculated_count = 0
-    all_target_user_ids = set()
-    
-    # 計算部門人數（僅訓練員）
-    if plan.target_departments:
-        dept_ids = [dept.id for dept in plan.target_departments]
-        dept_users = db.query(models.User).filter(
-            models.User.dept_id.in_(dept_ids),
-            models.User.status == "active",
-            models.User.is_trainee == True,
-        ).all()
-        for user in dept_users:
-            all_target_user_ids.add(user.emp_id)
 
-    # 計算個人受課對象人數（排除已在部門中的，僅訓練員）
-    if plan.target_users:
-        # 如果沒有部門，直接計算個人數量
-        if not plan.target_departments:
-            calculated_count = len([u for u in plan.target_users if u.status == "active" and u.is_trainee])
-        else:
-            # 如果有部門，只計算不在部門中的個人
-            dept_ids = [dept.id for dept in plan.target_departments]
-            dept_user_ids = set(
-                db.query(models.User.emp_id).filter(
-                    models.User.dept_id.in_(dept_ids),
-                    models.User.status == "active",
-                    models.User.is_trainee == True,
-                ).all()
-            )
-            dept_user_ids = {uid[0] for uid in dept_user_ids}
-            # 計算個人受課對象中不在部門的（僅訓練員）
-            personal_count = len([u for u in plan.target_users if u.status == "active" and u.is_trainee and u.emp_id not in dept_user_ids])
-            calculated_count = len(all_target_user_ids) + personal_count
-    else:
-        calculated_count = len(all_target_user_ids)
-    
+    calculated_count = len(resolve_checkin_expected_emp_ids(plan, db))
     return {"calculated_count": calculated_count}
 
 # --- 報到 QRcode 生成 ---

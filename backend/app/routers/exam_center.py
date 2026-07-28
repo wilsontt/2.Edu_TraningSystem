@@ -27,6 +27,11 @@ from ..services.attendance_checkin import (
     now_utc_naive,
     user_in_plan_targets,
 )
+from ..services.exam_exemption import (
+    user_requires_checkin,
+    user_requires_exam,
+)
+from ..constants.auth import is_super_admin_role
 
 def _training_plan_status_filter_expr_exam(status: str):
     """與 GET /training/plans、報表 overview 之 plan_status 語意一致（含 all）。"""
@@ -65,8 +70,8 @@ def _count_assigned_plans_for_user(
     plan_status: str,
 ) -> int:
     """
-    該員應考計畫數：未設定受課對象（全公司）∪ target_departments ∪ target_users，
-    並依 plan_status 篩選。與 get_my_exams 的 no_targets 語意一致。
+    該員「實際需考」計畫數：受課對象內且未免考。
+    未設定受課對象（全公司）∪ target_departments ∪ target_users，再排除免考。
     """
     no_targets = and_(
         ~models.TrainingPlan.target_departments.any(),
@@ -75,11 +80,17 @@ def _count_assigned_plans_for_user(
     conds = [no_targets, models.TrainingPlan.target_users.any(emp_id=user.emp_id)]
     if user.dept_id is not None:
         conds.append(models.TrainingPlan.target_departments.any(id=user.dept_id))
-    query = db.query(models.TrainingPlan.id).filter(or_(*conds))
+    query = db.query(models.TrainingPlan).options(
+        joinedload(models.TrainingPlan.exam_exempt_roles),
+        joinedload(models.TrainingPlan.exam_exempt_departments),
+        joinedload(models.TrainingPlan.exam_exempt_users),
+        joinedload(models.TrainingPlan.target_departments),
+        joinedload(models.TrainingPlan.target_users),
+    ).filter(or_(*conds))
     if plan_status != "all":
         query = query.filter(_training_plan_status_filter_expr_exam(plan_status))
-    return query.distinct().count()
-
+    plans = query.distinct().all()
+    return sum(1 for p in plans if user_requires_exam(user, p))
 
 def _now_utc_naive() -> datetime:
     """
@@ -348,6 +359,11 @@ def get_my_exams(
     # 為了相容舊資料庫，is_archived 可能為 NULL，視同未封存
     base_query = db.query(models.TrainingPlan).options(
         joinedload(models.TrainingPlan.questions),
+        joinedload(models.TrainingPlan.exam_exempt_roles),
+        joinedload(models.TrainingPlan.exam_exempt_departments),
+        joinedload(models.TrainingPlan.exam_exempt_users),
+        joinedload(models.TrainingPlan.target_departments),
+        joinedload(models.TrainingPlan.target_users),
     ).filter(
         or_(
             models.TrainingPlan.is_archived == False,
@@ -365,7 +381,8 @@ def get_my_exams(
     if current_user.dept_id is not None:
         or_conds.append(models.TrainingPlan.target_departments.any(id=current_user.dept_id))
     plans = base_query.filter(or_(*or_conds)).order_by(models.TrainingPlan.training_date.desc()).all()
-
+    # 免考者不列入可開考／待考列表
+    plans = [p for p in plans if user_requires_exam(current_user, p)]
     results = []
 
     plan_ids = [p.id for p in plans]
@@ -453,13 +470,22 @@ def start_exam(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    plan = db.query(models.TrainingPlan).options(
+        joinedload(models.TrainingPlan.exam_exempt_roles),
+        joinedload(models.TrainingPlan.exam_exempt_departments),
+        joinedload(models.TrainingPlan.exam_exempt_users),
+        joinedload(models.TrainingPlan.target_departments),
+        joinedload(models.TrainingPlan.target_users),
+    ).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Training plan not found")
     
     # 檢查計畫是否被封存
     if plan.is_archived:
         raise HTTPException(status_code=400, detail="該訓練計畫已被封存，無法進行考試")
+
+    if not user_requires_exam(current_user, plan):
+        raise HTTPException(status_code=403, detail="您無需參加本訓練計畫考試（免考或不在受課對象）")
         
     # Validation logic
     record = db.query(models.ExamRecord).filter(
@@ -482,7 +508,8 @@ def start_exam(
         if not (is_auto_retake or is_authorized_retake):
             raise HTTPException(status_code=400, detail="Exam has expired.")
 
-    _require_attendance_record(db, current_user.emp_id, plan_id)
+    if user_requires_checkin(current_user, plan):
+        _require_attendance_record(db, current_user.emp_id, plan_id)
 
     # 建立或更新 ExamRecord 的 start_time（記錄開始作答時間）
     # 這樣在 submit_exam 時可以正確計算作答時間
@@ -578,11 +605,21 @@ def submit_exam(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    plan = db.query(models.TrainingPlan).options(
+        joinedload(models.TrainingPlan.exam_exempt_roles),
+        joinedload(models.TrainingPlan.exam_exempt_departments),
+        joinedload(models.TrainingPlan.exam_exempt_users),
+        joinedload(models.TrainingPlan.target_departments),
+        joinedload(models.TrainingPlan.target_users),
+    ).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Training plan not found")
 
-    _require_attendance_record(db, current_user.emp_id, plan_id)
+    if not user_requires_exam(current_user, plan):
+        raise HTTPException(status_code=403, detail="您無需參加本訓練計畫考試（免考或不在受課對象）")
+
+    if user_requires_checkin(current_user, plan):
+        _require_attendance_record(db, current_user.emp_id, plan_id)
 
     # Fetch all questions
     questions = db.query(models.Question).filter(models.Question.plan_id == plan.id).all()
@@ -1652,7 +1689,10 @@ def check_in_attendance(
     current_user: models.User = Depends(get_current_user)
 ):
     """執行報到動作（冪等：已報到則回傳既有紀錄，不重複建立；並 append 歷程事件）。"""
-    plan = db.query(models.TrainingPlan).filter(models.TrainingPlan.id == plan_id).first()
+    plan = db.query(models.TrainingPlan).options(
+        joinedload(models.TrainingPlan.target_departments),
+        joinedload(models.TrainingPlan.target_users),
+    ).filter(models.TrainingPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="訓練計畫不存在")
 
@@ -1661,6 +1701,22 @@ def check_in_attendance(
     client_ip = client_ip_from_request(request)
     event_time = now_utc_naive()
     user_brief = checkin_user_brief(current_user)
+
+    # 預設超管免報到：不建立 attendance_records，避免虛增應到／實到
+    role_name = (current_user.role.name if current_user.role else "") or ""
+    if is_super_admin_role(role_name):
+        append_checkin_event(
+            db,
+            emp_id=current_user.emp_id,
+            plan_id=plan_id,
+            event_type="single_checkin",
+            source="qr_single",
+            result="skipped_not_target",
+            ip_address=client_ip,
+            event_time=event_time,
+        )
+        db.commit()
+        raise HTTPException(status_code=403, detail="系統管理者無需報到")
 
     existing = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.emp_id == current_user.emp_id,
@@ -1791,6 +1847,27 @@ def check_in_attendance_batch(
     skipped: list[dict] = []
 
     for plan in plans:
+        role_name = (current_user.role.name if current_user.role else "") or ""
+        if is_super_admin_role(role_name):
+            append_checkin_event(
+                db,
+                emp_id=current_user.emp_id,
+                plan_id=plan.id,
+                event_type="batch_checkin",
+                source="qr_batch",
+                result="skipped_not_target",
+                batch_id=batch.id,
+                ip_address=client_ip,
+                event_time=event_time,
+            )
+            skipped.append({
+                "plan_id": plan.id,
+                "plan_title": plan.title,
+                "result": "skipped_not_target",
+                "checkin_time": None,
+            })
+            continue
+
         if not user_in_plan_targets(current_user, plan):
             append_checkin_event(
                 db,

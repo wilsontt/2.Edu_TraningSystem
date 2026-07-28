@@ -71,26 +71,10 @@ def format_checkin_event_display_label(
 
 
 def collect_plan_target_emp_ids(plan: models.TrainingPlan, db: Session) -> Set[str]:
-    """收集計畫應到對象（在職受訓者）。"""
-    ids: Set[str] = set()
-    if plan.target_departments:
-        dept_ids = [d.id for d in plan.target_departments]
-        for u in (
-            db.query(models.User)
-            .filter(
-                models.User.dept_id.in_(dept_ids),
-                models.User.status == "active",
-                models.User.is_trainee == True,  # noqa: E712
-            )
-            .all()
-        ):
-            ids.add(u.emp_id)
-    if plan.target_users:
-        for u in plan.target_users:
-            if u.status == "active" and u.is_trainee:
-                ids.add(u.emp_id)
-    return ids
+    """收集計畫應到對象（報到口徑：在職受訓者 − 預設超管）。"""
+    from .exam_exemption import resolve_checkin_expected_emp_ids
 
+    return resolve_checkin_expected_emp_ids(plan, db)
 
 def is_checked_in(db: Session, plan_id: int, emp_id: str) -> bool:
     return (

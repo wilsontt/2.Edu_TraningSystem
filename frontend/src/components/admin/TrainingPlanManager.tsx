@@ -61,9 +61,27 @@ interface TrainingPlan {
     emp_id: string;
     name: string;
   }>;
+  exam_exempt_roles?: Array<{ id: number; name: string }>;
+  exam_exempt_departments?: Department[];
+  exam_exempt_users?: Array<{ emp_id: string; name: string; dept_name?: string }>;
   expected_attendance?: number | null;
   is_archived?: boolean;
 }
+
+interface RoleOption {
+  id: number;
+  name: string;
+}
+
+/** 與後端 SUPER_ADMIN_ROLE_NAMES 對齊；免考設定中鎖定不可取消 */
+const SUPER_ADMIN_ROLE_NAMES = new Set([
+  'Admin',
+  'System Admin',
+  '系統管理',
+  '系統管理者',
+]);
+
+const isLockedExemptRole = (name: string) => SUPER_ADMIN_ROLE_NAMES.has(name);
 
 interface AttendanceStats {
   plan_id: number;
@@ -218,11 +236,17 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
     passing_score: 60,
     target_dept_ids: [] as string[],
     target_user_ids: [] as string[],
+    exam_exempt_role_ids: [] as string[],
+    exam_exempt_dept_ids: [] as string[],
+    exam_exempt_user_ids: [] as string[],
     expected_attendance: '',
   });
   
   // 使用者列表（用於個人受課對象選擇，含 dept_id 以支援受課單位勾選時自動勾選該部門人員）
   const [users, setUsers] = useState<Array<{emp_id: string; name: string; dept_name: string; dept_id: number | null}>>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
+  const [isExemptModalOpen, setIsExemptModalOpen] = useState(false);
+  const [exemptUserSearchTerm, setExemptUserSearchTerm] = useState('');
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const deptDerivedUserIds = useMemo(() => {
     if (formData.target_dept_ids.length === 0) return new Set<string>();
@@ -246,6 +270,18 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
   const calculateExpectedAttendanceFromForm = useCallback(() => {
     return deptDerivedUserIds.size + explicitExtraUserIds.length;
   }, [deptDerivedUserIds, explicitExtraUserIds]);
+
+  const defaultExemptRoleIds = useCallback(() => {
+    return roles.filter((r) => isLockedExemptRole(r.name)).map((r) => r.id.toString());
+  }, [roles]);
+
+  const ensureLockedExemptRoles = useCallback(
+    (ids: string[]) => {
+      const locked = defaultExemptRoleIds();
+      return Array.from(new Set([...ids, ...locked]));
+    },
+    [defaultExemptRoleIds],
+  );
   // emp_id → 使用者資料，供受課對象卡片顯示姓名/部門
   const usersByEmpId = useMemo(() => {
     const map = new Map<string, { emp_id: string; name: string; dept_name: string; dept_id: number | null }>();
@@ -359,17 +395,21 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
         if (filterDeptId) params.append('dept_id', filterDeptId);
         if (filterCategoryId) params.append('category_id', filterCategoryId);
         
-        const [plansRes, catsRes, deptsRes, usersRes, allPlansRes] = await Promise.all([
+        const [plansRes, catsRes, deptsRes, usersRes, allPlansRes, rolesRes] = await Promise.all([
           api.get(`/training/plans?${params.toString()}`),
           api.get('/admin/categories/main'),
           api.get('/training/form-options/departments'),
           api.get('/training/form-options/users'),
-          api.get(`/training/plans?status=${statusMap[activeTab]}`)
+          api.get(`/training/plans?status=${statusMap[activeTab]}`),
+          api.get('/training/form-options/roles'),
         ]);
         setPlans(plansRes.data);
         setAllPlans(allPlansRes.data);
         setCategories(catsRes.data);
         setDepartments(deptsRes.data);
+        setRoles(
+          (rolesRes.data as RoleOption[]).map((r) => ({ id: r.id, name: r.name })),
+        );
         const usersList = usersRes.data.map((u: { emp_id: string; name: string; dept_name: string; dept_id: number | null }) => ({
           emp_id: u.emp_id,
           name: u.name,
@@ -395,6 +435,21 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
     };
     fetchData();
   }, [activeTab, filterYear, filterDeptId, filterCategoryId]);
+
+  // 角色清單載入後，確保超管免考角色已寫入表單（新建／編輯皆強制）
+  useEffect(() => {
+    if (!isModalOpen || roles.length === 0) return;
+    setFormData((prev) => {
+      const next = ensureLockedExemptRoles(prev.exam_exempt_role_ids);
+      if (
+        next.length === prev.exam_exempt_role_ids.length &&
+        next.every((id) => prev.exam_exempt_role_ids.includes(id))
+      ) {
+        return prev;
+      }
+      return { ...prev, exam_exempt_role_ids: next };
+    });
+  }, [isModalOpen, roles, ensureLockedExemptRoles]);
 
   const openModal = (plan?: TrainingPlan) => {
     if (plan) {
@@ -442,6 +497,11 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
         passing_score: plan.passing_score,
         target_dept_ids: plan.target_departments ? plan.target_departments.map(d => d.id.toString()) : [],
         target_user_ids: plan.target_users ? plan.target_users.map(u => u.emp_id) : [],
+        exam_exempt_role_ids: ensureLockedExemptRoles(
+          (plan.exam_exempt_roles || []).map((r) => r.id.toString()),
+        ),
+        exam_exempt_dept_ids: (plan.exam_exempt_departments || []).map((d) => d.id.toString()),
+        exam_exempt_user_ids: (plan.exam_exempt_users || []).map((u) => u.emp_id),
         expected_attendance: plan.expected_attendance ? plan.expected_attendance.toString() : '',
       });
     } else {
@@ -461,11 +521,16 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
         passing_score: 60,
         target_dept_ids: [],
         target_user_ids: [],
+        exam_exempt_role_ids: defaultExemptRoleIds(),
+        exam_exempt_dept_ids: [],
+        exam_exempt_user_ids: [],
         expected_attendance: '',
       });
     }
     setIsAddPersonOpen(false);
+    setIsExemptModalOpen(false);
     setUserSearchTerm('');
+    setExemptUserSearchTerm('');
     setIsModalOpen(true);
   };
 
@@ -490,6 +555,9 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
         target_dept_ids: formData.target_dept_ids.map(id => parseInt(id)),
         // 僅保存「額外新增」個人（排除受課單位衍生成員），避免將單位成員固化為個人受課對象
         target_user_ids: formData.target_user_ids.filter(id => !deptDerivedUserIds.has(id)),
+        exam_exempt_role_ids: ensureLockedExemptRoles(formData.exam_exempt_role_ids).map((id) => parseInt(id, 10)),
+        exam_exempt_dept_ids: formData.exam_exempt_dept_ids.map((id) => parseInt(id, 10)),
+        exam_exempt_user_ids: formData.exam_exempt_user_ids,
         expected_attendance: formData.expected_attendance ? parseInt(formData.expected_attendance) : null,
       };
 
@@ -1337,9 +1405,25 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
                   </div>
                 </div>
 
-                {/* Department */}
+                {/* Department + 免考設定入口 */}
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-500 uppercase">開課單位</label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-bold text-gray-500 uppercase">開課單位</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          exam_exempt_role_ids: ensureLockedExemptRoles(prev.exam_exempt_role_ids),
+                        }));
+                        setExemptUserSearchTerm('');
+                        setIsExemptModalOpen(true);
+                      }}
+                      className="text-xm text-indigo-600 font-bold hover:underline cursor-pointer shrink-0"
+                    >
+                      免考設定
+                    </button>
+                  </div>
                   <select
                     required
                     className="w-full px-4 py-2.5 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 bg-white cursor-pointer"
@@ -1351,6 +1435,11 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
                       <option key={d.id} value={String(d.id)}>{d.name}</option>
                     ))}
                   </select>
+                  <p className="text-xs text-gray-400 font-bold">
+                    免考：角色 {formData.exam_exempt_role_ids.length}
+                    {' · '}單位 {formData.exam_exempt_dept_ids.length}
+                    {' · '}個人 {formData.exam_exempt_user_ids.length}
+                  </p>
                 </div>
 
                 {/* Date */}
@@ -1776,6 +1865,174 @@ const TrainingPlanManager = ({ user }: TrainingPlanManagerProps) => {
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500">額外新增 {explicitExtraUserIds.length} 位</span>
               <button type="button" onClick={() => setIsAddPersonOpen(false)} className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer">
+                完成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 免考設定子 Modal */}
+      {isModalOpen && isExemptModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900">免考設定</h3>
+              <button type="button" onClick={() => setIsExemptModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-all cursor-pointer">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <fieldset disabled={isViewOnly} className="flex-1 overflow-y-auto p-5 space-y-5 disabled:opacity-80">
+              <div className="space-y-2">
+                <label className="text-xm font-bold text-gray-500 uppercase">免考角色</label>
+                <div className="border-2 border-indigo-200 rounded-xl p-3 max-h-40 overflow-y-auto bg-indigo-50/30 grid grid-cols-2 gap-2">
+                  {roles.map((role) => {
+                    const idStr = role.id.toString();
+                    const locked = isLockedExemptRole(role.name);
+                    const checked = formData.exam_exempt_role_ids.includes(idStr);
+                    return (
+                      <label
+                        key={role.id}
+                        className={`flex items-center gap-2 p-1 rounded-lg ${locked || isViewOnly ? 'cursor-default' : 'hover:bg-white cursor-pointer'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                          checked={checked || locked}
+                          disabled={locked || isViewOnly}
+                          onChange={(e) => {
+                            if (locked) return;
+                            setFormData((prev) => ({
+                              ...prev,
+                              exam_exempt_role_ids: e.target.checked
+                                ? ensureLockedExemptRoles([...prev.exam_exempt_role_ids, idStr])
+                                : ensureLockedExemptRoles(prev.exam_exempt_role_ids.filter((id) => id !== idStr)),
+                            }));
+                          }}
+                        />
+                        <span className="text-sm font-bold text-gray-700 truncate">{role.name}</span>
+                        {locked && (
+                          <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">鎖定</span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-amber-600 font-bold">超管角色預設免考且不可取消；僅超管免報到，其餘免考者仍須報到。</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xm font-bold text-gray-500 uppercase">免考單位</label>
+                <div className="border-2 border-indigo-200 rounded-xl p-3 max-h-40 overflow-y-auto bg-indigo-50/30 grid grid-cols-2 gap-2">
+                  {selectableTargetDepartments.map((dept) => {
+                    const idStr = dept.id.toString();
+                    return (
+                      <label key={dept.id} className="flex items-center gap-2 p-1 rounded-lg hover:bg-white cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                          checked={formData.exam_exempt_dept_ids.includes(idStr)}
+                          onChange={(e) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              exam_exempt_dept_ids: e.target.checked
+                                ? [...prev.exam_exempt_dept_ids, idStr]
+                                : prev.exam_exempt_dept_ids.filter((id) => id !== idStr),
+                            }));
+                          }}
+                        />
+                        <span className="text-sm font-bold text-gray-700">{dept.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xm font-bold text-gray-500 uppercase">免考個人</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="搜尋後勾選加入免考個人..."
+                    className="w-full pl-9 pr-3 py-2.5 border-2 border-indigo-200 rounded-lg text-sm font-bold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                    value={exemptUserSearchTerm}
+                    onChange={(e) => setExemptUserSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div className="border-2 border-indigo-200 rounded-xl p-2 max-h-40 overflow-y-auto bg-indigo-50/30 space-y-1">
+                  {formData.exam_exempt_user_ids.length > 0 && (
+                    <div className="space-y-1 mb-2 pb-2 border-b border-indigo-100">
+                      {formData.exam_exempt_user_ids.map((empId) => {
+                        const u = usersByEmpId.get(empId);
+                        return (
+                          <div key={empId} className="flex items-center justify-between gap-2 px-2 py-1 rounded-lg bg-white">
+                            <span className="text-sm font-bold text-gray-700 truncate">
+                              {u ? `${u.name} (${u.emp_id}) - ${u.dept_name}` : empId}
+                            </span>
+                            {!isViewOnly && (
+                              <button
+                                type="button"
+                                className="p-0.5 text-gray-400 hover:text-red-500 cursor-pointer"
+                                onClick={() =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    exam_exempt_user_ids: prev.exam_exempt_user_ids.filter((id) => id !== empId),
+                                  }))
+                                }
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {users
+                    .filter(
+                      (u) =>
+                        exemptUserSearchTerm !== '' &&
+                        (u.emp_id.toLowerCase().includes(exemptUserSearchTerm.toLowerCase()) ||
+                          u.name.toLowerCase().includes(exemptUserSearchTerm.toLowerCase()) ||
+                          u.dept_name.toLowerCase().includes(exemptUserSearchTerm.toLowerCase())),
+                    )
+                    .slice(0, 30)
+                    .map((u) => {
+                      const selected = formData.exam_exempt_user_ids.includes(u.emp_id);
+                      return (
+                        <label key={u.emp_id} className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-white cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 text-indigo-600 rounded border-gray-300"
+                            checked={selected}
+                            onChange={(e) => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                exam_exempt_user_ids: e.target.checked
+                                  ? [...prev.exam_exempt_user_ids, u.emp_id]
+                                  : prev.exam_exempt_user_ids.filter((id) => id !== u.emp_id),
+                              }));
+                            }}
+                          />
+                          <span className="text-sm font-bold text-gray-700 truncate">
+                            {u.name} ({u.emp_id}) - {u.dept_name}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  {exemptUserSearchTerm === '' && formData.exam_exempt_user_ids.length === 0 && (
+                    <p className="text-xs text-gray-400 text-center py-4">輸入關鍵字搜尋並勾選免考個人</p>
+                  )}
+                </div>
+              </div>
+            </fieldset>
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsExemptModalOpen(false)}
+                className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-95 cursor-pointer"
+              >
                 完成
               </button>
             </div>
