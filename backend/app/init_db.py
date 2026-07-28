@@ -32,14 +32,14 @@ def init_db():
         db.refresh(user_role)
         db.refresh(sysadmin_role)
         
-        # 2. 建立基礎部門
-        it_dept = db.query(models.Department).filter(models.Department.name == "IT部").first()
-        if not it_dept:
-            it_dept = models.Department(name="IT部")
-            db.add(it_dept)
+        # 2. 建立基礎部門（系統管理帳號的預設掛載部門）
+        sysadmin_dept = db.query(models.Department).filter(models.Department.name == "系統管理").first()
+        if not sysadmin_dept:
+            sysadmin_dept = models.Department(name="系統管理")
+            db.add(sysadmin_dept)
         
         db.commit()
-        db.refresh(it_dept)
+        db.refresh(sysadmin_dept)
         
         # 3. 建立基礎功能選單
         functions = [
@@ -143,7 +143,7 @@ def init_db():
             admin_user = models.User(
                 emp_id="admin",
                 name="系統管理員",
-                dept_id=it_dept.id,
+                dept_id=sysadmin_dept.id,
                 role_id=admin_role.id,
                 status="active",
                 auth_source="local",

@@ -111,7 +111,7 @@ class Settings(BaseSettings):
     ad_domain: str = ""               # UPN 網域，例：yourco.com
     ad_admin_group: str = "IT Admins"  # DC 上的群組名稱
     ad_admin_role_name: str = "系統管理"  # JIT 掛載的本地 RBAC 角色
-    ad_default_dept_name: str = "IT部"   # JIT 預設部門
+    ad_default_dept_name: str = "系統管理"  # JIT 預設部門
     ad_use_nested_groups: bool = False
 
     # Email OTP 備援（路徑 D）

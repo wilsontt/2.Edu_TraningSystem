@@ -16,7 +16,7 @@ from app.services.jit_provision import EmpIdCollisionError, upsert_admin_user
 
 def _settings(
     ad_admin_role_name="系統管理",
-    ad_default_dept_name="IT部",
+    ad_default_dept_name="系統管理",
 ):
     s = MagicMock()
     s.ad_admin_role_name = ad_admin_role_name
@@ -62,7 +62,7 @@ def test_upsert_creates_correct_dept(in_memory_db):
     result = upsert_admin_user(in_memory_db, _ad_result(), s)
 
     dept = in_memory_db.query(Department).filter(Department.id == result.dept_id).first()
-    assert dept.name == "IT部"
+    assert dept.name == "系統管理"
 
 
 # ── 既有管理帳號更新 ────────────────────────────────────────────
