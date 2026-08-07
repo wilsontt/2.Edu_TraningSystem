@@ -1,21 +1,28 @@
 """
 排程備份路由 (Backup Schedule Router) — Wave 4
 
-提供排程設定（啟用、頻率、時間、保留份數、NAS backup 帳密）、「立即備份」與
-備份紀錄查詢。權限採獨立代碼 `menu:admin:backup`，可於系統管理之權限管理頁
-單獨指派給特定角色（不與其他系統管理子功能共用）。
+提供排程設定（啟用、頻率、時間、保留份數、NAS backup 帳密）、「立即備份」、
+連線測試、備份紀錄查詢與批次刪除。權限採獨立代碼 `menu:admin:backup`，可於
+系統管理之權限管理頁單獨指派給特定角色（不與其他系統管理子功能共用）。
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from .. import models, schemas
 from ..database import get_db
 from .auth import check_permission
-from ..services.backup_service import get_or_create_config, perform_backup
+from ..services.backup_service import (
+    get_or_create_config,
+    perform_backup,
+    test_backup_connection,
+    bulk_delete_backup_records,
+    BackupCredentialError,
+)
 from ..services.crypto import encrypt_secret
 from ..services.scheduler import reschedule_backup_job
+from ..services import storage
 
 router = APIRouter(prefix="/admin/backup", tags=["backup"])
 
@@ -68,6 +75,23 @@ def update_backup_config(
     return _to_config_out(config)
 
 
+@router.post("/test-connection", response_model=schemas.BackupConnectionTestResult)
+def test_connection(
+    payload: schemas.BackupConnectionTestRequest,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:admin:backup"),
+):
+    """輕量 NAS 連線測試（不寫入備份紀錄）；可用表單尚未儲存的帳密／目的地。"""
+    config = get_or_create_config(db)
+    ok, message = test_backup_connection(
+        config,
+        username=payload.backup_nas_username,
+        password=payload.backup_nas_password,
+        destination=payload.destination,
+    )
+    return schemas.BackupConnectionTestResult(ok=ok, message=message)
+
+
 @router.post("/run-now", response_model=schemas.BackupRecordOut)
 def run_backup_now(
     db: Session = Depends(get_db),
@@ -93,3 +117,27 @@ def list_backup_records(
         "items": items, "total": total, "page": page, "size": size,
         "total_pages": (total + size - 1) // size,
     }
+
+
+@router.delete("/records/bulk-delete", response_model=schemas.BulkDeleteBackupRecordsResult)
+def bulk_delete_records(
+    payload: schemas.BulkDeleteBackupRecordsRequest,
+    db: Session = Depends(get_db),
+    current_user=check_permission("menu:admin:backup"),
+):
+    """批次刪除備份紀錄；可選同步刪除 NAS 上對應 ZIP。"""
+    if not payload.record_ids:
+        raise HTTPException(status_code=400, detail="record_ids 不可為空")
+    try:
+        result = bulk_delete_backup_records(
+            db,
+            payload.record_ids,
+            delete_nas_files=payload.delete_nas_files,
+        )
+    except BackupCredentialError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except storage.StorageUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return result

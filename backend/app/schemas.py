@@ -877,6 +877,31 @@ class BackupRecordList(BaseModel):
     total_pages: int
 
 
+class BackupConnectionTestRequest(BaseModel):
+    """連線測試請求：可帶表單尚未儲存的帳密／目的地；密碼留空則用已存加密密碼。"""
+    destination: Optional[str] = None
+    backup_nas_username: Optional[str] = None
+    backup_nas_password: Optional[str] = None
+
+
+class BackupConnectionTestResult(BaseModel):
+    ok: bool
+    message: str
+
+
+class BulkDeleteBackupRecordsRequest(BaseModel):
+    """備份紀錄批次刪除；delete_nas_files=True 時一併嘗試刪 NAS 上對應 ZIP。"""
+    record_ids: List[int]
+    delete_nas_files: bool = False
+
+
+class BulkDeleteBackupRecordsResult(BaseModel):
+    deleted_count: int
+    missing_ids: List[int]
+    nas_deleted_count: int
+    nas_failed: List[str]
+
+
 # ----------------------------------------------------------------
 # 成績中心批次列印相關模型 (Batch Print Schemas) — Wave 1
 # ----------------------------------------------------------------

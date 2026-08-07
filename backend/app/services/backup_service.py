@@ -20,7 +20,7 @@ import tempfile
 import time
 import zipfile
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -32,6 +32,10 @@ from .crypto import decrypt_secret, CredentialEncryptionError
 APP_VERSION = "1.2.0"
 SCHEMA_VERSION = "1"
 BACKUP_FILENAME_PREFIX = "education_training_backup_"
+
+
+class BackupCredentialError(Exception):
+    """備份 NAS 帳密不足或無法解密。"""
 
 
 def get_or_create_config(db: Session) -> models.BackupScheduleConfig:
@@ -149,3 +153,119 @@ def run_scheduled_backup() -> None:
         perform_backup(db, config)
     finally:
         db.close()
+
+
+def resolve_backup_credentials(
+    config: models.BackupScheduleConfig,
+    *,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    destination: Optional[str] = None,
+) -> storage.SmbCredentials:
+    """解析備份用 SMB 憑證。
+
+    - username／destination：請求有給就用請求值，否則用已存設定
+    - password：請求有非空字串用請求值；否則解密已存密碼
+    """
+    resolved_username = (username.strip() if username else None) or config.backup_nas_username
+    if password:
+        resolved_password = password
+    elif config.backup_nas_password_encrypted:
+        try:
+            resolved_password = decrypt_secret(config.backup_nas_password_encrypted)
+        except CredentialEncryptionError as e:
+            raise BackupCredentialError(str(e)) from e
+    else:
+        resolved_password = None
+
+    # destination 為 None 表示沿用設定；空字串表示改用系統預設 BACKUP_ROOT
+    if destination is not None:
+        resolved_destination = destination.strip() or None
+    else:
+        resolved_destination = config.destination
+
+    if not resolved_username or not resolved_password:
+        raise BackupCredentialError("排程備份尚未設定 NAS 帳號或密碼")
+
+    return storage.backup_credentials(resolved_username, resolved_password, resolved_destination)
+
+
+def test_backup_connection(
+    config: models.BackupScheduleConfig,
+    *,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    destination: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """輕量連線測試：連上 NAS 並 list 目的地根目錄。回傳 (ok, message)。"""
+    try:
+        creds = resolve_backup_credentials(
+            config, username=username, password=password, destination=destination,
+        )
+        with storage.connection(creds) as st:
+            st.list("")
+        return True, "連線成功，備份目的地可存取"
+    except BackupCredentialError as e:
+        return False, str(e)
+    except storage.StorageUnavailable as e:
+        return False, str(e)
+    except storage.StorageError as e:
+        return False, str(e)
+    except Exception as e:  # noqa: BLE001
+        return False, f"連線測試失敗：{e}"
+
+
+def _is_nas_file_missing(err: storage.StorageError) -> bool:
+    return str(err).startswith("檔案不存在")
+
+
+def bulk_delete_backup_records(
+    db: Session,
+    record_ids: List[int],
+    *,
+    delete_nas_files: bool = False,
+) -> dict:
+    """批次刪除備份紀錄；可選同步刪 NAS ZIP。
+
+    delete_nas_files=True 且 NAS 連線失敗時拋 StorageUnavailable（呼叫端應中止、不刪 DB）。
+    NAS 個別檔不存在視為可忽略；其他刪除錯誤記入 nas_failed，仍刪除對應 DB 紀錄。
+    """
+    if not record_ids:
+        raise ValueError("record_ids 不可為空")
+
+    unique_ids = list(dict.fromkeys(record_ids))
+    records = (
+        db.query(models.BackupRecord)
+        .filter(models.BackupRecord.id.in_(unique_ids))
+        .all()
+    )
+    found_ids = {r.id for r in records}
+    missing_ids = [i for i in unique_ids if i not in found_ids]
+
+    nas_deleted_count = 0
+    nas_failed: List[str] = []
+
+    if delete_nas_files:
+        config = get_or_create_config(db)
+        creds = resolve_backup_credentials(config)
+        filenames = [r.filename for r in records if r.filename]
+        with storage.connection(creds) as st:
+            for name in filenames:
+                try:
+                    st.delete(name)
+                    nas_deleted_count += 1
+                except storage.StorageError as e:
+                    if _is_nas_file_missing(e):
+                        continue
+                    nas_failed.append(name)
+
+    for r in records:
+        db.delete(r)
+    db.commit()
+
+    return {
+        "deleted_count": len(records),
+        "missing_ids": missing_ids,
+        "nas_deleted_count": nas_deleted_count,
+        "nas_failed": nas_failed,
+    }
