@@ -1,7 +1,7 @@
 # API 測試手冊
 
-**版本**：v2.0  
-**最後更新**：2026-07-06  
+**版本**：v2.1  
+**最後更新**：2026-08-07  
 **適用**：本機開發（`http://localhost:8000`）與 Docker 生產（依反向代理路徑調整 Base URL）
 
 ---
@@ -287,11 +287,31 @@ curl -s -X PUT "http://localhost:8000/api/admin/backup/config" \
 curl -s -X POST "http://localhost:8000/api/admin/backup/run-now" \
   -H "Authorization: Bearer YOUR_TOKEN" | jq .
 
-# 備份紀錄
+# NAS 連線測試（密碼留空則用已存加密密碼；不寫入備份紀錄）
+curl -s -X POST "http://localhost:8000/api/admin/backup/test-connection" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": null,
+    "backup_nas_username": "backup_svc",
+    "backup_nas_password": "YOUR_BACKUP_PASSWORD"
+  }' | jq .
+
+# 備份紀錄（分頁）
 curl -s "http://localhost:8000/api/admin/backup/records?page=1&size=10" \
   -H "Authorization: Bearer YOUR_TOKEN" | jq .
+
+# 批次刪除紀錄（delete_nas_files=true 時一併嘗試刪 NAS ZIP；連線失敗回 503 且不刪 DB）
+curl -s -X DELETE "http://localhost:8000/api/admin/backup/records/bulk-delete" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "record_ids": [1, 2],
+    "delete_nas_files": false
+  }' | jq .
 ```
 
+> 詳見 [20260807_排程備份_連線測試與紀錄批次刪除.md](20260807_排程備份_連線測試與紀錄批次刪除.md)。
 ---
 
 ## 7. QRcode 登入頁（方案 A）

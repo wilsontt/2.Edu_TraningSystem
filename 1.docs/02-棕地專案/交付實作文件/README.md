@@ -32,12 +32,13 @@
 | [../plans/已完成/20260612_AD整合_系統管理者登入_PLAN.md](../plans/已完成/20260612_AD整合_系統管理者登入_PLAN.md) | 規格定案 | ✅ 已實作 |
 | [../plans/已完成/20260612_AD整合_系統管理者登入_技術設計.md](../plans/已完成/20260612_AD整合_系統管理者登入_技術設計.md) | 技術設計 | ✅ 已實作 |
 
-### 建議事項／NAS／教材／備份（2026-06～07）
+### 建議事項／NAS／教材／備份（2026-06～08）
 
 | 文件 | 主題 | 狀態 |
 |------|------|------|
 | [../plans/已完成/20260618_教育訓練_建議事項_實作_PLAN.md](../plans/已完成/20260618_教育訓練_建議事項_實作_PLAN.md) | Wave 0～6 實作分工 | ✅ 已完成（產品驗收 2026-07-14） |
-| [../plans/已完成/20260612_系統備援_NAS儲存與排程備份_PLAN.md](../plans/已完成/20260612_系統備援_NAS儲存與排程備份_PLAN.md) | SMB 三模式、排程備份 | ✅ 已實作 |
+| [../plans/已完成/20260612_系統備援_NAS儲存與排程備份_PLAN.md](../plans/已完成/20260612_系統備援_NAS儲存與排程備份_PLAN.md) | SMB 三模式、排程備份 | ✅ 已實作（僅 DB ZIP） |
+| [../reviews/20260807_排程備份_連線測試與紀錄批次刪除.md](../reviews/20260807_排程備份_連線測試與紀錄批次刪除.md) | 連線測試、紀錄分頁／批次刪除 | ✅ 已實作（2026-08-07） |
 | [../plans/已完成/20260617_教材上傳列管與教材庫_PLAN.md](../plans/已完成/20260617_教材上傳列管與教材庫_PLAN.md) | 教材庫業務規格 | ✅ 已實作 |
 | [../plans/已完成/20260704_教材主檔與允許格式維護_PLAN.md](../plans/已完成/20260704_教材主檔與允許格式維護_PLAN.md) | 教材類型／格式主檔 UI | ✅ 已完成（2026-07-04） |
 | [../plans/已完成/20260703_報到補齊與開考強制與交卷印章_PLAN.md](../plans/已完成/20260703_報到補齊與開考強制與交卷印章_PLAN.md) | 報到 backfill、開考強制 | ✅ 已完成（2026-07-03） |
@@ -58,11 +59,12 @@
 - **前端**：`LoginPage.tsx`（管理登入／緊急登入分頁）、`ChangePasswordPage.tsx`
 - **遷移**：`migrations/add_ad_auth_user_fields.py`
 
-### 教材／NAS／備份（2026-06～07）
+### 教材／NAS／備份（2026-06～08）
 
-- **後端**：`routers/teaching_materials.py`、`routers/backup.py`、`services/storage.py`
-- **前端**：`teaching/*`、`MaterialMastersManager.tsx`、`BackupScheduleManager.tsx`
+- **後端**：`routers/teaching_materials.py`、`routers/backup.py`（含 `test-connection`、`records/bulk-delete`）、`services/storage.py`、`services/backup_service.py`
+- **前端**：`teaching/*`、`MaterialMastersManager.tsx`、`BackupScheduleManager.tsx`（連線測試、`common/Pagination`、批次刪除）
 - **遷移**：`add_teaching_materials.py`、`add_material_file_formats.py`、`add_backup_schedule.py` 等
+- **補強說明**：[../reviews/20260807_排程備份_連線測試與紀錄批次刪除.md](../reviews/20260807_排程備份_連線測試與紀錄批次刪除.md)
 
 ---
 

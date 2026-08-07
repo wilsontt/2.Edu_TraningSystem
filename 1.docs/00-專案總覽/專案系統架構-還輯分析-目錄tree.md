@@ -93,7 +93,7 @@
 | **教材庫** | `/admin/teaching-materials`（含 `/sets`） | 套組上傳／下載、NAS session、類型／格式主檔 |
 | **考試中心** | `/exam` | `/my_exams`, `/start/{id}`, `/submit/{id}`, 報到 |
 | **報表中心** | `/admin/reports` | 統計、部門績效、批次列印、PDF |
-| **排程備份** | `/admin/backup` | 設定、立即備份、紀錄 |
+| **排程備份** | `/admin/backup` | 設定、連線測試、立即備份、紀錄分頁／批次刪除 |
 
 ### 4.3 調用規範
 1. **資料格式**：所有請求與回應均使用 JSON 格式，遵循 Pydantic Schema 定義。
