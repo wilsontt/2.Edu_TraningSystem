@@ -1,6 +1,7 @@
 """
-資料庫配置與連線管理 (Database Configuration & Connection Management)
-負責定義 SQLite 資料庫路徑、初始化 SQLAlchemy 引擎以及提供資料庫工作階段 (Session)。
+資料庫配置與連線管理。
+固定使用專案根目錄 data/education_training.db（與 backend/ 並列），勿使用 backend/data/ 空檔。
+提供 SQLAlchemy engine、SessionLocal 與 get_db() 依賴注入。
 """
 
 from sqlalchemy import create_engine

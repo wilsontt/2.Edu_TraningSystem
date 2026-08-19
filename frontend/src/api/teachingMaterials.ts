@@ -1,3 +1,7 @@
+/**
+ * 教材套組 API 包裝。
+ * 對應後端 /admin/teaching-materials/sets 與主檔端點。
+ */
 import type { AxiosProgressEvent, AxiosResponse } from 'axios';
 import api from '../api';
 import type {

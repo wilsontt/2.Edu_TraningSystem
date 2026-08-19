@@ -1,13 +1,7 @@
 /**
- * LandingPage.tsx
- * 
- * 企業教育訓練系統 Landing Page
- * 基於 UI UX Pro Max 設計系統：
- * - Pattern: Enterprise Gateway
- * - Style: Trust & Authority
- * - Colors: Primary #4F46E5, CTA #22C55E
- * - Typography: Poppins (Heading) + Open Sans (Body)
+ * 早期落地頁。App.tsx 未掛路由，勿當現行入口。
  */
+import React from 'react';
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';

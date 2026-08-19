@@ -1,3 +1,6 @@
+/**
+ * 交卷 PASS／FAIL 印章動畫。
+ */
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 

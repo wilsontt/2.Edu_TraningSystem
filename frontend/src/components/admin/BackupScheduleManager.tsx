@@ -1,3 +1,7 @@
+/**
+ * 排程備份設定（`/admin/backup`）。
+ * NAS 連線測試、立即備份、備份紀錄分頁與可選刪 NAS。
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { HardDriveDownload, Loader2, Save, Play, CheckCircle2, XCircle, RefreshCw, Plug, Trash2 } from 'lucide-react';
 import api from '../../api';

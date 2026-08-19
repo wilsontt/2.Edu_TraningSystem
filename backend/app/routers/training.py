@@ -1,6 +1,6 @@
 """
-訓練計畫模組路由 (Training Router)
-負責處理訓練計畫的建立、更新、查詢、受課對象管理以及報到紀錄的核心邏輯。
+訓練計畫模組路由 (Training Router)，前綴 /training。
+計畫 CRUD、受課單位／個人、免考設定、封存、報到統計與報到總覽（含合併報到批次）。
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Query, Body

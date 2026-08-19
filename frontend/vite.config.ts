@@ -1,3 +1,8 @@
+/**
+ * Vite 開發／建置設定。
+ * base `/training/`；代理 `/training/api` → localhost:8000/api；
+ * `@shared-ui` 別名與 React 單例（避免與共用元件重複 React 實例）。
+ */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

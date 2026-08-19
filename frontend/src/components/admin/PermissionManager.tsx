@@ -1,3 +1,7 @@
+/**
+ * 角色功能權限設定（`/admin/permissions`）。
+ * 為角色勾選 system_functions；受保護系統角色不可隨意變更。
+ */
 import { useState, useEffect, useMemo } from 'react';
 import { AxiosError } from 'axios';
 import { Shield, Lock, Save, Check, Loader2, AlertCircle, ChevronRight } from 'lucide-react';

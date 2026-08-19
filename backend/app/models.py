@@ -1,3 +1,8 @@
+"""
+SQLAlchemy ORM 資料模型。
+涵蓋組織（users／roles／departments）、訓練計畫、計畫題／全域題庫、考試紀錄、
+報到、教材套組、備份與稽核。欄位細節以資料庫結構分析文件為準。
+"""
 from typing import Optional
 from sqlalchemy import Column, Integer, String, Text, Boolean, Date, DateTime, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.orm import relationship, backref

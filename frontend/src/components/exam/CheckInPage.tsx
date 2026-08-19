@@ -1,3 +1,7 @@
+/**
+ * 掃碼／手動報到頁（`/checkin`）。
+ * 完成後顯示報到人與時間，可導回考試中心。
+ */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2, Clock, ArrowLeft } from 'lucide-react';

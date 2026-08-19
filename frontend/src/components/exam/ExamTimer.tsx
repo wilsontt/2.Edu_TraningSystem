@@ -1,3 +1,7 @@
+/**
+ * 考試倒數計時器。
+ * limitTime 為允許總秒數，歸零時呼叫 onTimeUp（通常觸發自動交卷）。
+ */
 import { useEffect, useState } from 'react';
 import { Clock } from 'lucide-react';
 

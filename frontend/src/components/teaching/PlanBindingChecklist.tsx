@@ -1,3 +1,7 @@
+/**
+ * 套組綁定計畫勾選清單。
+ * 可篩選進行中計畫；訓練計畫頁上傳時可鎖定本計畫。
+ */
 import type { PlanOption } from '../../types/materials';
 import { planProgress, selectablePlanOptions, todayYmd } from './planBindingUtils';
 

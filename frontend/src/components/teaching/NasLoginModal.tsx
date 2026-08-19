@@ -1,3 +1,7 @@
+/**
+ * NAS 互動登入 Modal。
+ * 取得短時 session token 後才能上傳／下載教材。
+ */
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Loader2, KeyRound, Server } from 'lucide-react';

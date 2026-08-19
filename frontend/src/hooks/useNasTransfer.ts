@@ -1,3 +1,6 @@
+/**
+ * NAS 登入與檔案傳輸進度共用 hook（教材套組）。
+ */
 import { useRef, useState } from 'react';
 import axios, { type AxiosProgressEvent } from 'axios';
 import { idleTransfer, IN_FLIGHT_PROGRESS_CAP, type TransferState } from '../components/teaching/transfer';

@@ -1,3 +1,7 @@
+/**
+ * 成績中心頁面（`/reports`、`/reports/personal`）。
+ * 個人總覽／歷程／學習分析；具報表權限時嵌入 ReportDashboard 與批次列印。
+ */
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';

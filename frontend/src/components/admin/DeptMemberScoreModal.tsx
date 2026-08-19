@@ -1,3 +1,7 @@
+/**
+ * 部門成員成績彈窗。
+ * 分頁列出部門成員成績，並可走批次列印（與個人成績單 HTML 同源）。
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { X, ChevronRight, AlertTriangle } from 'lucide-react';
 import { API_BASE_URL } from '../../api';

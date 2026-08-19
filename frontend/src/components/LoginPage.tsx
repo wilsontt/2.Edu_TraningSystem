@@ -1,3 +1,7 @@
+/**
+ * 登入頁（`/login`）。
+ * 員工驗證碼登入、AD 管理員、break-glass 緊急登入、Email OTP 備援。
+ */
 import { useNavigate, useLocation } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';

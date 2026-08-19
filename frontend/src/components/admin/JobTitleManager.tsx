@@ -1,3 +1,7 @@
+/**
+ * 職務主檔維護（`/admin/job-titles`）。
+ * 職務 CRUD、成員檢視；供人員管理綁定 job_title。
+ */
 import { useState, useEffect } from 'react';
 import { AxiosError } from 'axios';
 import { Briefcase, Plus, Loader2, Trash2, AlertCircle, Edit2, Eye, X, Users, Search, Check } from 'lucide-react';

@@ -1,3 +1,7 @@
+/**
+ * 系統功能清單維護 UI。
+ * App.tsx 未掛路由；現行功能碼由種子／權限管理維護。保留僅供溯源。
+ */
 import { useState, useEffect } from 'react';
 import { AxiosError } from 'axios';
 import { Settings, Plus, Edit2, Trash2, X, ChevronRight, ChevronDown, Check, FolderTree, AlertCircle } from 'lucide-react';

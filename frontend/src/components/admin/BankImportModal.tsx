@@ -1,3 +1,6 @@
+/**
+ * 從全域題庫勾選題目匯入指定訓練計畫。
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, ChevronLeft, ChevronRight, Check, Search } from 'lucide-react';
 import api from '../../api';

@@ -1,3 +1,7 @@
+/**
+ * 考試中心「立即報到」按鈕。
+ * 未報到時引導送出報到；顯示報到時間。
+ */
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, Clock, Loader2, AlertCircle } from 'lucide-react';
 import api from '../../api';

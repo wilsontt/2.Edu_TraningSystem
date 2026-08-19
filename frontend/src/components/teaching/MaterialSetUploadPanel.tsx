@@ -1,3 +1,6 @@
+/**
+ * 新增教材套組面板（標題、類型、檔案、綁定計畫）。
+ */
 import { useState } from 'react';
 import { Upload, Loader2, FileText, AlertCircle } from 'lucide-react';
 import { type AxiosError } from 'axios';

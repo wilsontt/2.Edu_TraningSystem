@@ -1,6 +1,6 @@
 """
-報表與統計模組路由 (Report Router)
-負責處理管理端的成績統計、部門績效分析、訓練計畫概覽以及 PDF 成績單的批次導出邏輯。
+報表與統計路由，前綴 /admin/reports。
+總覽／部門／計畫統計、計畫與部門詳情分頁、PDF 成績清單與批次列印（list／individual）。
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Body

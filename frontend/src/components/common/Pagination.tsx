@@ -1,3 +1,7 @@
+/**
+ * 通用分頁列。
+ * 支援每頁筆數、跳頁；itemsLabel 可標示「考生／計畫／部門」等。
+ */
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 

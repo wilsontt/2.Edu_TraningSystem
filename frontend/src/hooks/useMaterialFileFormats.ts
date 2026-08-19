@@ -1,3 +1,7 @@
+/**
+ * 教材允許副檔名清單 hook。
+ * 讀取系統管理教材主檔（material-file-formats）。
+ */
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api';
 

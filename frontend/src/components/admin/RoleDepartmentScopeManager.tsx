@@ -1,3 +1,7 @@
+/**
+ * 角色資料範圍設定（`/admin/role-scopes`）。
+ * 設定角色可見 all／department／self 及額外部門清單。
+ */
 import { useEffect, useState } from 'react';
 import { AxiosError } from 'axios';
 import { Building2, Save, Check, Loader2, AlertCircle, ChevronRight } from 'lucide-react';

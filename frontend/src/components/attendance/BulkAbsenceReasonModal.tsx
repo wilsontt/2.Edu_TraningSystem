@@ -1,3 +1,6 @@
+/**
+ * 報到總覽：批次登記未到原因。
+ */
 import { useMemo, useState } from 'react';
 
 type UserItem = {

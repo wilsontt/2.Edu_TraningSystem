@@ -1,3 +1,7 @@
+/**
+ * 變更密碼頁（`/login/change-password`）。
+ * break-glass／過期密碼強制改密與自願改密。
+ */
 import React, { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';

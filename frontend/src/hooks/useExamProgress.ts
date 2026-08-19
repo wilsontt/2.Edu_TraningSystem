@@ -1,3 +1,7 @@
+/**
+ * 考試作答進度本機保存。
+ * 以 localStorage（exam_progress_{userId}_{planId}）暫存答案，重整後可還原。
+ */
 import { useState, useEffect, useCallback } from 'react';
 
 const STORAGE_PREFIX = 'exam_progress_';

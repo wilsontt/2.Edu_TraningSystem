@@ -1,9 +1,6 @@
 /**
- * 成績中心儀表板 (Report Dashboard Component)
- * 系統最核心的數據統計頁面，提供：
- * 1. 總體統計指標 (及格率、平均分等)。
- * 2. 計畫與部門維度的績效分析。
- * 3. 成績單批次列印與導出功能。
+ * 管理端成績儀表板（亦可嵌在個人成績頁）。
+ * 總覽 KPI、部門／計畫績效、展開列之考生成績／成員成績 API 分頁、成績列印。
  */
 
 import { useState, useEffect, useMemo, Fragment } from 'react';

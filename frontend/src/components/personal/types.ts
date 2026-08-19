@@ -1,3 +1,6 @@
+/**
+ * 個人成績相關 TypeScript 型別（詳情、歷程項目等）。
+ */
 export interface QuestionDetail {
   question_id: number;
   question_number: number;

@@ -1,3 +1,7 @@
+/**
+ * 報到總覽（`/attendance-overview`）。
+ * 各計畫報到統計、合併報到 QR、未到原因；封存計畫僅檢視。
+ */
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { format } from 'date-fns';
 import { AxiosError } from 'axios';

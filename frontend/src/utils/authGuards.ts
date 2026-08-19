@@ -1,3 +1,7 @@
+/**
+ * 前端權限守衛輔助。
+ * 超管角色名稱、管理選單可見、開課單位 Owner 寫入判定（與後端對齊）。
+ */
 import type { User } from '../types';
 
 /** 與後端 SUPER_ADMIN_ROLE_NAMES 一致；權限／角色名稱不可透過 UI 變更 */

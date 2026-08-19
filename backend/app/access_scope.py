@@ -1,3 +1,8 @@
+"""
+資料可見範圍（hybrid scope）。
+resolve_data_scope() 回傳 all／department／self（RoleDepartmentScope 優先於角色關鍵字）。
+get_scope_emp_ids() 供列表 API：None=不限制、[]=無可見資料、其餘為 emp_id 名單。
+"""
 from typing import Iterable, List, Literal, Optional, Sequence, Set
 
 from sqlalchemy.orm import Session

@@ -1,3 +1,7 @@
+/**
+ * 登入使用者摘要快取（sessionStorage）。
+ * 報到完成 redirect 後仍能顯示報到人姓名。
+ */
 import type { User } from '../types';
 
 const SESSION_USER_KEY = 'training_session_user';

@@ -1,3 +1,7 @@
+/**
+ * 考卷成績單預覽。
+ * 與批次列印 individual 同源 HTML（scoreCardPrintHtml），僅支援最後一次成績。
+ */
 import { X, Printer } from 'lucide-react';
 import clsx from 'clsx';
 import type { ScoreDetail } from './types';

@@ -1,3 +1,7 @@
+/**
+ * 授權重考對話框。
+ * 管理員為已通過者開通一次重考（綁定 exam_history）。
+ */
 import { useState } from 'react';
 import api from '../../api';
 

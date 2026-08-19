@@ -1,13 +1,7 @@
 """
-應用組態 (Application Settings)
-
-集中管理環境變數，特別是 NAS（SMB）儲存相關設定。
-SMB 帳密屬機敏：僅由環境變數／密鑰管理注入，嚴禁寫入版控或資料庫明文。
-
-路徑慣例（Win／macOS 開發、Linux Docker 生產共用）：
-- SMB 相關值為「邏輯路徑」，不是本機磁碟路徑；一律以 `/` 分段。
-- `env_file` 以本檔位置推算 `backend/.env`，不依賴行程 cwd。
-- 生產 Docker 以環境變數注入為準（映像不含 `.env`）。
+應用組態（pydantic-settings）。
+讀取 backend/.env（路徑以本檔位置推算，不依賴 cwd）：JWT、AD、SMB／NAS、SMTP、備份。
+機敏值僅由環境變數注入；SMTP 密碼建議 enc: 密文。生產 Docker 以 TRAINING_* 注入為準。
 """
 
 from functools import lru_cache

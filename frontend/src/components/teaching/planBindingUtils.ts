@@ -1,3 +1,6 @@
+/**
+ * 教材套組綁定訓練計畫的進度計算（進行中／已過期／已封存）。
+ */
 import type { PlanOption } from '../../types/materials';
 
 export type PlanProgress = 'active' | 'expired' | 'archived';

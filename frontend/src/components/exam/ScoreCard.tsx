@@ -1,3 +1,7 @@
+/**
+ * 交卷後成績卡。
+ * 顯示分數與 PASS／FAIL 印章，並提供重考或返回入口。
+ */
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import { useEffect } from 'react';
 import { RotateCcw, ArrowRight } from 'lucide-react';

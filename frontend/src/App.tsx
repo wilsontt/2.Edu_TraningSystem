@@ -1,6 +1,6 @@
 /**
- * 主應用程式元件 (Main App Component)
- * 負責全域狀態管理 (使用者資訊、登入狀態)、路由配置 (React Router) 以及響應式導覽列 (Navbar)。
+ * 主應用程式元件。
+ * 登入使用者狀態、React Router（base `/training/`）、響應式導覽列、功能碼路由守衛。
  */
 
 import { useState, useEffect, useCallback } from 'react';

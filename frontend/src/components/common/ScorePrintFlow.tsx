@@ -1,3 +1,7 @@
+/**
+ * 成績列印精靈 UI。
+ * 選計畫、列印類型（list／individual）、簽名與歷程選項；供 ReportDashboard 與 BatchPrintPage 共用。
+ */
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { PrintModeTriState, SignatureTriState } from '../personal/printTriState';

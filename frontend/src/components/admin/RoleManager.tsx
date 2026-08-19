@@ -1,3 +1,7 @@
+/**
+ * 角色維護（`/admin/roles`）。
+ * 角色 CRUD、在職成員數；受保護系統角色不可刪。
+ */
 import { useState, useEffect, useMemo } from 'react';
 import { AxiosError } from 'axios';
 import { Plus, Shield, Check, X, Loader2, AlertCircle, PenTool, Trash2, Search } from 'lucide-react';

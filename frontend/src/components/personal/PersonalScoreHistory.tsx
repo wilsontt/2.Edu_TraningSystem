@@ -1,3 +1,7 @@
+/**
+ * 個人考試歷程頁籤。
+ * 依 plan_status 列出已提交紀錄；可開詳情、授權重考（權限內）。
+ */
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Eye, Search, Repeat } from 'lucide-react';
 import clsx from 'clsx';

@@ -1,3 +1,7 @@
+/**
+ * 訓練分類維護（`/admin/categories`）。
+ * 大項目／細項目兩層 CRUD，供訓練計畫綁定。
+ */
 import { useState, useEffect } from 'react';
 import { AxiosError } from 'axios';
 import { Plus, Edit2, Check, X, FolderTree, Search, Loader2, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';

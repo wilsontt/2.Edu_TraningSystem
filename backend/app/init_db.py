@@ -1,3 +1,8 @@
+"""
+資料庫初始化（僅首次或資料庫不存在時執行）。
+建立全部資料表並寫入基礎角色、選單功能、break-glass 種子帳號。
+資料庫已有業務資料時請勿執行，以免覆寫或遺失資料。
+"""
 from sqlalchemy.orm import Session
 from .database import SessionLocal, engine, Base
 from . import models

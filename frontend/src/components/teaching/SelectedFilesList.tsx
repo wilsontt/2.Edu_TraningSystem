@@ -1,3 +1,6 @@
+/**
+ * 已選上傳檔案清單（顯示檔名與大小，可移除單檔）。
+ */
 import { X } from 'lucide-react';
 
 const fmtSize = (n: number) =>

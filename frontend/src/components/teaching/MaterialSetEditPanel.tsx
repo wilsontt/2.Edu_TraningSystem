@@ -1,3 +1,6 @@
+/**
+ * 編輯教材套組面板（中繼資料、檔案增刪、計畫綁定）。
+ */
 import { useRef, useState } from 'react';
 import { Loader2, FileText, AlertCircle, X, Trash2 } from 'lucide-react';
 import { type AxiosError, type AxiosProgressEvent } from 'axios';

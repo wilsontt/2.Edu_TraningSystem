@@ -1,3 +1,7 @@
+/**
+ * 單題編輯 Modal（考卷工坊計畫題或題庫題）。
+ * 維護題幹、選項、答案、配分與提示。
+ */
 import { useState, useEffect } from 'react';
 import { Loader2, X, Plus, Trash2, Check, AlertCircle } from 'lucide-react';
 import { isAxiosError } from 'axios';

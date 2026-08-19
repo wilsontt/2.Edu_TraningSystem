@@ -1,3 +1,6 @@
+/**
+ * 通用確認對話框。
+ */
 import React from 'react';
 import { AlertCircle, X, Check, Save } from 'lucide-react';
 

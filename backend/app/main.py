@@ -1,6 +1,7 @@
 """
-FastAPI 主應用程式入口 (Main Application Entry Point)
-負責初始化 FastAPI 實例、配置 CORS 中間件、連結資料庫以及註冊各模組路由。
+FastAPI 主應用程式入口。
+初始化應用、CORS、啟動時建表與備份排程、關閉時停止排程，並將各 router 掛載於 /api。
+實際 SQLite 路徑見 database.py（專案根 data/education_training.db）。
 """
 
 from fastapi import FastAPI

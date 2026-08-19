@@ -1,3 +1,7 @@
+/**
+ * 個人成績總覽頁籤。
+ * 六張 KPI 卡與成績分析；API GET /exam/personal/overview。
+ */
 import { useState, useEffect } from 'react';
 import { Award, TrendingUp, Clock, Target, CheckCircle, XCircle } from 'lucide-react';
 import { API_BASE_URL } from '../../api';

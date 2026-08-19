@@ -1,3 +1,7 @@
+/**
+ * 全域題庫維護（嵌在 ExamStudio）。
+ * 查詢／編輯／刪除題庫題；開課單位 Owner 寫入權見 canModifyOwnedResource。
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { Search, Trash2, Loader2, Lightbulb, ChevronUp, ChevronDown, Edit } from 'lucide-react';
 import api from '../../api';

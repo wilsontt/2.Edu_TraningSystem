@@ -1,3 +1,7 @@
+/**
+ * 舊 QR 一次性 token 登入頁。
+ * App.tsx 未掛載；現行掃碼導向 `/login`（方案 A）。保留僅供溯源，勿當入口。
+ */
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { QrCode, Loader2, AlertCircle, CheckCircle, LogIn, RefreshCw } from 'lucide-react';

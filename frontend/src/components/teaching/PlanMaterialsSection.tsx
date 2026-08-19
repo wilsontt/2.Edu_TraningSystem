@@ -1,3 +1,7 @@
+/**
+ * 訓練計畫編輯頁的教材區塊。
+ * 列出已綁定套組並支援上傳／下載（需 NAS 登入）。
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { FileText, Download, Trash2, Pencil } from 'lucide-react';
 import { type AxiosError } from 'axios';

@@ -1,6 +1,6 @@
 """
-系統管理路由 (Admin Router)
-負責處理組織架構 (部門、職務)、使用者帳號、角色權限以及課程分類的核心 CRUD 操作。
+系統管理路由 (Admin Router)，前綴 /admin。
+單位、分類、人員、職務、角色、功能權限、角色部門範圍（RoleDepartmentScope）CRUD。
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Body, Query

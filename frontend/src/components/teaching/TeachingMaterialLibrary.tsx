@@ -1,3 +1,7 @@
+/**
+ * 教材套組庫。
+ * 搜尋、上傳、編輯、批次下載 ZIP、刪除；需 NAS 登入。
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { Library, Search, Download, Trash2, Loader2, CheckSquare, Square, PackageOpen, Upload, Pencil, PenTool, LayoutGrid, FileStack } from 'lucide-react';
 import { type AxiosError } from 'axios';

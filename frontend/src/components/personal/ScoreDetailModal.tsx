@@ -1,3 +1,7 @@
+/**
+ * 單次考試詳情 Modal。
+ * 顯示每題對錯、授權重考資訊，並可預覽／列印成績單。
+ */
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { X, CheckCircle, XCircle, Clock, User, FileText, Award, Printer } from 'lucide-react';
 import clsx from 'clsx';

@@ -1,6 +1,6 @@
 /**
- * Axios API 通訊配置 (Axios API Client Configuration)
- * 負責統一配置後端請求的基礎路徑、攔截器 (Interceptors) 以及身份驗證 (JWT)。
+ * Axios API 客戶端。
+ * baseURL=`/training/api`；請求注入 JWT；公開登入端點 401 不踢出，其餘 401 清 token 導向登入頁。
  */
 
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';

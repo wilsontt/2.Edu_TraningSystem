@@ -1,3 +1,7 @@
+/**
+ * 單一訓練計畫考試歷程 Modal。
+ * 列出該計畫多次應考紀錄，可開詳情與列印。
+ */
 import { useState, useEffect, useMemo } from 'react';
 import { X, Eye, CheckCircle, XCircle } from 'lucide-react';
 import clsx from 'clsx';

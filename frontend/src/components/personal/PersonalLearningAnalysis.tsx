@@ -1,3 +1,7 @@
+/**
+ * 個人學習分析頁籤。
+ * 學習進度、擅長／弱項、分類成績圖、成績趨勢（3／6／12 月）。
+ */
 import { useState, useEffect, useRef } from 'react';
 import { TrendingUp, TrendingDown, Target } from 'lucide-react';
 import { API_BASE_URL } from '../../api';

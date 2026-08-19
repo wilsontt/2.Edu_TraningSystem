@@ -1,3 +1,7 @@
+/**
+ * 登入／報到 QR 產生（`/admin/qrcode`）。
+ * 方案 A：編碼固定登入頁 URL，不含一次性 token。
+ */
 import { useState } from 'react';
 import { QrCode, Loader2, Copy, Check } from 'lucide-react';
 import api from '../../api';

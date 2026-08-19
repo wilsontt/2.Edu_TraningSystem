@@ -1,3 +1,6 @@
+/**
+ * 教材檔案傳輸進度 Modal（上傳／下載／取消）。
+ */
 import { useEffect } from 'react';
 import { X, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import type { TransferState } from './transfer';
