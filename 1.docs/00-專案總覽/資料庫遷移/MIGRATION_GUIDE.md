@@ -1,5 +1,15 @@
 # 資料庫遷移指南
 
+![版本](https://img.shields.io/badge/版本-v1.3.0-blue)
+![狀態](https://img.shields.io/badge/狀態-穩定版-green)
+![文件類型](https://img.shields.io/badge/文件類型-維運指南-blue)
+![文件狀態](https://img.shields.io/badge/文件-完整-blue)
+
+**徽章使用規範**：本文件遵循 [徽章使用規範](../../01-綠地專案/徽章使用規範.md)。
+
+**文件版本**：v1.3.0  
+**最後修訂**：2026-08-19（補齊抬頭徽章）
+
 ## 問題修復步驟
 
 ### 1. 安裝缺失的套件

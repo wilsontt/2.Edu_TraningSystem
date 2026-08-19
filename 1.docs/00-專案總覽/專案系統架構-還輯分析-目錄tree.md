@@ -1,6 +1,11 @@
 # 線上教育訓練系統 - 系統架構、邏輯分析與目錄結構
 
-![版本](https://img.shields.io/badge/版本-v1.2.0-blue) ![狀態](https://img.shields.io/badge/狀態-穩定版-green)
+![版本](https://img.shields.io/badge/版本-v1.2.1-blue)
+![狀態](https://img.shields.io/badge/狀態-穩定版-green)
+![文件類型](https://img.shields.io/badge/文件類型-架構摘要-blue)
+![文件狀態](https://img.shields.io/badge/文件-完整-blue)
+
+**徽章使用規範**：本文件遵循 [徽章使用規範](../01-綠地專案/徽章使用規範.md)。
 
 本文件整合了專案的技術架構、核心商業邏輯、資料庫結構、API 串接方法以及目錄組織結構，旨在提供開發人員與維運人員全方位的系統概覽。
 
@@ -113,19 +118,19 @@
 │   ├── 系統測試/            # 使用者驗證測試 (UAT) 文件
 │   └── logs/               # 開發期日誌
 ├── backend/                # FastAPI 後端應用
-│   ├── app/                # 核心代碼
-│   │   ├── routers/        # API 端點 (auth, admin, training, exam...)
-│   │   ├── services/       # 業務邏輯 (如 parser.py 解析器)
+│   ├── app/                # 核心代碼（每支檔案用途見 專案系統架構分析.md 第七章）
+│   │   ├── routers/        # API 端點（§7.2）
+│   │   ├── services/       # 業務邏輯（§7.3）
 │   │   ├── models.py       # SQLAlchemy 資料模型
 │   │   └── schemas.py      # Pydantic 資料結構
-│   └── data/               # 資料庫連結與教材存放 (部分連結至根目錄 data)
+│   └── data/               # 勿當正式庫；正式 DB 在專案根 data/
 ├── frontend/               # React 前端應用
 │   ├── src/
-│   │   ├── components/     # UI 元件 (admin, exam, personal, teaching, attendance)
-│   │   ├── hooks/          # 自定義 Hooks (如 useExamProgress)
+│   │   ├── components/     # UI 元件（每支檔案用途見 專案系統架構分析.md 第八章）
+│   │   ├── hooks/          # 自定義 Hooks
 │   │   └── api.ts          # Axios 配置與通訊封裝
-│   └── public/             # 靜態資源 (Logo 等)
-├── data/                   # SQLite 資料庫與教材上傳目錄 (備份重點)
+│   └── public/             # 靜態資源
+├── data/                   # SQLite 資料庫與教材上傳目錄（備份重點）
 └── tests/                  # 測試腳本與自動化檢驗工具
 ```
 
@@ -136,10 +141,11 @@
 | 文件 | 描述 |
 |------|------|
 | `README.md` | 專案快速啟動與現況摘要 |
-| `1.docs/00-專案總覽/專案系統架構分析.md` | 詳細的系統流程圖與資料流程 |
+| `1.docs/00-專案總覽/專案系統架構分析.md` | **現行架構 SSOT**：流程圖、模組、**前後端每支檔案用途** |
 | `1.docs/00-專案總覽/資料庫結構分析/education_training_db_結構分析.md` | 資料表全欄位與關聯定義 |
 | `1.docs/02-棕地專案/棕地功能總覽.md` | 棕地波次（2026-04～07）功能與程式落點 |
 | `1.docs/02-棕地專案/交付實作文件/README.md` | 棕地任務單與結案索引 |
 
 ---
-**最後更新時間**：2026-07-15（教材套組 Wave2）
+**文件版本**：v1.2.1  
+**最後修訂**：2026-08-19（補齊文件類型／文件狀態徽章；目錄樹指向架構 SSOT）

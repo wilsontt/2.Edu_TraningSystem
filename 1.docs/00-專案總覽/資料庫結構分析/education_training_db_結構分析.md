@@ -1,5 +1,15 @@
 # education_training.db 資料庫結構分析
 
+![版本](https://img.shields.io/badge/版本-v1.2.0-blue)
+![狀態](https://img.shields.io/badge/狀態-穩定版-green)
+![文件類型](https://img.shields.io/badge/文件類型-資料庫說明-blue)
+![文件狀態](https://img.shields.io/badge/文件-完整-blue)
+
+**徽章使用規範**：本文件遵循 [徽章使用規範](../../01-綠地專案/徽章使用規範.md)。
+
+**文件版本**：v1.2.0  
+**最後修訂**：2026-08-19（補齊抬頭徽章；結構內容基準 2026-07-15）
+
 ## 1. 目的
 
 記錄專案根目錄 `data/education_training.db`（SQLite）之資料表、欄位定義、索引與表間關聯，供開發、遷移與權限設計對照使用。
@@ -790,4 +800,5 @@ sqlite3 data/education_training.db "PRAGMA foreign_key_list('表名');"
 
 ---
 
-**文件版本**：依 `data/education_training.db`／`models.py` 對照；2026-04-02 補齊表中文名與長度欄；**2026-07-15** 補教材套組 Wave2 三表與 Wave1 遺留說明。
+**文件版本**：v1.2.0  
+**最後修訂**：2026-08-19（補齊抬頭徽章）。結構內容：2026-04-02 補齊表中文名與長度欄；**2026-07-15** 補教材套組 Wave2 三表與 Wave1 遺留說明。

@@ -1,6 +1,9 @@
 # 考卷 TXT 題目格式說明
 
-![版本](https://img.shields.io/badge/版本-v1.0.0-blue) ![狀態](https://img.shields.io/badge/狀態-穩定版-green) ![文件類型](https://img.shields.io/badge/文件類型-格式規範-blue) ![文件狀態](https://img.shields.io/badge/文件-完整-blue)
+![版本](https://img.shields.io/badge/版本-v1.0.0-blue)
+![狀態](https://img.shields.io/badge/狀態-穩定版-green)
+![文件類型](https://img.shields.io/badge/文件類型-格式規範-blue)
+![文件狀態](https://img.shields.io/badge/文件-完整-blue)
 
 **文件版本**: v1.0.0
 **建立日期**: 2026-06-15

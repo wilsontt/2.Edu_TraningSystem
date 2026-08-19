@@ -1,8 +1,15 @@
 # NAS 與路徑跨平台慣例
 
-**文件類型**：作業慣例（長青）  
+![版本](https://img.shields.io/badge/版本-v1.1.0-blue)
+![狀態](https://img.shields.io/badge/狀態-穩定版-green)
+![文件類型](https://img.shields.io/badge/文件類型-作業慣例-blue)
+![文件狀態](https://img.shields.io/badge/文件-完整-blue)
+
+**徽章使用規範**：本文件遵循 [徽章使用規範](../01-綠地專案/徽章使用規範.md)。
+
+**文件版本**：v1.1.0  
 **建立日期**：2026-07-04  
-**最後修訂**：2026-07-06（補 Docker `deploy/.env`／`TRAINING_*`、Fernet、NAS 錯誤對照）  
+**最後修訂**：2026-08-19（補齊抬頭徽章；內容基準 2026-07-06）  
 **適用環境**：Windows／macOS 本機開發、Linux Docker 生產
 
 ---

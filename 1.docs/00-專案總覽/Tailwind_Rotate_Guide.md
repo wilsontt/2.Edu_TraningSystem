@@ -1,5 +1,12 @@
 # Tailwind CSS 旋轉角度寫法指南
 
+![版本](https://img.shields.io/badge/版本-v1.0.0-blue)
+![狀態](https://img.shields.io/badge/狀態-穩定版-green)
+![文件類型](https://img.shields.io/badge/文件類型-參考文件-blue)
+![文件狀態](https://img.shields.io/badge/文件-完整-blue)
+
+**徽章使用規範**：本文件遵循 [徽章使用規範](../01-綠地專案/徽章使用規範.md)。
+
 在 Tailwind CSS 中，使用 `transform` 與 `rotate` 相關的 utility classes 來控制元素的旋轉。
 
 ## 1. 順時針旋轉 (Clockwise)
