@@ -2,8 +2,6 @@
  * 早期落地頁。App.tsx 未掛路由，勿當現行入口。
  */
 import React from 'react';
-
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoUrl from '../assets/CROWN_logo.png';
 import { 
