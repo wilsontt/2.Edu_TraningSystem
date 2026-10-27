@@ -1,14 +1,14 @@
 # 資料庫遷移指南
 
-![版本](https://img.shields.io/badge/版本-v1.3.0-blue)
+![版本](https://img.shields.io/badge/版本-v1.4.1-blue)
 ![狀態](https://img.shields.io/badge/狀態-穩定版-green)
 ![文件類型](https://img.shields.io/badge/文件類型-維運指南-blue)
 ![文件狀態](https://img.shields.io/badge/文件-完整-blue)
 
 **徽章使用規範**：本文件遵循 [徽章使用規範](../../01-綠地專案/徽章使用規範.md)。
 
-**文件版本**：v1.3.0  
-**最後修訂**：2026-08-19（補齊抬頭徽章）
+**文件版本**：v1.4.1  
+**最後修訂**：2026-10-27（新增「變更 break-glass admin 密碼」與本機開發測試步驟）
 
 ## 問題修復步驟
 
@@ -86,6 +86,8 @@ docker compose exec \
 ```
 
 成功應看到：`[users] admin.password_hash 已設定（INITIAL_ADMIN_PASSWORD）`
+
+> 此做法僅用於**首次初始化** break-glass admin。日後要**變更** admin 密碼，請改用 [變更 break-glass admin 密碼](#變更-break-glass-admin-密碼reset_admin_passwordpy)，不要重跑遷移腳本。
 
 其他遷移（依版本需求擇一或依序執行，皆可重複跑）：
 
@@ -758,10 +760,175 @@ sqlite3 data/education_training.db \
 |------|------|
 | 用**系統** `python3` 跑遷移，venv 內 `bcrypt` 未載入 | 改為 `backend/.venv/bin/python3 migrations/add_ad_auth_user_fields.py` |
 | 未設定 `INITIAL_ADMIN_PASSWORD` | 匯出環境變數後重跑遷移 |
+| 要變更既有 admin 密碼 | 使用 `scripts/reset_admin_password.py`，見上方「變更 break-glass admin 密碼」 |
 | 遷移只 warning、腳本仍 exit 0 | 確認 `password_hash` 非 NULL；必要時更新遷移腳本後重跑 |
 | `passlib` + `bcrypt 5.x` 驗證失敗 | break-glass 須用 `auth_utils.hash_password` / `verify_password`（`bcrypt` 直接），見 Cloud Code 提示詞 §10 |
 
 詳細案例與 curl 範例：`1.docs/02-棕地專案/交付實作文件/20260625_AD整合_系統管理者登入-CloudCode提示詞.md` §10。
+
+## 變更 break-glass admin 密碼（`reset_admin_password.py`）
+
+**適用**：變更**本機** `admin`（`emp_id=admin`，緊急登入分頁使用）的密碼。AD 管理員的密碼由網域控制站管理，不適用本節。
+
+**特性**：
+- 只能在主機／容器內以 shell 執行，系統沒有對應的 Web 端點。
+- 密碼須符合複雜度：至少 `PASSWORD_MIN_LENGTH`（預設 12）個字元，含大寫、小寫、數字、特殊字元；UTF-8 長度不得超過 72 bytes。
+- 成功時同步：更新密碼雜湊、`password_changed_at` 設為現在（90 天內不會過期）、清除登入失敗次數與鎖定；**不**強制下次登入改密碼。
+- **既有登入不會被登出**：JWT 為無狀態，已簽發的 token 最長維持至 `JWT_EXPIRE_MINUTES`（預設 480 分鐘）。
+- 稽核只寫 logger（不含密碼），除輸出到終端機外，另附加寫入 `data/logs/admin_password_reset.log`；Docker 內為 `/data/logs/`，對應主機 `${DATA_ROOT}/training/logs/admin_password_reset.log`。
+
+### ds1 Docker：變更步驟
+
+> 主機 `backend/` **沒有** `.venv`；Python 在 `training-backend` 容器內。腳本是 COPY 進**映像**的（不是 volume），所以第一次使用、或腳本有更新時，必須先重建映像。
+
+**步驟 1：確認映像內有腳本（沒有就重建）**
+
+```bash
+cd /opt/apps/enterprise-portal/deploy
+
+docker compose exec training-backend ls scripts/reset_admin_password.py
+# 若顯示 No such file：程式碼同步到正式機後，重建並換容器（後端會短暫重啟，資料在 /data volume 不受影響）
+DOCKER_BUILDKIT=0 docker compose build training-backend
+docker compose up -d training-backend
+```
+
+不想重建時的暫時替代（容器下次重建就會消失，之後仍須重建）：
+
+```bash
+docker cp /opt/apps/enterprise-portal/2.教育訓練教材及線上考卷/backend/scripts/reset_admin_password.py \
+  enterprise-training-backend:/app/scripts/reset_admin_password.py
+```
+
+**步驟 2：備份資料庫**
+
+```bash
+cp -a "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/education_training.db" \
+      "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/education_training.db.bak.$(date +%Y%m%d_%H%M%S)"
+```
+
+**步驟 3：執行（建議：互動輸入，不回顯，輸入兩次）**
+
+```bash
+docker compose exec -it training-backend python scripts/reset_admin_password.py
+```
+
+- 若是透過 SSH 連到正式機，請用 `ssh -t <主機>` 登入，否則會因沒有 TTY 而中止。
+- 成功時的輸出範例：
+
+```text
+目標資料庫：/data/education_training.db
+admin 密碼已更新。
+注意：既有登入不會被登出，最長維持至 JWT 到期。
+```
+
+非互動做法（密碼不會出現在指令列與 shell history，但 `docker exec` 仍會把它放在該次 exec 的環境變數）：
+
+```bash
+read -rsp '新密碼: ' NEW_ADMIN_PASSWORD; echo
+export NEW_ADMIN_PASSWORD
+docker compose exec -e NEW_ADMIN_PASSWORD training-backend python scripts/reset_admin_password.py
+unset NEW_ADMIN_PASSWORD
+```
+
+> 不要把 `NEW_ADMIN_PASSWORD` 寫入 `.env` 或 `deploy/.env`。
+
+**步驟 4：驗證**
+
+```bash
+# (a) 資料庫欄位：應為 changed_at 有值、must_change=0、failed=0、locked 為空
+docker compose exec training-backend python -c "import sqlite3;c=sqlite3.connect('/data/education_training.db');print(c.execute(\"select emp_id,password_changed_at,must_change_password,failed_login_count,locked_until from users where emp_id='admin'\").fetchall())"
+
+# (b) 稽核紀錄：應有 event=admin_password_reset，且不含密碼
+tail -n 3 "${DATA_ROOT:-/opt/apps/enterprise-portal/data}/training/logs/admin_password_reset.log"
+```
+
+(c) 開啟登入頁「緊急登入」分頁，以新密碼登入成功；舊密碼應回「帳號或密碼錯誤」。
+
+### 退出碼與疑難排解
+
+| 現象 | 退出碼 | 原因與處理 |
+|------|--------|------------|
+| `非互動環境：請使用 docker compose exec -it ...` | 1 | 沒有 TTY。SSH 請加 `-t`，或改用 `NEW_ADMIN_PASSWORD` 做法 |
+| `密碼不符合強度規則：...` | 1 | 依訊息調整；需 ≥ 12 字元且含大寫、小寫、數字、特殊字元 |
+| `密碼過長：UTF-8 長度不得超過 72 bytes` | 1 | 縮短密碼（中文字元每字 3 bytes） |
+| `兩次輸入不一致` | 1 | 重新執行 |
+| `找不到帳號 admin，請先執行 init_db 建立` | 1 | 該資料庫尚未建立 admin；先完成初始化（見上方 ds1 遷移） |
+| `帳號 admin 不是 break-glass（is_protected）帳號` | 1 | 帳號被改動過；請先確認 `users.is_protected` |
+| `python: can't open file ... reset_admin_password.py` | — | 映像內沒有腳本，回到步驟 1 重建 |
+| `未預期錯誤：...` | 2 | 多為資料庫無法開啟或被鎖；確認 `training-backend` 容器正常、`/data` volume 掛載正確 |
+| 執行成功但仍無法登入 | — | 若輸出有「帳號 admin 狀態不是 active」警告，需先於人員管理啟用；其餘請確認登入頁選的是「緊急登入」 |
+
+### 本機開發（非 Docker）：測試變更 admin 密碼
+
+> **注意**：本機直接使用專案根目錄的 `data/education_training.db`（開發資料庫，不是測試用的假資料庫）。執行前請先備份，並建議用「測試密碼」驗證，測完再改回你要的密碼。
+> 以下指令以 macOS／Linux 為例；Windows 請將 `.venv/bin/python3` 換成 `.\.venv\Scripts\python.exe`。
+
+**步驟 1：備份（於專案根目錄）**
+
+```bash
+cp data/education_training.db data/education_training.db.bak.$(date +%Y%m%d_%H%M%S)
+```
+
+**步驟 2：啟動後端**（若已在跑可略過；`--reload` 不需重啟）
+
+```bash
+cd backend
+export PYTHONPATH=$PYTHONPATH:.
+.venv/bin/python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**步驟 3：另開一個 terminal 執行腳本**
+
+```bash
+cd backend
+.venv/bin/python3 scripts/reset_admin_password.py
+```
+
+依提示輸入兩次新密碼（不回顯）。成功會顯示 `目標資料庫：…/data/education_training.db` 與 `admin 密碼已更新。`；請確認目標路徑是你要測的那一份。
+
+**步驟 4：驗證**
+
+```bash
+# (a) 以新密碼登入（應回 200，內容含 token）；PASSWORD 請換成剛設定的密碼
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8000/api/auth/login/local \
+  -H 'Content-Type: application/json' -d '{"emp_id":"admin","password":"PASSWORD"}'
+
+# (b) 舊密碼或亂打的密碼（應回 401）
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8000/api/auth/login/local \
+  -H 'Content-Type: application/json' -d '{"emp_id":"admin","password":"wrong-password"}'
+
+# (c) 資料庫欄位：password_changed_at 為剛才的時間（UTC）、must_change=0、failed=0、locked 為空
+sqlite3 ../data/education_training.db \
+  "select emp_id,password_changed_at,must_change_password,failed_login_count,locked_until from users where emp_id='admin';"
+
+# (d) 稽核紀錄（應有 event=admin_password_reset 一行，且不含密碼）
+tail -n 3 ../data/logs/admin_password_reset.log
+```
+
+也可以在瀏覽器開 <http://localhost:5173/training/> 的登入頁，切到「緊急登入」分頁，用新密碼登入。
+
+**選做：驗證「同時解除鎖定」**
+
+```bash
+# 製造鎖定狀態：登入應回 423
+sqlite3 ../data/education_training.db \
+  "update users set failed_login_count=6, locked_until=datetime('now','+15 minutes') where emp_id='admin';"
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8000/api/auth/login/local \
+  -H 'Content-Type: application/json' -d '{"emp_id":"admin","password":"PASSWORD"}'
+
+# 重跑腳本後再登入，應回 200，且輸出含「已同時解除帳號鎖定。」
+.venv/bin/python3 scripts/reset_admin_password.py
+```
+
+**選做：驗證被拒絕的情況**（皆應顯示 `Admin 密碼未變更。`，退出碼為 1，資料庫不變）：輸入少於 12 碼、缺少大寫／小寫／數字／特殊字元的密碼，或兩次輸入不一致。
+
+**還原**：測完若要回到原本的資料庫狀態，將步驟 1 的備份檔複製回 `data/education_training.db`（需先停掉後端）；或再執行一次腳本設回你要的密碼。
+
+**自動化測試**（不碰開發資料庫，使用暫存 SQLite）：於專案根目錄執行
+
+```bash
+backend/.venv/bin/python3 -m pytest tests/test_reset_admin_password.py -v
+```
 
 ---
 
