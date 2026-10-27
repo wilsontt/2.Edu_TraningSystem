@@ -21,7 +21,9 @@ function validatePassword(pw: string): string | null {
 const ChangePasswordPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const changeToken = (location.state as { change_token?: string } | null)?.change_token;
+  const locationState = location.state as { change_token?: string; emp_id?: string } | null;
+  const changeToken = locationState?.change_token;
+  const empId = locationState?.emp_id;
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -31,7 +33,7 @@ const ChangePasswordPage: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  if (!changeToken) {
+  if (!changeToken || !empId) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-10 text-center border border-gray-100">
@@ -58,6 +60,7 @@ const ChangePasswordPage: React.FC = () => {
     setError('');
     try {
       await api.post('/auth/password/change', {
+        emp_id: empId,
         change_token: changeToken,
         new_password: newPassword,
       });

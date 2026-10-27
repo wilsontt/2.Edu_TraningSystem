@@ -263,7 +263,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         password: localPassword,
       });
       if ('must_change_password' in res.data && res.data.must_change_password) {
-        navigate('/login/change-password', { state: { change_token: res.data.change_token } });
+        navigate('/login/change-password', {
+          state: { change_token: res.data.change_token, emp_id: localEmpId },
+        });
         return;
       }
       const loginData = res.data as LoginResponse;
